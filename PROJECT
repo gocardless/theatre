@@ -1,0 +1,3 @@
+version: "1"
+domain: gocardless.io
+repo: github.com/lawrencejones/rbac-directory

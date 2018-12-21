@@ -3,7 +3,7 @@ apiVersion: rbac.gocardless.io/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-admin
-spec:
+subjects:
   - apiGroup: rbac.gocardless.io
     kind: GoogleGroup
     name: platform@gocardless.com

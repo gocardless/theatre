@@ -11,18 +11,14 @@ type DirectoryRoleBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec DirectoryRoleBindingSpec `json:"spec"`
-}
-
-type DirectoryRoleBindingSpec struct {
-	Subject []Subject
+	Subjects []Subject `json:"subjects"`
 }
 
 type Subject struct {
 	APIGroup  string `json:"apiGroup"`
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

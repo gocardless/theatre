@@ -3,21 +3,26 @@ package main
 import (
 	"context"
 	"fmt"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
+	level "github.com/go-kit/kit/log/level"
 	"golang.org/x/oauth2/google"
 	admin "google.golang.org/api/admin/directory/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 
 	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
 	informers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions"
-	"github.com/lawrencejones/rbac-directory/pkg/controller"
+	"github.com/lawrencejones/rbac-directory/pkg/controller/directoryrolebinding"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 )
@@ -33,13 +38,25 @@ var (
 	members      = app.Command("members", "List all users in group")
 	membersGroup = members.Arg("group", "Group to list users for").Required().String()
 
+	drbs          = app.Command("drbs", "List all DirectoryRoleBindings")
+	drbsContext   = drbs.Flag("context", "Kubernetes cluster context").Default("lab").String()
+	drbsNamespace = drbs.Flag("namespace", "Kubernetes namespace in which to list").Required().String()
+
 	operate                = app.Command("operate", "Operate on kubernetes 😷")
 	operateContext         = operate.Flag("context", "Kubernetes cluster context").Default("lab").String()
 	operateRefreshInterval = operate.Flag("refresh-interval", "Period to refresh our listeners").Default("10s").Duration()
+	operateThreads         = operate.Flag("threads", "Number of threads for the operator").Default("2").Int()
 
 	// Version is set by goreleaser
 	Version = "dev"
 )
+
+func init() {
+	logger = level.NewFilter(logger, level.AllowInfo())
+	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
+	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
+	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
+}
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,6 +88,28 @@ func main() {
 		for _, member := range resp.Members {
 			fmt.Println(member.Email)
 		}
+
+	case drbs.FullCommand():
+		config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			clientcmd.NewDefaultClientConfigLoadingRules(),
+			&clientcmd.ConfigOverrides{CurrentContext: *drbsContext},
+		).ClientConfig()
+
+		if err != nil {
+			app.Fatalf("failed to identify kubernetes config: %v", err)
+		}
+
+		clientset, err := clientset.NewForConfig(config)
+		if err != nil {
+			app.Fatalf("failed to create kubernetes config: %v", err)
+		}
+
+		resp, err := clientset.Rbac().DirectoryRoleBindings(*drbsNamespace).List(v1.ListOptions{})
+		if err != nil {
+			app.Fatalf("failed list drbs: %v", err)
+		}
+
+		spew.Dump(resp)
 
 	case operate.FullCommand():
 		sigc := make(chan os.Signal, 1)
@@ -106,7 +145,7 @@ func main() {
 		rbacInformerFactory := informers.
 			NewSharedInformerFactory(clientset, *operateRefreshInterval)
 
-		ctrl := controller.NewController(
+		ctrl := directoryrolebinding.NewController(
 			ctx,
 			logger,
 			kubeclientset,
@@ -114,7 +153,11 @@ func main() {
 			rbacInformerFactory.Rbac().V1alpha1().DirectoryRoleBindings(),
 		)
 
-		fmt.Println(ctrl)
+		rbacInformerFactory.Start(ctx.Done())
+
+		if err := ctrl.Run(ctx, *operateThreads); err != nil {
+			app.Fatalf("failed to run controller: %v", err)
+		}
 	}
 }
 

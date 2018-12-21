@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"k8s.io/kubernetes/pkg/apis/rbac"
+	"github.com/lawrencejones/rbac-directory/pkg/apis/rbac"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

@@ -1,25 +1,22 @@
 package v1alpha1
 
 import (
+	rbac "github.com/lawrencejones/rbac-directory/pkg/apis/rbac"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	GroupName       = rbac.GroupName
+	GoogleGroupKind = "GoogleGroup"
 )
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-type DirectoryRoleBinding struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Subjects []Subject `json:"subjects"`
-}
-
-type Subject struct {
-	APIGroup  string `json:"apiGroup"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-}
+// DirectoryRoleBinding only extends the standard RoleBinding resource provided by
+// Kubernetes. We shouldn't ever require other fields here.
+type DirectoryRoleBinding rbacv1.RoleBinding
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

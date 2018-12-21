@@ -16,6 +16,7 @@ import (
 	"golang.org/x/oauth2/google"
 	admin "google.golang.org/api/admin/directory/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -132,27 +133,33 @@ func main() {
 			app.Fatalf("failed to identify kubernetes config: %v", err)
 		}
 
-		kubeclientset, err := kubernetes.NewForConfig(config)
+		kubeClient, err := kubernetes.NewForConfig(config)
 		if err != nil {
 			app.Fatalf("failed to connect to kubernetes: %v", err)
 		}
 
-		clientset, err := clientset.NewForConfig(config)
+		rbacClient, err := clientset.NewForConfig(config)
 		if err != nil {
 			app.Fatalf("failed to create kubernetes config: %v", err)
 		}
 
+		kubeInformerFactory := kubeinformers.
+			NewSharedInformerFactory(kubeClient, *operateRefreshInterval)
+
 		rbacInformerFactory := informers.
-			NewSharedInformerFactory(clientset, *operateRefreshInterval)
+			NewSharedInformerFactory(rbacClient, *operateRefreshInterval)
 
 		ctrl := directoryrolebinding.NewController(
 			ctx,
 			logger,
-			kubeclientset,
-			clientset,
+			client,
+			kubeClient,
+			kubeInformerFactory.Rbac().V1().RoleBindings(),
+			rbacClient,
 			rbacInformerFactory.Rbac().V1alpha1().DirectoryRoleBindings(),
 		)
 
+		kubeInformerFactory.Start(ctx.Done())
 		rbacInformerFactory.Start(ctx.Done())
 
 		if err := ctrl.Run(ctx, *operateThreads); err != nil {

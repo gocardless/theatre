@@ -6,29 +6,44 @@ import (
 	stdlog "log"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
+	admin "google.golang.org/api/admin/directory/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	rbacinformers "k8s.io/client-go/informers/rbac/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
+	kubescheme "k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/staging/src/k8s.io/client-go/util/workqueue"
 
+	// We import our own clients here, without providing any prefix. Everything we pull in
+	// from the Kubernetes stdlib we will prefix.
+	rbac "github.com/lawrencejones/rbac-directory/pkg/apis/rbac"
 	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	rbacscheme "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/scheme"
-	rbacinformers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac/v1alpha1"
+	scheme "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/scheme"
+	informers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac/v1alpha1"
 	listers "github.com/lawrencejones/rbac-directory/pkg/client/listers/rbac/v1alpha1"
 )
 
 const controllerAgentName = "rbac-controller"
 
 type Controller struct {
-	logger        kitlog.Logger
-	kubeclientset kubernetes.Interface
-	clientset     clientset.Interface
+	logger     kitlog.Logger
+	client     *admin.Service
+	kubeClient kubernetes.Interface
+	rbacClient clientset.Interface
+
+	// RoleBinding informer fields
+	rbsLister rbaclisters.RoleBindingLister
+	rbsSynced cache.InformerSynced
 
 	// DirectoryRoleBinding informer fields
 	drbsLister listers.DirectoryRoleBindingLister
@@ -43,31 +58,40 @@ type Controller struct {
 }
 
 func NewController(
-	ctx context.Context, logger kitlog.Logger,
-	kubeclientset kubernetes.Interface, clientset clientset.Interface,
-	drbInformer rbacinformers.DirectoryRoleBindingInformer,
+	ctx context.Context,
+	logger kitlog.Logger,
+	client *admin.Service,
+	kubeClient kubernetes.Interface,
+	rbInformer rbacinformers.RoleBindingInformer,
+	rbacClient clientset.Interface,
+	drbInformer informers.DirectoryRoleBindingInformer,
 ) *Controller {
 	// Add rbac types to the default Kubernetes Scheme so Events can be logged for the rbac
 	// types.
-	utilruntime.Must(rbacscheme.AddToScheme(scheme.Scheme))
+	utilruntime.Must(kubescheme.AddToScheme(scheme.Scheme))
 
 	logger.Log("event", "broadcaster.create")
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(stdlog.Printf)
 	eventBroadcaster.StartRecordingToSink(
-		&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")},
+		&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")},
 	)
 
 	recorder := eventBroadcaster.NewRecorder(
-		scheme.Scheme, corev1.EventSource{Component: controllerAgentName},
+		kubescheme.Scheme, corev1.EventSource{Component: controllerAgentName},
 	)
 
 	ctrl := &Controller{
-		logger:        logger,
-		kubeclientset: kubeclientset,
-		clientset:     clientset,
-		drbsLister:    drbInformer.Lister(),
-		drbsSynced:    drbInformer.Informer().HasSynced,
+		logger:     logger,
+		client:     client,
+		kubeClient: kubeClient,
+		rbacClient: rbacClient,
+		// RoleBindings listeners
+		rbsLister: rbInformer.Lister(),
+		rbsSynced: rbInformer.Informer().HasSynced,
+		// DirectoryRoleBindings listeners
+		drbsLister: drbInformer.Lister(),
+		drbsSynced: drbInformer.Informer().HasSynced,
 		workqueue: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(), "DirectoryRoleBindings",
 		),
@@ -84,10 +108,22 @@ func NewController(
 		},
 	)
 
+	logger.Log("event", "handlers.configure", "resource", "RoleBinding")
+	rbInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: ctrl.handleObject,
+			UpdateFunc: func(old, new interface{}) {
+				ctrl.handleObject(new)
+			},
+			DeleteFunc: ctrl.handleObject,
+		},
+	)
+
 	return ctrl
 }
 
-func (c *Controller) Run(ctx context.Context, threadiness int) error {
+// Run the control workloop until the context expires, using `threads` number of workers.
+func (c *Controller) Run(ctx context.Context, threads int) error {
 	defer utilruntime.HandleCrash()
 	defer c.workqueue.ShutDown()
 
@@ -97,8 +133,8 @@ func (c *Controller) Run(ctx context.Context, threadiness int) error {
 		return fmt.Errorf("failed to wait for cached to sync")
 	}
 
-	for idx := 0; idx < threadiness; idx++ {
-		c.logger.Log("event", "workers.start", "index", idx)
+	c.logger.Log("event", "workers.start", "count", threads)
+	for idx := 0; idx < threads; idx++ {
 		go wait.Until(c.runWorker, time.Second, ctx.Done())
 	}
 
@@ -153,7 +189,81 @@ func (c *Controller) processNextWorkItem() bool {
 
 // syncHandler performs our reconciliation process for the given resource
 func (c *Controller) syncHandler(key string) error {
+	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		c.logger.Log("event", "sync.error", "error", "invalid namespace/name key")
+	}
+
+	logger := kitlog.With(c.logger, "namespace", namespace, "name", name)
+	logger.Log("event", "sync.start")
+
+	drb, err := c.drbsLister.DirectoryRoleBindings(namespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Log("event", "sync.error", "error", "item no longer exists")
+			return nil
+		}
+
+		return err
+	}
+
+	var subjects = make([]rbacv1.Subject, 0)
+	for _, subject := range drb.Subjects {
+		if subject.APIGroup != rbac.GroupName {
+			subjects = append(subjects, subject)
+			continue
+		}
+
+		switch subject.Kind {
+		case "GoogleGroup":
+			resp, err := c.client.Members.List(subject.Name).Do()
+			if err != nil {
+				logger.Log("event", "sync.error", "error", err.Error())
+				break
+			}
+
+			for _, member := range resp.Members {
+				subjects = append(subjects, rbacv1.Subject{
+					APIGroup: rbacv1.GroupName,
+					Kind:     rbacv1.UserKind,
+					Name:     member.Email,
+				})
+			}
+		default:
+			logger.Log("event", "sync.error", "kind", subject.Kind, "error", "unrecognised kind")
+		}
+	}
+
+	// TODO
+	spew.Dump(drb)
+	spew.Dump(subjects)
+
 	return nil
+}
+
+func (c *Controller) handleObject(obj interface{}) {
+	logger := kitlog.With(c.logger, "obj", obj)
+	object, ok := obj.(metav1.Object)
+	if !ok {
+		logger.Log("event", "handle.error", "error", "failed to decode object, invalid type")
+		return
+	}
+
+	if ownerRef := metav1.GetControllerOf(object); ownerRef != nil {
+		if ownerRef.Kind != "DirectoryRoleBinding" {
+			logger.Log("event", "handler.unrelated", "msg", "object is not handled by this controller")
+			return
+		}
+
+		drb, err := c.drbsLister.DirectoryRoleBindings(object.GetNamespace()).Get(ownerRef.Name)
+		if err != nil {
+			logger.Log("event", "handler.orphaned", "msg", "ignoring orphaned object")
+			return
+		}
+
+		logger.Log("event", "handler.enqueuing", "selflink", drb.GetSelfLink())
+		c.enqueueDirectoryRoleBinding(drb)
+	}
 }
 
 // enqueueDirectoryRoleBinding receives a DirectoryRoleBinding resource and notifies the
@@ -161,7 +271,7 @@ func (c *Controller) syncHandler(key string) error {
 func (c *Controller) enqueueDirectoryRoleBinding(obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
-		utilruntime.HandleError(err)
+		c.logger.Log("event", "enqueue.error", "error", err.Error())
 		return
 	}
 

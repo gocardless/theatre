@@ -1,0 +1,12 @@
+---
+apiVersion: rbac.gocardless.io/v1alpha1
+kind: DirectoryRoleBinding
+metadata:
+  name: platform-admin
+spec:
+  - apiGroup: rbac.gocardless.io
+    kind: GoogleGroup
+    name: platform@gocardless.com
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: ivan@gocardless.com

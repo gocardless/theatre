@@ -1,3 +1,17 @@
+required = [
+  "k8s.io/code-generator/cmd/client-gen"
+]
+
 [prune]
   go-tests = true
   unused-packages = true
+
+  [[prune.project]]
+    name = "k8s.io/code-generator"
+    unused-packages = false
+    go-tests = false
+
+  [[prune.project]]
+    name = "k8s.io/gengo"
+    unused-packages = false
+    go-tests = false

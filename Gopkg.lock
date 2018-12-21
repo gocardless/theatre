@@ -53,9 +53,12 @@
   version = "v4.1.0"
 
 [[projects]]
-  digest = "1:3c4c08c15ef4e018a5d50fdab6a2485d54f97d8ee82acefc2367a9d86289bfee"
+  digest = "1:ce058ca1b1787a997e578c4344f9650becb5086a3512332cbedffca9950d77a1"
   name = "github.com/go-kit/kit"
-  packages = ["log"]
+  packages = [
+    "log",
+    "log/level",
+  ]
   pruneopts = "UT"
   revision = "12210fb6ace19e0496167bb3e667dcd91fa9f69b"
   version = "v0.8.0"
@@ -78,6 +81,14 @@
   pruneopts = "UT"
   revision = "4cbf7e384e768b4e01799441fdf2a706a5635ae7"
   version = "v1.2.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:3fb07f8e222402962fa190eb060608b34eddfb64562a18e2167df2de0ece85d8"
+  name = "github.com/golang/groupcache"
+  packages = ["lru"]
+  pruneopts = "UT"
+  revision = "c65c006176ff7ff98bb916961c7abbc6b0afc0aa"
 
 [[projects]]
   digest = "1:4c0989ca0bcd10799064318923b9bc2db6b4d6338dd75f3f2d86c3511aaaf5cf"
@@ -447,7 +458,7 @@
   revision = "98853ca904e81a25e2000cae7f077dc30f81b85f"
 
 [[projects]]
-  digest = "1:61e15d0507187ffc3c503ea8f810d8feba04cbd59a0ffcfe032df84a0c46e0d4"
+  digest = "1:3e703234ad8fc50059b370a696d86685e6e3ab7b99dc76d462293971a2ef77a3"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -504,6 +515,7 @@
     "tools/clientcmd/api/v1",
     "tools/metrics",
     "tools/pager",
+    "tools/record",
     "tools/reference",
     "transport",
     "util/buffer",
@@ -569,9 +581,12 @@
   revision = "0317810137be915b9cf888946c6e115c1bfac693"
 
 [[projects]]
-  digest = "1:d11958a070188fcbe30515cf4854c896f836a712475ecc1841ae5221c7067422"
+  digest = "1:c32ce3ec4b95611addcdbda444e3471e3db42504e8eba9e8752549a4bfcf59b5"
   name = "k8s.io/kubernetes"
-  packages = ["pkg/apis/rbac"]
+  packages = [
+    "pkg/apis/rbac",
+    "staging/src/k8s.io/client-go/util/workqueue",
+  ]
   pruneopts = "UT"
   revision = "eec55b9ba98609a46fee712359c7b5b365bdd920"
   version = "v1.13.1"
@@ -590,8 +605,10 @@
   input-imports = [
     "github.com/alecthomas/kingpin",
     "github.com/go-kit/kit/log",
+    "github.com/go-kit/kit/log/level",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
+    "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/labels",
@@ -600,18 +617,23 @@
     "k8s.io/apimachinery/pkg/runtime/serializer",
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/runtime",
+    "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/apimachinery/pkg/watch",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/discovery/fake",
     "k8s.io/client-go/kubernetes",
+    "k8s.io/client-go/kubernetes/scheme",
+    "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/testing",
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/client-go/tools/record",
     "k8s.io/client-go/util/flowcontrol",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/kubernetes/pkg/apis/rbac",
+    "k8s.io/kubernetes/staging/src/k8s.io/client-go/util/workqueue",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

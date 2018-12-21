@@ -19,7 +19,7 @@ limitations under the License.
 package scheme
 
 import (
-	rbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/apis/rbac.gocardless.io/v1alpha1"
+	rbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/apis/rbac/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

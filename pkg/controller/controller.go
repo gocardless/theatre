@@ -5,7 +5,7 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	rbacinformers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac.gocardless.io/v1alpha1"
+	rbacinformers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 )
 

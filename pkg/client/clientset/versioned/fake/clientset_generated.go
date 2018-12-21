@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	rbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/typed/rbac.gocardless.io/v1alpha1"
-	fakerbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/typed/rbac.gocardless.io/v1alpha1/fake"
+	rbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/typed/rbac/v1alpha1"
+	fakerbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/typed/rbac/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

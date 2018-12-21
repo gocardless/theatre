@@ -25,7 +25,7 @@ import (
 
 	versioned "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/internalinterfaces"
-	rbacgocardlessio "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac.gocardless.io"
+	rbac "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -172,9 +172,9 @@ type SharedInformerFactory interface {
 	ForResource(resource schema.GroupVersionResource) (GenericInformer, error)
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 
-	Rbac() rbacgocardlessio.Interface
+	Rbac() rbac.Interface
 }
 
-func (f *sharedInformerFactory) Rbac() rbacgocardlessio.Interface {
-	return rbacgocardlessio.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Rbac() rbac.Interface {
+	return rbac.New(f, f.namespace, f.tweakListOptions)
 }

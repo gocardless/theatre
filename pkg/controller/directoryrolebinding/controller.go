@@ -26,11 +26,11 @@ import (
 
 	// We import our own clients here, without providing any prefix. Everything we pull in
 	// from the Kubernetes stdlib we will prefix.
-	rbac "github.com/lawrencejones/rbac-directory/pkg/apis/rbac"
-	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	scheme "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned/scheme"
-	informers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac/v1alpha1"
-	listers "github.com/lawrencejones/rbac-directory/pkg/client/listers/rbac/v1alpha1"
+	rbac "github.com/lawrencejones/operators/pkg/apis/rbac"
+	clientset "github.com/lawrencejones/operators/pkg/client/clientset/versioned"
+	scheme "github.com/lawrencejones/operators/pkg/client/clientset/versioned/scheme"
+	informers "github.com/lawrencejones/operators/pkg/client/informers/externalversions/rbac/v1alpha1"
+	listers "github.com/lawrencejones/operators/pkg/client/listers/rbac/v1alpha1"
 )
 
 const controllerAgentName = "rbac-controller"

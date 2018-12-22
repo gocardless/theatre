@@ -21,10 +21,10 @@ package v1alpha1
 import (
 	time "time"
 
-	rbacv1alpha1 "github.com/lawrencejones/rbac-directory/pkg/apis/rbac/v1alpha1"
-	versioned "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/listers/rbac/v1alpha1"
+	rbacv1alpha1 "github.com/lawrencejones/operators/pkg/apis/rbac/v1alpha1"
+	versioned "github.com/lawrencejones/operators/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/lawrencejones/operators/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/lawrencejones/operators/pkg/client/listers/rbac/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

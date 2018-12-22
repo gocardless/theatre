@@ -1,4 +1,4 @@
-PROJECT=github.com/lawrencejones/rbac-directory
+PROJECT=github.com/lawrencejones/operators
 
 .PHONY: codegen
 

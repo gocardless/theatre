@@ -23,9 +23,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/internalinterfaces"
-	rbac "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac"
+	versioned "github.com/lawrencejones/operators/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/lawrencejones/operators/pkg/client/informers/externalversions/internalinterfaces"
+	rbac "github.com/lawrencejones/operators/pkg/client/informers/externalversions/rbac"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

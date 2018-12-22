@@ -1,5 +1,5 @@
 ---
-apiVersion: rbac.gocardless.io/v1alpha1
+apiVersion: rbac.lawrjone.xyz/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-admin

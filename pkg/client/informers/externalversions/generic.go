@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/lawrencejones/rbac-directory/pkg/apis/rbac/v1alpha1"
+	v1alpha1 "github.com/lawrencejones/operators/pkg/apis/rbac/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -52,7 +52,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=rbac.gocardless.io, Version=v1alpha1
+	// Group=rbac.lawrjone.xyz, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("directoryrolebindings"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Rbac().V1alpha1().DirectoryRoleBindings().Informer()}, nil
 

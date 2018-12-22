@@ -19,8 +19,8 @@ limitations under the License.
 package rbac
 
 import (
-	internalinterfaces "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions/rbac/v1alpha1"
+	internalinterfaces "github.com/lawrencejones/operators/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/lawrencejones/operators/pkg/client/informers/externalversions/rbac/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

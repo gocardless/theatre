@@ -21,9 +21,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	clientset "github.com/lawrencejones/rbac-directory/pkg/client/clientset/versioned"
-	informers "github.com/lawrencejones/rbac-directory/pkg/client/informers/externalversions"
-	"github.com/lawrencejones/rbac-directory/pkg/controller/directoryrolebinding"
+	clientset "github.com/lawrencejones/operators/pkg/client/clientset/versioned"
+	informers "github.com/lawrencejones/operators/pkg/client/informers/externalversions"
+	"github.com/lawrencejones/operators/pkg/controller/directoryrolebinding"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 )

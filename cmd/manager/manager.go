@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
-	rbacv1alpha1 "github.com/lawrencejones/operators/pkg/apis/rbac/v1alpha1"
+	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 )
 
 var (

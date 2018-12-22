@@ -1,4 +1,4 @@
-PROJECT=github.com/lawrencejones/operators
+PROJECT=github.com/lawrencejones/theatre
 
 .PHONY: codegen
 

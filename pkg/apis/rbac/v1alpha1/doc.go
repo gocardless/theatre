@@ -2,7 +2,7 @@
 
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=github.com/lawrencejones/operators/pkg/apis/rbac
+// +k8s:conversion-gen=github.com/lawrencejones/theatre/pkg/apis/rbac
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=rbac.lawrjone.xyz
 package v1alpha1

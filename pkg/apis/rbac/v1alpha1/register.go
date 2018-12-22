@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"github.com/lawrencejones/operators/pkg/apis/rbac"
+	"github.com/lawrencejones/theatre/pkg/apis/rbac"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

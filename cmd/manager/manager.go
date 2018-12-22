@@ -21,16 +21,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/lawrencejones/theatre/pkg/apis"
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/controller/directoryrolebinding"
+	"github.com/lawrencejones/theatre/pkg/signals"
 )
 
 var (
-	app             = kingpin.New("manager", "Manages GoCardless operators 😷").Version(Version)
+	app             = kingpin.New("manager", "Manages lawrjone.xyz operators 😷").Version(Version)
 	subject         = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
-	kubeContext     = app.Flag("context", "Kubernetes cluster context").Default("lab").String()
 	refreshInterval = app.Flag("refresh-interval", "Period to refresh our listeners").Default("10s").Duration()
 	threads         = app.Flag("threads", "Number of threads for the operator").Default("2").Int()
 
@@ -53,25 +54,35 @@ func main() {
 		app.Fatalf("failed to add rbac scheme: %v", err)
 	}
 
+	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	if err != nil {
+		app.Fatalf("failed to create manager: %v", err)
+	}
+
+	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+		app.Fatalf("failed to add CRDs to scheme: %v", err)
+	}
+
 	client, err := client.New(config.GetConfigOrDie(), client.Options{})
 	if err != nil {
 		app.Fatalf("failed to create kubernetes client: %v", err)
 	}
+
+	ctx, cancel := signals.SetupSignalHandler()
+	defer cancel()
 
 	adminClient, err := createAdminClient(context.TODO(), *subject)
 	if err != nil {
 		app.Fatalf("failed to create Google Admin client: %v", err)
 	}
 
-	mgr, err := builder.SimpleController().
+	_, err = builder.SimpleController().
+		WithManager(mgr).
 		ForType(&rbacv1alpha1.DirectoryRoleBinding{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Build(
 			directoryrolebinding.NewController(
-				context.TODO(),
-				logger,
-				client,
-				adminClient,
+				ctx, logger, client, adminClient,
 			),
 		)
 
@@ -79,7 +90,7 @@ func main() {
 		app.Fatalf("failed to build controller: %v", err)
 	}
 
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
 }

@@ -195,6 +195,20 @@
   version = "v0.5.0"
 
 [[projects]]
+  digest = "1:a1038ef593beb4771c8f0f9c26e8b00410acd800af5c6864651d9bf160ea1813"
+  name = "github.com/hpcloud/tail"
+  packages = [
+    ".",
+    "ratelimiter",
+    "util",
+    "watch",
+    "winfile",
+  ]
+  pruneopts = "UT"
+  revision = "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:8eb1de8112c9924d59bf1d3e5c26f5eaa2bfc2a5fcbb92dc1c2e4546d695f277"
   name = "github.com/imdario/mergo"
   packages = ["."]
@@ -249,6 +263,33 @@
   pruneopts = "UT"
   revision = "4b7aa43c6742a2c18fdef89dd197aaae7dac7ccd"
   version = "1.0.1"
+
+[[projects]]
+  digest = "1:5f4b78246f0bcb105b1e3b2b9e22b52a57cd02f57a8078572fe27c62f4a75ff7"
+  name = "github.com/onsi/ginkgo"
+  packages = [
+    ".",
+    "config",
+    "internal/codelocation",
+    "internal/containernode",
+    "internal/failer",
+    "internal/leafnodes",
+    "internal/remote",
+    "internal/spec",
+    "internal/spec_iterator",
+    "internal/specrunner",
+    "internal/suite",
+    "internal/testingtproxy",
+    "internal/writer",
+    "reporters",
+    "reporters/stenographer",
+    "reporters/stenographer/support/go-colorable",
+    "reporters/stenographer/support/go-isatty",
+    "types",
+  ]
+  pruneopts = "UT"
+  revision = "2e1be8f7d90e9d3e3e58b0ce470f2f14d075406f"
+  version = "v1.7.0"
 
 [[projects]]
   digest = "1:e5d0bd87abc2781d14e274807a470acd180f0499f8bf5bb18606e9ec22ad9de9"
@@ -490,12 +531,29 @@
   version = "v1.3.0"
 
 [[projects]]
+  digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
+  name = "gopkg.in/fsnotify.v1"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9"
+  source = "https://github.com/fsnotify/fsnotify/archive/v1.4.7.tar.gz"
+  version = "v1.4.7"
+
+[[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
   name = "gopkg.in/inf.v0"
   packages = ["."]
   pruneopts = "UT"
   revision = "d2d2541c53f18d2a059457998ce2876cc8e67cbf"
   version = "v0.9.1"
+
+[[projects]]
+  branch = "v1"
+  digest = "1:0caa92e17bc0b65a98c63e5bc76a9e844cd5e56493f8fdbb28fad101a16254d9"
+  name = "gopkg.in/tomb.v1"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "dd632973f1e7218eb1089048e0798ec9ae7dceb8"
 
 [[projects]]
   digest = "1:4d2e5a73dc1500038e504a8d78b986630e3626dc027bc030ba5c75da257cdb96"
@@ -769,6 +827,7 @@
     "github.com/alecthomas/kingpin",
     "github.com/go-kit/kit/log",
     "github.com/go-kit/kit/log/level",
+    "github.com/onsi/ginkgo",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
     "k8s.io/api/rbac/v1",

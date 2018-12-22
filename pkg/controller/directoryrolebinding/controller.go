@@ -2,278 +2,172 @@ package directoryrolebinding
 
 import (
 	"context"
-	"fmt"
-	stdlog "log"
-	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
+
 	admin "google.golang.org/api/admin/directory/v1"
-	corev1 "k8s.io/api/core/v1"
+
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	rbacinformers "k8s.io/client-go/informers/rbac/v1"
-	"k8s.io/client-go/kubernetes"
-	kubescheme "k8s.io/client-go/kubernetes/scheme"
-	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	rbaclisters "k8s.io/client-go/listers/rbac/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/staging/src/k8s.io/client-go/util/workqueue"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
-	// We import our own clients here, without providing any prefix. Everything we pull in
-	// from the Kubernetes stdlib we will prefix.
-	rbac "github.com/lawrencejones/theatre/pkg/apis/rbac"
-	clientset "github.com/lawrencejones/theatre/pkg/client/clientset/versioned"
-	scheme "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/scheme"
-	informers "github.com/lawrencejones/theatre/pkg/client/informers/externalversions/rbac/v1alpha1"
-	listers "github.com/lawrencejones/theatre/pkg/client/listers/rbac/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 )
 
-const controllerAgentName = "rbac-controller"
+func NewController(ctx context.Context, logger kitlog.Logger, client client.Client, adminClient *admin.Service) *Controller {
+	return &Controller{
+		ctx:         ctx,
+		logger:      logger,
+		client:      client,
+		adminClient: adminClient,
+	}
+}
 
 type Controller struct {
-	logger     kitlog.Logger
-	client     *admin.Service
-	kubeClient kubernetes.Interface
-	rbacClient clientset.Interface
-
-	// RoleBinding informer fields
-	rbsLister rbaclisters.RoleBindingLister
-	rbsSynced cache.InformerSynced
-
-	// DirectoryRoleBinding informer fields
-	drbsLister listers.DirectoryRoleBindingLister
-	drbsSynced cache.InformerSynced
-
-	// workqueue is a rate limited work queue, used to ensure we can process a steady stream
-	// of work and that we're never processing events for the same resource simultaneously.
-	workqueue workqueue.RateLimitingInterface
-
-	// recorder allows us to submit events to the Kubernetes API
-	recorder record.EventRecorder
+	ctx         context.Context
+	logger      kitlog.Logger
+	client      client.Client
+	adminClient *admin.Service
 }
 
-func NewController(
-	ctx context.Context,
-	logger kitlog.Logger,
-	client *admin.Service,
-	kubeClient kubernetes.Interface,
-	rbInformer rbacinformers.RoleBindingInformer,
-	rbacClient clientset.Interface,
-	drbInformer informers.DirectoryRoleBindingInformer,
-) *Controller {
-	// Add rbac types to the default Kubernetes Scheme so Events can be logged for the rbac
-	// types.
-	utilruntime.Must(kubescheme.AddToScheme(scheme.Scheme))
+func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
+	logger := kitlog.With(r.logger, "request", request)
+	logger.Log("event", "reconcile.start")
 
-	logger.Log("event", "broadcaster.create")
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(stdlog.Printf)
-	eventBroadcaster.StartRecordingToSink(
-		&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")},
-	)
-
-	recorder := eventBroadcaster.NewRecorder(
-		kubescheme.Scheme, corev1.EventSource{Component: controllerAgentName},
-	)
-
-	ctrl := &Controller{
-		logger:     logger,
-		client:     client,
-		kubeClient: kubeClient,
-		rbacClient: rbacClient,
-		// RoleBindings listeners
-		rbsLister: rbInformer.Lister(),
-		rbsSynced: rbInformer.Informer().HasSynced,
-		// DirectoryRoleBindings listeners
-		drbsLister: drbInformer.Lister(),
-		drbsSynced: drbInformer.Informer().HasSynced,
-		workqueue: workqueue.NewNamedRateLimitingQueue(
-			workqueue.DefaultControllerRateLimiter(), "DirectoryRoleBindings",
-		),
-		recorder: recorder,
-	}
-
-	logger.Log("event", "handlers.configure", "resource", "DirectoryRoleBinding")
-	drbInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: ctrl.enqueueDirectoryRoleBinding,
-			UpdateFunc: func(old, new interface{}) {
-				ctrl.enqueueDirectoryRoleBinding(new)
-			},
-		},
-	)
-
-	logger.Log("event", "handlers.configure", "resource", "RoleBinding")
-	rbInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: ctrl.handleObject,
-			UpdateFunc: func(old, new interface{}) {
-				ctrl.handleObject(new)
-			},
-			DeleteFunc: ctrl.handleObject,
-		},
-	)
-
-	return ctrl
-}
-
-// Run the control workloop until the context expires, using `threads` number of workers.
-func (c *Controller) Run(ctx context.Context, threads int) error {
-	defer utilruntime.HandleCrash()
-	defer c.workqueue.ShutDown()
-
-	c.logger.Log("event", "controller.start")
-	c.logger.Log("event", "cache.sync")
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.drbsSynced); !ok {
-		return fmt.Errorf("failed to wait for cached to sync")
-	}
-
-	c.logger.Log("event", "workers.start", "count", threads)
-	for idx := 0; idx < threads; idx++ {
-		go wait.Until(c.runWorker, time.Second, ctx.Done())
-	}
-
-	<-ctx.Done()
-
-	return nil
-}
-
-// runWorker continually processes items from the workqueue until told to shutdown
-func (c *Controller) runWorker() {
-	for c.processNextWorkItem() {
-	}
-}
-
-func (c *Controller) processNextWorkItem() bool {
-	obj, shutdown := c.workqueue.Get()
-	if shutdown {
-		return false
-	}
-
-	logger := kitlog.With(c.logger, "obj", obj)
-	logger.Log("event", "workqueue.process")
-
-	err := func(obj interface{}) error {
-		defer c.workqueue.Done(obj)
-
-		key, ok := obj.(string)
-		if !ok {
-			// This item is invalid, don't process it again
-			c.workqueue.Forget(obj)
-			return fmt.Errorf("expected string in workqueue")
+	defer func() {
+		if err != nil {
+			logger.Log("event", "reconcile.error", "error", err)
 		}
+	}()
 
-		// Sync the object represented by our key, where key is <namespace>/<name>
-		if err := c.syncHandler(key); err != nil {
-			c.workqueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing '%s': %s, re-queuing", key, err.Error())
-		}
-
-		c.workqueue.Forget(obj)
-		return nil
-	}(obj)
-
-	if err != nil {
-		logger.Log("event", "workqueue.error", "error", err)
-	} else {
-		logger.Log("event", "workqueue.success")
-	}
-
-	return true
-}
-
-// syncHandler performs our reconciliation process for the given resource
-func (c *Controller) syncHandler(key string) error {
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		c.logger.Log("event", "sync.error", "error", "invalid namespace/name key")
-	}
-
-	logger := kitlog.With(c.logger, "namespace", namespace, "name", name)
-	logger.Log("event", "sync.start")
-
-	drb, err := c.drbsLister.DirectoryRoleBindings(namespace).Get(name)
-	if err != nil {
+	drb := &rbacv1alpha1.DirectoryRoleBinding{}
+	if err := r.client.Get(r.ctx, request.NamespacedName, drb); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Log("event", "sync.error", "error", "item no longer exists")
-			return nil
+			r.logger.Log("event", "reconcile.not_found")
+			return res, nil
 		}
 
-		return err
+		r.logger.Log("event", "reconcile.error", "error", err)
+		return res, err
 	}
 
-	var subjects = make([]rbacv1.Subject, 0)
-	for _, subject := range drb.Subjects {
-		if subject.APIGroup != rbac.GroupName {
-			subjects = append(subjects, subject)
-			continue
+	rb := &rbacv1.RoleBinding{}
+	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
+	err = r.client.Get(r.ctx, identifier, rb)
+	if err != nil && errors.IsNotFound(err) {
+		logger.Log("event", "reconcile.create", "msg", "no RoleBinding found, creating")
+
+		rb.ObjectMeta = metav1.ObjectMeta{
+			Name:      drb.Name,
+			Namespace: drb.Namespace,
+		}
+		rb.RoleRef = drb.RoleRef
+		rb.Subjects = []rbacv1.Subject{}
+
+		if err := controllerutil.SetControllerReference(drb, rb, scheme.Scheme); err != nil {
+			return reconcile.Result{}, err
 		}
 
+		if err = r.client.Create(r.ctx, rb); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		if err = r.client.Get(r.ctx, identifier, rb); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	subjects, err := r.resolve(drb.Subjects)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	add, remove := diff(subjects, rb.Subjects), diff(rb.Subjects, subjects)
+	if len(add) > 0 || len(remove) > 0 {
+		for _, member := range add {
+			logger.Log("event", "member.add", "member", member.Name)
+		}
+
+		for _, member := range remove {
+			logger.Log("event", "member.remove", "member", member.Name)
+		}
+
+		logger.Log("event", "reconcile.update", "msg", "updating RoleBinding subjects")
+		rb.Subjects = subjects
+		if err := r.client.Update(r.ctx, rb); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func diff(s1 []rbacv1.Subject, s2 []rbacv1.Subject) []rbacv1.Subject {
+	result := make([]rbacv1.Subject, 0)
+	for _, s := range s1 {
+		if !includesSubject(s2, s) {
+			result = append(result, s)
+		}
+	}
+
+	return result
+}
+
+func includesSubject(ss []rbacv1.Subject, s rbacv1.Subject) bool {
+	for _, existing := range ss {
+		if existing.Kind == s.Kind && existing.Name == s.Name && existing.Namespace == s.Namespace {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *Controller) membersOf(group string) ([]rbacv1.Subject, error) {
+	subjects := make([]rbacv1.Subject, 0)
+	resp, err := r.adminClient.Members.List(group).Do()
+
+	if err == nil {
+		for _, member := range resp.Members {
+			subjects = append(subjects, rbacv1.Subject{
+				APIGroup: rbacv1.GroupName,
+				Kind:     rbacv1.UserKind,
+				Name:     member.Email,
+			})
+		}
+	}
+
+	return subjects, err
+}
+
+func (r *Controller) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
+	out := make([]rbacv1.Subject, 0)
+	for _, subject := range in {
 		switch subject.Kind {
 		case "GoogleGroup":
-			resp, err := c.client.Members.List(subject.Name).Do()
+			members, err := r.membersOf(subject.Name)
 			if err != nil {
-				logger.Log("event", "sync.error", "error", err.Error())
-				break
+				return nil, err
 			}
 
-			for _, member := range resp.Members {
-				subjects = append(subjects, rbacv1.Subject{
-					APIGroup: rbacv1.GroupName,
-					Kind:     rbacv1.UserKind,
-					Name:     member.Email,
-				})
+			// For each of our group members, add them if they weren't already here
+			for _, member := range members {
+				if !includesSubject(out, member) {
+					out = append(out, member)
+				}
 			}
+
 		default:
-			logger.Log("event", "sync.error", "kind", subject.Kind, "error", "unrecognised kind")
+			out = append(out, subject)
 		}
 	}
 
-	// TODO
-	spew.Dump(drb)
-	spew.Dump(subjects)
-
-	return nil
-}
-
-func (c *Controller) handleObject(obj interface{}) {
-	logger := kitlog.With(c.logger, "obj", obj)
-	object, ok := obj.(metav1.Object)
-	if !ok {
-		logger.Log("event", "handle.error", "error", "failed to decode object, invalid type")
-		return
-	}
-
-	if ownerRef := metav1.GetControllerOf(object); ownerRef != nil {
-		if ownerRef.Kind != "DirectoryRoleBinding" {
-			logger.Log("event", "handler.unrelated", "msg", "object is not handled by this controller")
-			return
-		}
-
-		drb, err := c.drbsLister.DirectoryRoleBindings(object.GetNamespace()).Get(ownerRef.Name)
-		if err != nil {
-			logger.Log("event", "handler.orphaned", "msg", "ignoring orphaned object")
-			return
-		}
-
-		logger.Log("event", "handler.enqueuing", "selflink", drb.GetSelfLink())
-		c.enqueueDirectoryRoleBinding(drb)
-	}
-}
-
-// enqueueDirectoryRoleBinding receives a DirectoryRoleBinding resource and notifies the
-// workqueue using the appropriate cache key.
-func (c *Controller) enqueueDirectoryRoleBinding(obj interface{}) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		c.logger.Log("event", "enqueue.error", "error", err.Error())
-		return
-	}
-
-	c.workqueue.AddRateLimited(key)
+	return out, nil
 }

@@ -3,10 +3,12 @@ apiVersion: rbac.gocardless.io/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tiller
 subjects:
-  - apiGroup: rbac.gocardless.io
-    kind: GoogleGroup
+  - kind: GoogleGroup
     name: platform@gocardless.com
-  - apiGroup: rbac.authorization.k8s.io
-    kind: User
+  - kind: User
     name: ivan@gocardless.com

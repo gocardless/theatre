@@ -1,0 +1,19 @@
+---
+version: 2
+
+jobs:
+  unit:
+    docker:
+      - image: golang:1.11
+    working_directory: /go/src/github.com/lawrencejones/theatre
+    steps:
+      - checkout
+      - run:
+          name: Run unit tests
+          command: go test -race -count=1 -v ./...
+
+workflows:
+  version: 2
+  build-integration:
+    jobs:
+      - unit

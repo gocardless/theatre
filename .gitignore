@@ -1,2 +1,3 @@
 .env
-rbac-directory
+/rbac-directory
+/manager

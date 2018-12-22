@@ -1,6 +1,21 @@
 required = [
-  "k8s.io/code-generator/cmd/client-gen"
+  "github.com/onsi/ginkgo",
+  "github.com/onsi/gomega",
+  "k8s.io/code-generator/cmd/client-gen",
+  "k8s.io/code-generator/cmd/deepcopy-gen",
 ]
+
+[[override]]
+  name="k8s.io/code-generator"
+  version="kubernetes-1.12.4"
+
+[[constraint]]
+  name="sigs.k8s.io/controller-runtime"
+  version="v0.1.1"
+
+[[constraint]]
+  name="sigs.k8s.io/controller-tools"
+  version="v0.1.1"
 
 [[constraint]]
   name = "github.com/onsi/gomega"

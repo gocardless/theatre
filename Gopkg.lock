@@ -771,8 +771,7 @@
   version = "kubernetes-1.12.3"
 
 [[projects]]
-  branch = "master"
-  digest = "1:b76327c4796a4b2ed85f0431705cd023b50a910aec99c8b9440814a0f98418bc"
+  digest = "1:8108815d1aef9159daabdb3f0fcef04a88765536daf0c0cd29a31fdba135ee54"
   name = "k8s.io/code-generator"
   packages = [
     "cmd/client-gen",
@@ -783,11 +782,13 @@
     "cmd/client-gen/generators/util",
     "cmd/client-gen/path",
     "cmd/client-gen/types",
-    "pkg/namer",
+    "cmd/deepcopy-gen",
+    "cmd/deepcopy-gen/args",
     "pkg/util",
   ]
   pruneopts = ""
-  revision = "3a2206dd6a78497deceb3ae058417fdeb2036c7e"
+  revision = "b1289fc74931d4b6b04bd1a259acfc88a2cb0a66"
+  version = "kubernetes-1.12.4"
 
 [[projects]]
   branch = "master"
@@ -795,6 +796,8 @@
   name = "k8s.io/gengo"
   packages = [
     "args",
+    "examples/deepcopy-gen/generators",
+    "examples/set-gen/sets",
     "generator",
     "namer",
     "parser",
@@ -886,6 +889,7 @@
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/util/flowcontrol",
     "k8s.io/code-generator/cmd/client-gen",
+    "k8s.io/code-generator/cmd/deepcopy-gen",
     "k8s.io/klog",
     "sigs.k8s.io/controller-runtime/pkg/builder",
     "sigs.k8s.io/controller-runtime/pkg/client",

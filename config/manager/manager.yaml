@@ -45,7 +45,7 @@ spec:
       containers:
         - command:
             - /manager
-          image: lawrjone/theatre:latest
+          image: gcr.io/lawrjone/theatre:latest
           imagePullPolicy: Always
           name: manager
           env:

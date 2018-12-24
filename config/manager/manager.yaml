@@ -28,18 +28,26 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: default
+    namespace: lawrence
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: manager
+  labels:
+    app: manager
+    group: lawrjone.xyz
 spec:
+  serviceName: manager
   selector:
     matchLabels:
-      name: manager
+      app: manager
+      group: lawrjone.xyz
   template:
     metadata:
-      name: manager
+      labels:
+        app: manager
+        group: lawrjone.xyz
     spec:
       terminationGracePeriodSeconds: 10
       containers:

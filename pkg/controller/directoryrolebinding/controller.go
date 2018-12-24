@@ -37,6 +37,7 @@ type Controller struct {
 	adminClient *admin.Service
 }
 
+// Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
 func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
 	logger.Log("event", "reconcile.start")

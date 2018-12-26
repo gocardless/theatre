@@ -2,17 +2,20 @@ package directoryrolebinding
 
 import (
 	"context"
+	"fmt"
 
 	kitlog "github.com/go-kit/kit/log"
 
 	admin "google.golang.org/api/admin/directory/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
+	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,10 +24,16 @@ import (
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 )
 
-func NewController(ctx context.Context, logger kitlog.Logger, client client.Client, adminClient *admin.Service) *Controller {
+const (
+	EventCreated          = "Created"
+	EventSubjectsModified = "SubjectsModified"
+)
+
+func NewController(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client, adminClient *admin.Service) *Controller {
 	return &Controller{
 		ctx:         ctx,
 		logger:      logger,
+		recorder:    recorder,
 		client:      client,
 		adminClient: adminClient,
 	}
@@ -33,6 +42,7 @@ func NewController(ctx context.Context, logger kitlog.Logger, client client.Clie
 type Controller struct {
 	ctx         context.Context
 	logger      kitlog.Logger
+	recorder    record.EventRecorder
 	client      client.Client
 	adminClient *admin.Service
 }
@@ -83,6 +93,10 @@ func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result,
 		if err = r.client.Get(r.ctx, identifier, rb); err != nil {
 			return reconcile.Result{}, err
 		}
+
+		r.recorder.Event(drb, corev1.EventTypeNormal, EventCreated, fmt.Sprintf(
+			"Created RoleBinding: %s", identifier,
+		))
 	}
 
 	subjects, err := r.resolve(drb.Subjects)
@@ -92,6 +106,10 @@ func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result,
 
 	add, remove := diff(subjects, rb.Subjects), diff(rb.Subjects, subjects)
 	if len(add) > 0 || len(remove) > 0 {
+		r.recorder.Event(drb, corev1.EventTypeNormal, EventSubjectsModified, fmt.Sprintf(
+			"Modifying subject list, adding %d and removing %d", len(add), len(remove),
+		))
+
 		for _, member := range add {
 			logger.Log("event", "member.add", "member", member.Name)
 		}

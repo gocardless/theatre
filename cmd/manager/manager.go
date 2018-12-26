@@ -82,7 +82,7 @@ func main() {
 		Owns(&rbacv1.RoleBinding{}).
 		Build(
 			directoryrolebinding.NewController(
-				ctx, logger, client, adminClient,
+				ctx, logger, mgr.GetRecorder("DirectoryRoleBinding"), client, adminClient,
 			),
 		)
 

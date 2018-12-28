@@ -3,6 +3,8 @@ package sudorolebinding
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 
@@ -11,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 
@@ -26,7 +27,70 @@ import (
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/controlflow"
 	"github.com/lawrencejones/theatre/pkg/logging"
+	"github.com/lawrencejones/theatre/pkg/rbacutils"
 )
+
+// TODO: This implementation isn't possible right now, as Kubernetes doesn't provide the
+// ability to define arbitrary subresources on CRDs. The plan was initially to expose a
+// /sudo subresource on the SudoRoleBinding and anyone who hit that endpoint would be
+// added to the grants RoleBinding.
+//
+// An example of how this might integrate with DirectoryRoleBindings would be the
+// following:
+
+/*
+# Define a Role that permits POST to the /sudo subresource of our
+# SudoRoleBinding called sudoers
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sudoers
+rules:
+  - apiGroups:
+      - rbac.lawrjone.xyz
+    resourceNames:
+      - sudoers
+    resources:
+      - sudorolebindings/sudo
+    verbs:
+      - '*'
+
+# Now define a DirectoryRoleBinding that would add the platform@ group into our
+# sudoers Role
+---
+apiVersion: rbac.lawrjone.xyz/v1alpha1
+kind: DirectoryRoleBinding
+metadata:
+  name: sudoers-group
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sudoers
+subjects:
+  - kind: GoogleGroup
+    name: platform@gocardless.com
+
+# Finally we use a SudoRoleBinding to permit users to temporarily elevate
+# themselves into the superuser ClusterRole. Our previous RBAC configuration
+# ensures only platform@ can perform the required /sudo action, thereby
+# elevating their permissions.
+---
+apiVersion: rbac.lawrjone.xyz/v1alpha1
+kind: SudoRoleBinding
+metadata:
+  name: sudoers
+spec:
+  expiry: 60  # 1m
+  roleBinding:
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: superuser
+*/
+
+// While we can create this functionality without subresources, it's probably not worth
+// doing it until we have them.
 
 const (
 	EventError          = "Error"
@@ -34,8 +98,8 @@ const (
 	EventNotFound       = "NotFound"
 	EventGrantsNotFound = "GrantsNotFound"
 	EventGrantsCreated  = "GrantsCreated"
-	EventSudoNotFound   = "SudoNotFound"
-	EventSudoCreated    = "SudoCreated"
+	EventInvalidExpiry  = "InvalidExpiry"
+	EventGrantExpired   = "GrantExpired"
 )
 
 // Add instantiates a SudoRoleBinding controller and adds it to the manager.
@@ -70,15 +134,6 @@ func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, client 
 	return c, err
 }
 
-func NewSudoRoleBindingReconciler(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client) *SudoRoleBindingReconciler {
-	return &SudoRoleBindingReconciler{
-		ctx:      ctx,
-		logger:   logger,
-		recorder: recorder,
-		client:   client,
-	}
-}
-
 type SudoRoleBindingReconciler struct {
 	ctx      context.Context
 	logger   kitlog.Logger
@@ -86,11 +141,11 @@ type SudoRoleBindingReconciler struct {
 	client   client.Client
 }
 
-// Reconcile manages a SudoRoleBinding. SudoRoleBindings allow a specific set of users to
-// temporarily elevate their permissions by adding binding themselves into a rolebinding.
+// Reconcile manages a SudoRoleBinding. SudoRoleBindings allow users to temporarily
+// elevate their permissions by adding themselves into a rolebinding.
 //
-// Each SudoRoleBinding creates two associated rolebindings, one for granting the elevated
-// permissions and another to permit the users to elevate themselves.
+// Each SudoRoleBinding creates an associated rolebindings that it adds subjects to when
+// they successfully sudo.
 func (r *SudoRoleBindingReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
 	logger.Log("event", EventReconcile)
@@ -112,21 +167,82 @@ func (r *SudoRoleBindingReconciler) Reconcile(request reconcile.Request) (res re
 
 	logger = logging.WithRecorder(logger, r.recorder, srb)
 
-	_, err = r.findOrCreateGrants(logger, srb)
+	rb, err := r.findOrCreateGrants(logger, srb)
 	if err != nil {
 		return
 	}
 
-	// create sudo role binding
-	// produce subject list, update sudo role binding
+	validGrants := []rbacv1alpha1.SudoRoleBindingGrant{}
+	for _, grant := range srb.Status.Grants {
+		expiry, err := time.Parse(time.RFC3339, grant.Expiry)
+		if err != nil {
+			logger.Log("event", EventInvalidExpiry, "subject", grant.Subject.Name, "error", fmt.Errorf(
+				"Invalid expiry time for grant subject %s: %v", grant.Subject.Name, err,
+			))
+
+			continue
+		}
+
+		if time.Now().After(expiry) {
+			logger.Log("event", EventGrantExpired, "subject", grant.Subject.Name, "msg", fmt.Sprintf(
+				"Grant expired for subject: %s", grant.Subject.Name,
+			))
+
+			continue
+		}
+
+		// If we get here, we know we're looking at a valid grant
+		validGrants = append(validGrants, grant)
+	}
+
+	subjects := mapSubjects(validGrants)
+	add, remove := rbacutils.Diff(subjects, rb.Subjects), rbacutils.Diff(rb.Subjects, subjects)
+	if len(add) > 0 || len(remove) > 0 {
+		rb.Subjects = subjects
+		if err := r.client.Update(r.ctx, rb); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	if !reflect.DeepEqual(srb.Status.Grants, validGrants) {
+		srb.Status.Grants = validGrants
+		if err := r.client.Status().Update(r.ctx, srb); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
 
 	return reconcile.Result{}, nil
+}
+
+func mapSubjects(grants []rbacv1alpha1.SudoRoleBindingGrant) []rbacv1.Subject {
+	subjects := []rbacv1.Subject{}
+	for _, grant := range grants {
+		subjects = append(subjects, grant.Subject)
+	}
+
+	return subjects
+}
+
+// findOrCreateGrants finds the rolebinding that powers the elevation of permissions to
+// those defined in our SudoRoleBinding. It will initially have an empty set of subjects,
+// as subjects should only be added to this role via the sudo action.
+func (r *SudoRoleBindingReconciler) findOrCreateGrants(logger kitlog.Logger, srb *rbacv1alpha1.SudoRoleBinding) (rb *rbacv1.RoleBinding, err error) {
+	rb = &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      srb.GetName(),
+			Namespace: srb.GetNamespace(),
+		},
+		RoleRef:  srb.Spec.RoleBinding.RoleRef,
+		Subjects: []rbacv1.Subject{},
+	}
+
+	return rb, r.findOrCreate(logger, srb, EventGrantsNotFound, EventGrantsCreated, rb)
 }
 
 // findOrCreate generates a Kubernetes resource if it doesn't already exist in the
 // cluster. We set the object metadata to ensure the resource is owned by the
 // SudoRoleBinding, and will get cleaned up whenever that resource is deleted.
-func (r *SudoRoleBindingReconciler) findOrCreate(logger kitlog.Logger, srb *rbacv1alpha1.SudoRoleBinding, obj runtime.Object, eventNotFound, eventCreated string) (err error) {
+func (r *SudoRoleBindingReconciler) findOrCreate(logger kitlog.Logger, srb *rbacv1alpha1.SudoRoleBinding, eventNotFound, eventCreated string, obj runtime.Object) (err error) {
 	key, err := client.ObjectKeyFromObject(obj)
 	if err != nil {
 		return err
@@ -146,74 +262,10 @@ func (r *SudoRoleBindingReconciler) findOrCreate(logger kitlog.Logger, srb *rbac
 			}
 
 			logger.Log("event", eventCreated, "msg", fmt.Sprintf(
-				"Created %s: %s", desired.GetObjectKind(), key,
+				"Created %s: %s", reflect.TypeOf(obj), key,
 			))
 		}
 	}
 
 	return nil
-}
-
-// findOrCreateGrants finds the rolebinding that powers the elevation of permissions to
-// those defined in our SudoRoleBinding. It will initially have an empty set of subjects,
-// as subjects should only be added to this role via the sudo action.
-func (r *SudoRoleBindingReconciler) findOrCreateGrants(logger kitlog.Logger, srb *rbacv1alpha1.SudoRoleBinding) (rb *rbacv1.RoleBinding, err error) {
-	identifier := types.NamespacedName{Name: fmt.Sprintf("%s-grants", srb.GetName()), Namespace: srb.GetNamespace()}
-	if err = r.client.Get(r.ctx, identifier, rb); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Log("event", EventGrantsNotFound)
-			rb = &rbacv1.RoleBinding{
-				ObjectMeta: metav1.ObjectMeta{},
-				RoleRef:    srb.Spec.RoleBinding.RoleRef,
-				Subjects:   []rbacv1.Subject{},
-			}
-
-			if err = controllerutil.SetControllerReference(srb, rb, scheme.Scheme); err != nil {
-				return
-			}
-
-			if err = r.client.Create(r.ctx, rb); err != nil {
-				return
-			}
-
-			logger.Log("event", EventGrantsCreated, "msg", fmt.Sprintf(
-				"Created grants RoleBinding: %s", identifier,
-			))
-		}
-	}
-
-	return
-}
-
-// findOrCreateSudo finds the directory role binding that permits the SudoRoleBinding
-// subject list to perform the sudo action on our SudoRoleBinding.
-func (r *SudoRoleBindingReconciler) findOrCreateSudo(logger kitlog.Logger, srb *rbacv1alpha1.SudoRoleBinding) (rb *rbacv1alpha1.DirectoryRoleBinding, err error) {
-	identifier := types.NamespacedName{Name: fmt.Sprintf("%s-sudo", srb.GetName()), Namespace: srb.GetNamespace()}
-	if err = r.client.Get(r.ctx, identifier, rb); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Log("event", EventSudoNotFound)
-			rb = &rbacv1alpha1.DirectoryRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      identifier.Name,
-					Namespace: identifier.Namespace,
-				},
-				RoleRef:  rbacv1.RoleRef{},
-				Subjects: []rbacv1.Subject{},
-			}
-
-			if err = controllerutil.SetControllerReference(srb, rb, scheme.Scheme); err != nil {
-				return
-			}
-
-			if err = r.client.Create(r.ctx, rb); err != nil {
-				return
-			}
-
-			logger.Log("event", EventGrantsCreated, "msg", fmt.Sprintf(
-				"Created grants RoleBinding: %s", identifier,
-			))
-		}
-	}
-
-	return
 }

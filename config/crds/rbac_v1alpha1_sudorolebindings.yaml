@@ -12,6 +12,7 @@ spec:
     shortNames:
       - srb
       - srbs
+  scope: Namespaced
   subresources:
     status: {}
   version: v1alpha1
@@ -44,8 +45,6 @@ spec:
                       type: string
                     name:
                       type: string
-                subjects:
-                  type: array
         status:
           properties:
             grants:
@@ -56,10 +55,3 @@ spec:
                     type: object
                   expiry:
                     type: string
-  status:
-    acceptedNames:
-      kind: ""
-      plural: ""
-    grants: {}
-    conditions: []
-    storedVersions: []

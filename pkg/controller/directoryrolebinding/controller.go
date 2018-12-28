@@ -26,6 +26,7 @@ import (
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/controlflow"
 	"github.com/lawrencejones/theatre/pkg/logging"
+	"github.com/lawrencejones/theatre/pkg/rbacutils"
 )
 
 const (
@@ -135,7 +136,7 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 
-	add, remove := diff(subjects, rb.Subjects), diff(rb.Subjects, subjects)
+	add, remove := rbacutils.Diff(subjects, rb.Subjects), rbacutils.Diff(rb.Subjects, subjects)
 	if len(add) > 0 || len(remove) > 0 {
 		logger.Log("event", EventSubjectsModified, "add", len(add), "remove", len(remove), "msg", fmt.Sprintf(
 			"Modifying subject list, adding %d and removing %d", len(add), len(remove),
@@ -156,27 +157,6 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func diff(s1 []rbacv1.Subject, s2 []rbacv1.Subject) []rbacv1.Subject {
-	result := make([]rbacv1.Subject, 0)
-	for _, s := range s1 {
-		if !includesSubject(s2, s) {
-			result = append(result, s)
-		}
-	}
-
-	return result
-}
-
-func includesSubject(ss []rbacv1.Subject, s rbacv1.Subject) bool {
-	for _, existing := range ss {
-		if existing.Kind == s.Kind && existing.Name == s.Name && existing.Namespace == s.Namespace {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (r *DirectoryRoleBindingReconciler) membersOf(group string) ([]rbacv1.Subject, error) {
@@ -208,7 +188,7 @@ func (r *DirectoryRoleBindingReconciler) resolve(in []rbacv1.Subject) ([]rbacv1.
 
 			// For each of our group members, add them if they weren't already here
 			for _, member := range members {
-				if !includesSubject(out, member) {
+				if !rbacutils.IncludesSubject(out, member) {
 					out = append(out, member)
 				}
 			}

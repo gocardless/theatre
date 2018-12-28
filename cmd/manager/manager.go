@@ -81,6 +81,7 @@ func main() {
 	}
 
 	// SudoRoleBinding controller
+	// TODO: Not yet fully functional, see controller.go for more details
 	if _, err = sudorolebinding.Add(ctx, mgr, logger, client); err != nil {
 		app.Fatalf(err.Error())
 	}

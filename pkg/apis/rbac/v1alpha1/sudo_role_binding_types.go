@@ -14,8 +14,8 @@ type SudoRoleBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SudoRoleBindingSpec `json:"spec"`
-	Status SudoRoleBindingSpec `json:"status"`
+	Spec   SudoRoleBindingSpec   `json:"spec"`
+	Status SudoRoleBindingStatus `json:"status"`
 }
 
 type SudoRoleBindingSpec struct {

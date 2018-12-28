@@ -34,8 +34,8 @@ const (
 	EventSubjectsModified   = "SubjectsModified"
 )
 
-func NewController(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client, adminClient *admin.Service) *Controller {
-	return &Controller{
+func NewDirectoryRoleBindingController(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client, adminClient *admin.Service) *DirectoryRoleBindingController {
+	return &DirectoryRoleBindingController{
 		ctx:         ctx,
 		logger:      logger,
 		recorder:    recorder,
@@ -44,7 +44,7 @@ func NewController(ctx context.Context, logger kitlog.Logger, recorder record.Ev
 	}
 }
 
-type Controller struct {
+type DirectoryRoleBindingController struct {
 	ctx         context.Context
 	logger      kitlog.Logger
 	recorder    record.EventRecorder
@@ -53,7 +53,7 @@ type Controller struct {
 }
 
 // Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
-func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
+func (r *DirectoryRoleBindingController) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
 	logger.Log("event", EventReconcile)
 
@@ -152,7 +152,7 @@ func includesSubject(ss []rbacv1.Subject, s rbacv1.Subject) bool {
 	return false
 }
 
-func (r *Controller) membersOf(group string) ([]rbacv1.Subject, error) {
+func (r *DirectoryRoleBindingController) membersOf(group string) ([]rbacv1.Subject, error) {
 	subjects := make([]rbacv1.Subject, 0)
 	resp, err := r.adminClient.Members.List(group).Do()
 
@@ -169,7 +169,7 @@ func (r *Controller) membersOf(group string) ([]rbacv1.Subject, error) {
 	return subjects, err
 }
 
-func (r *Controller) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
+func (r *DirectoryRoleBindingController) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
 	out := make([]rbacv1.Subject, 0)
 	for _, subject := range in {
 		switch subject.Kind {

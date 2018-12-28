@@ -28,6 +28,7 @@ import (
 type RbacV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	DirectoryRoleBindingsGetter
+	SudoRoleBindingsGetter
 }
 
 // RbacV1alpha1Client is used to interact with features provided by the rbac.lawrjone.xyz group.
@@ -37,6 +38,10 @@ type RbacV1alpha1Client struct {
 
 func (c *RbacV1alpha1Client) DirectoryRoleBindings(namespace string) DirectoryRoleBindingInterface {
 	return newDirectoryRoleBindings(c, namespace)
+}
+
+func (c *RbacV1alpha1Client) SudoRoleBindings(namespace string) SudoRoleBindingInterface {
+	return newSudoRoleBindings(c, namespace)
 }
 
 // NewForConfig creates a new RbacV1alpha1Client for the given config.

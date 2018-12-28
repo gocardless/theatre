@@ -1,0 +1,15 @@
+---
+apiVersion: rbac.lawrjone.xyz/v1alpha1
+kind: SudoRoleBinding
+metadata:
+  name: platform-can-superuser
+spec:
+  expiry: 300  # 5m
+  roleBinding:
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: superuser
+    subjects:
+      - kind: GoogleGroup
+        name: platform@gocardless.com

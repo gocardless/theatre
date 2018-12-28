@@ -26,6 +26,8 @@ import (
 type Interface interface {
 	// DirectoryRoleBindings returns a DirectoryRoleBindingInformer.
 	DirectoryRoleBindings() DirectoryRoleBindingInformer
+	// SudoRoleBindings returns a SudoRoleBindingInformer.
+	SudoRoleBindings() SudoRoleBindingInformer
 }
 
 type version struct {
@@ -42,4 +44,9 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // DirectoryRoleBindings returns a DirectoryRoleBindingInformer.
 func (v *version) DirectoryRoleBindings() DirectoryRoleBindingInformer {
 	return &directoryRoleBindingInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// SudoRoleBindings returns a SudoRoleBindingInformer.
+func (v *version) SudoRoleBindings() SudoRoleBindingInformer {
+	return &sudoRoleBindingInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

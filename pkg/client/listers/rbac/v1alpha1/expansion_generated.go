@@ -25,3 +25,11 @@ type DirectoryRoleBindingListerExpansion interface{}
 // DirectoryRoleBindingNamespaceListerExpansion allows custom methods to be added to
 // DirectoryRoleBindingNamespaceLister.
 type DirectoryRoleBindingNamespaceListerExpansion interface{}
+
+// SudoRoleBindingListerExpansion allows custom methods to be added to
+// SudoRoleBindingLister.
+type SudoRoleBindingListerExpansion interface{}
+
+// SudoRoleBindingNamespaceListerExpansion allows custom methods to be added to
+// SudoRoleBindingNamespaceLister.
+type SudoRoleBindingNamespaceListerExpansion interface{}

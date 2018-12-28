@@ -8,7 +8,6 @@ import (
 
 	admin "google.golang.org/api/admin/directory/v1"
 
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,11 +21,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
+	"github.com/lawrencejones/theatre/pkg/logging"
 )
 
 const (
-	EventCreated          = "Created"
-	EventSubjectsModified = "SubjectsModified"
+	EventReconcile          = "Reconcile"
+	EventNotFound           = "NotFound"
+	EventRoleBindingCreated = "Created"
+	EventError              = "Error"
+	EventSubjectAdd         = "SubjectAdd"
+	EventSubjectRemove      = "SubjectRemove"
+	EventSubjectsModified   = "SubjectsModified"
 )
 
 func NewController(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client, adminClient *admin.Service) *Controller {
@@ -50,31 +55,30 @@ type Controller struct {
 // Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
 func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
-	logger.Log("event", "reconcile.start")
-
-	defer func() {
-		if err != nil {
-			logger.Log("event", "reconcile.error", "error", err)
-		}
-	}()
+	logger.Log("event", EventReconcile)
 
 	drb := &rbacv1alpha1.DirectoryRoleBinding{}
 	if err := r.client.Get(r.ctx, request.NamespacedName, drb); err != nil {
 		if errors.IsNotFound(err) {
-			r.logger.Log("event", "reconcile.not_found")
-			return res, nil
+			return res, logger.Log("event", EventNotFound)
 		}
 
-		r.logger.Log("event", "reconcile.error", "error", err)
+		logger.Log("event", EventError, "error", err)
 		return res, err
 	}
+
+	logger = logging.WithRecorder(logger, r.recorder, drb)
+
+	defer func() {
+		if err != nil {
+			logger.Log("event", EventError, "error", err)
+		}
+	}()
 
 	rb := &rbacv1.RoleBinding{}
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
 	err = r.client.Get(r.ctx, identifier, rb)
 	if err != nil && errors.IsNotFound(err) {
-		logger.Log("event", "reconcile.create", "msg", "no RoleBinding found, creating")
-
 		rb.ObjectMeta = metav1.ObjectMeta{
 			Name:      drb.Name,
 			Namespace: drb.Namespace,
@@ -94,7 +98,7 @@ func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result,
 			return reconcile.Result{}, err
 		}
 
-		r.recorder.Event(drb, corev1.EventTypeNormal, EventCreated, fmt.Sprintf(
+		logger.Log("event", EventRoleBindingCreated, "msg", fmt.Sprintf(
 			"Created RoleBinding: %s", identifier,
 		))
 	}
@@ -106,19 +110,18 @@ func (r *Controller) Reconcile(request reconcile.Request) (res reconcile.Result,
 
 	add, remove := diff(subjects, rb.Subjects), diff(rb.Subjects, subjects)
 	if len(add) > 0 || len(remove) > 0 {
-		r.recorder.Event(drb, corev1.EventTypeNormal, EventSubjectsModified, fmt.Sprintf(
+		logger.Log("event", EventSubjectsModified, "add", len(add), "remove", len(remove), "msg", fmt.Sprintf(
 			"Modifying subject list, adding %d and removing %d", len(add), len(remove),
 		))
 
 		for _, member := range add {
-			logger.Log("event", "member.add", "member", member.Name)
+			logging.WithNoRecord(logger).Log("event", EventSubjectAdd, "subject", member.Name)
 		}
 
 		for _, member := range remove {
-			logger.Log("event", "member.remove", "member", member.Name)
+			logging.WithNoRecord(logger).Log("event", EventSubjectRemove, "subject", member.Name)
 		}
 
-		logger.Log("event", "reconcile.update", "msg", "updating RoleBinding subjects")
 		rb.Subjects = subjects
 		if err := r.client.Update(r.ctx, rb); err != nil {
 			return reconcile.Result{}, err

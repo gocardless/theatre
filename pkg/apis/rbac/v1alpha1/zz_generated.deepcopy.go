@@ -21,8 +21,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	time "time"
-
 	v1 "k8s.io/api/rbac/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -124,11 +122,6 @@ func (in *SudoRoleBinding) DeepCopyObject() runtime.Object {
 func (in *SudoRoleBindingGrant) DeepCopyInto(out *SudoRoleBindingGrant) {
 	*out = *in
 	out.Subject = in.Subject
-	if in.Expiry != nil {
-		in, out := &in.Expiry, &out.Expiry
-		*out = new(time.Time)
-		(*in).DeepCopyInto(*out)
-	}
 	return
 }
 
@@ -203,9 +196,7 @@ func (in *SudoRoleBindingStatus) DeepCopyInto(out *SudoRoleBindingStatus) {
 	if in.Grants != nil {
 		in, out := &in.Grants, &out.Grants
 		*out = make([]SudoRoleBindingGrant, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+		copy(*out, *in)
 	}
 	return
 }

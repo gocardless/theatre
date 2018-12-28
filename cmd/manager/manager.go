@@ -13,12 +13,10 @@ import (
 	"golang.org/x/oauth2/google"
 	admin "google.golang.org/api/admin/directory/v1"
 
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	"k8s.io/klog"
 
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -26,6 +24,7 @@ import (
 	"github.com/lawrencejones/theatre/pkg/apis"
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/controller/directoryrolebinding"
+	"github.com/lawrencejones/theatre/pkg/controller/sudorolebinding"
 	"github.com/lawrencejones/theatre/pkg/signals"
 )
 
@@ -54,15 +53,6 @@ func main() {
 		app.Fatalf("failed to add rbac scheme: %v", err)
 	}
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
-	if err != nil {
-		app.Fatalf("failed to create manager: %v", err)
-	}
-
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		app.Fatalf("failed to add CRDs to scheme: %v", err)
-	}
-
 	client, err := client.New(config.GetConfigOrDie(), client.Options{})
 	if err != nil {
 		app.Fatalf("failed to create kubernetes client: %v", err)
@@ -76,18 +66,23 @@ func main() {
 		app.Fatalf("failed to create Google Admin client: %v", err)
 	}
 
-	_, err = builder.SimpleController().
-		WithManager(mgr).
-		ForType(&rbacv1alpha1.DirectoryRoleBinding{}).
-		Owns(&rbacv1.RoleBinding{}).
-		Build(
-			directoryrolebinding.NewDirectoryRoleBindingController(
-				ctx, logger, mgr.GetRecorder("DirectoryRoleBinding"), client, adminClient,
-			),
-		)
-
+	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
 	if err != nil {
-		app.Fatalf("failed to build controller: %v", err)
+		app.Fatalf("failed to create manager: %v", err)
+	}
+
+	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+		app.Fatalf("failed to add CRDs to scheme: %v", err)
+	}
+
+	// DirectoryRoleBinding controller
+	if _, err = directoryrolebinding.Add(ctx, mgr, logger, client, adminClient); err != nil {
+		app.Fatalf(err.Error())
+	}
+
+	// SudoRoleBinding controller
+	if _, err = sudorolebinding.Add(ctx, mgr, logger, client); err != nil {
+		app.Fatalf(err.Error())
 	}
 
 	if err := mgr.Start(ctx.Done()); err != nil {

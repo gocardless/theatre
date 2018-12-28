@@ -16,10 +16,15 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
+	"github.com/lawrencejones/theatre/pkg/controlflow"
 	"github.com/lawrencejones/theatre/pkg/logging"
 )
 
@@ -33,17 +38,40 @@ const (
 	EventSubjectsModified   = "SubjectsModified"
 )
 
-func NewDirectoryRoleBindingController(ctx context.Context, logger kitlog.Logger, recorder record.EventRecorder, client client.Client, adminClient *admin.Service) *DirectoryRoleBindingController {
-	return &DirectoryRoleBindingController{
-		ctx:         ctx,
-		logger:      logger,
-		recorder:    recorder,
-		client:      client,
-		adminClient: adminClient,
-	}
+// Add instantiates a DirectoryRoleBinding controller and adds it to the manager.
+func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, client client.Client, adminClient *admin.Service) (controller.Controller, error) {
+	c, err := controller.New("directoryrolebinding-controller", mgr,
+		controller.Options{
+			Reconciler: &DirectoryRoleBindingReconciler{
+				ctx:         ctx,
+				logger:      kitlog.With(logger, "component", "DirectoryRoleBinding"),
+				recorder:    mgr.GetRecorder("DirectoryRoleBinding"),
+				client:      client,
+				adminClient: adminClient,
+			},
+		},
+	)
+
+	err = controlflow.All(
+		func() error {
+			return c.Watch(
+				&source.Kind{Type: &rbacv1alpha1.DirectoryRoleBinding{}}, &handler.EnqueueRequestForObject{},
+			)
+		},
+		func() error {
+			return c.Watch(
+				&source.Kind{Type: &rbacv1.RoleBinding{}}, &handler.EnqueueRequestForOwner{
+					IsController: true,
+					OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
+				},
+			)
+		},
+	)
+
+	return c, err
 }
 
-type DirectoryRoleBindingController struct {
+type DirectoryRoleBindingReconciler struct {
 	ctx         context.Context
 	logger      kitlog.Logger
 	recorder    record.EventRecorder
@@ -52,7 +80,7 @@ type DirectoryRoleBindingController struct {
 }
 
 // Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
-func (r *DirectoryRoleBindingController) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
+func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
 	logger.Log("event", EventReconcile)
 
@@ -151,7 +179,7 @@ func includesSubject(ss []rbacv1.Subject, s rbacv1.Subject) bool {
 	return false
 }
 
-func (r *DirectoryRoleBindingController) membersOf(group string) ([]rbacv1.Subject, error) {
+func (r *DirectoryRoleBindingReconciler) membersOf(group string) ([]rbacv1.Subject, error) {
 	subjects := make([]rbacv1.Subject, 0)
 	resp, err := r.adminClient.Members.List(group).Do()
 
@@ -168,7 +196,7 @@ func (r *DirectoryRoleBindingController) membersOf(group string) ([]rbacv1.Subje
 	return subjects, err
 }
 
-func (r *DirectoryRoleBindingController) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
+func (r *DirectoryRoleBindingReconciler) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
 	out := make([]rbacv1.Subject, 0)
 	for _, subject := range in {
 		switch subject.Kind {

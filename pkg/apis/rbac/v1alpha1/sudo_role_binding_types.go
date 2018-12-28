@@ -1,8 +1,6 @@
 package v1alpha1
 
 import (
-	"time"
-
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,7 +29,7 @@ type SudoRoleBindingStatus struct {
 
 type SudoRoleBindingGrant struct {
 	Subject rbacv1.Subject `json:"subject"`
-	Expiry  *time.Time     `json:"expiry"`
+	Expiry  string         `json:"expiry"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

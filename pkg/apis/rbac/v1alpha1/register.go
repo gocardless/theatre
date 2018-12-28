@@ -42,6 +42,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&DirectoryRoleBinding{},
 		&DirectoryRoleBindingList{},
+		&SudoRoleBinding{},
+		&SudoRoleBindingList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

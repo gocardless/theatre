@@ -172,7 +172,7 @@ func (r *DirectoryRoleBindingController) resolve(in []rbacv1.Subject) ([]rbacv1.
 	out := make([]rbacv1.Subject, 0)
 	for _, subject := range in {
 		switch subject.Kind {
-		case "GoogleGroup":
+		case rbacv1alpha1.GoogleGroupKind:
 			members, err := r.membersOf(subject.Name)
 			if err != nil {
 				return nil, err

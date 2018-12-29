@@ -38,6 +38,25 @@ CRD extends the native Kubernetes RoleBinding resource to provide the
 - [ ] Has acceptance tests
 - [x] Refactor to support a more standard CRD interface
 
+```yaml
+---
+apiVersion: rbac.lawrjone.xyz/v1alpha1
+kind: DirectoryRoleBinding
+metadata:
+  name: platform-superuser
+spec:
+  roleBinding:
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: superuser
+    subjects:
+      - kind: GoogleGroup
+        name: platform@gocardless.com
+      - kind: User
+        name: hmac@gocardless.com
+```
+
 ### `SudoRoleBinding`
 
 In normal cluster usage, you don't want to be using a superadmin account to do

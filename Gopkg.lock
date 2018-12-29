@@ -823,10 +823,9 @@
   revision = "0317810137be915b9cf888946c6e115c1bfac693"
 
 [[projects]]
-  digest = "1:a539588f7a7c1e726f785cbb9b8a482139944b3612636100c96faa43a07350c4"
+  digest = "1:9310be9b57b529fcc8684325ecfb22da3ae9be05f01123ac529926a1ba49f20c"
   name = "sigs.k8s.io/controller-runtime"
   packages = [
-    "pkg/builder",
     "pkg/cache",
     "pkg/cache/internal",
     "pkg/client",
@@ -864,12 +863,14 @@
   analyzer-version = 1
   input-imports = [
     "github.com/alecthomas/kingpin",
+    "github.com/davecgh/go-spew/spew",
     "github.com/go-kit/kit/log",
     "github.com/go-kit/kit/log/level",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
+    "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
@@ -887,16 +888,19 @@
     "k8s.io/client-go/rest",
     "k8s.io/client-go/testing",
     "k8s.io/client-go/tools/cache",
+    "k8s.io/client-go/tools/record",
     "k8s.io/client-go/util/flowcontrol",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
     "k8s.io/klog",
-    "sigs.k8s.io/controller-runtime/pkg/builder",
     "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/config",
+    "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil",
+    "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",
+    "sigs.k8s.io/controller-runtime/pkg/source",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

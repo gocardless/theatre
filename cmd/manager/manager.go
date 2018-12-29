@@ -23,8 +23,8 @@ import (
 
 	"github.com/lawrencejones/theatre/pkg/apis"
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/controller/directoryrolebinding"
-	"github.com/lawrencejones/theatre/pkg/controller/sudorolebinding"
+	"github.com/lawrencejones/theatre/pkg/controllers/directoryrolebinding"
+	"github.com/lawrencejones/theatre/pkg/controllers/sudorolebinding"
 	"github.com/lawrencejones/theatre/pkg/signals"
 )
 

@@ -1,0 +1,25 @@
+---
+apiVersion: v1beta1
+kind: Kustomization
+
+namespace: theatre-system
+namePrefix: theatre-
+
+imageTags:
+  - name: gcr.io/lawrjone/theatre
+    newTag: latest
+
+commonLabels:
+  app: theatre
+
+resources:
+  - crds/rbac_v1alpha1_directoryrolebindings.yaml
+  - crds/rbac_v1alpha1_sudorolebindings.yaml
+  - manager/manager.yaml
+
+secretGenerator:
+  - commands:
+      # Assuming the current GOOGLE_APPLICATION_CREDENTIALS env var points at
+      # the key we want to use during deployment.
+      credentials.json: cat $GOOGLE_APPLICATION_CREDENTIALS
+    name: google-application-credentials

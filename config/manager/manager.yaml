@@ -1,19 +1,41 @@
 ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: system
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: manager-role
 rules:
+  # This rule should be removed for clusters that are 1.12 and greater. At that
+  # point the subsequent rules that provide the escalate privilege will be
+  # sufficient to permit management of role and clusterrole bindings without
+  # granting superuser privileges.
+  - apiGroups:
+      - "*"
+    resources:
+      - "*"
+    verbs:
+      - "*"
   - apiGroups:
       - rbac.authorization.k8s.io
     resources:
       - rolebindings
+      - clusterrolebindings
     verbs:
-      - "*"
+      - "*"  # this should include escalated in 1.12 and greater
   - apiGroups:
       - rbac.lawrjone.xyz
     resources:
       - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - events
     verbs:
       - "*"
 ---
@@ -28,7 +50,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: lawrence
+    namespace: system
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -39,6 +61,7 @@ metadata:
     group: lawrjone.xyz
 spec:
   serviceName: manager
+  volumeClaimTemplates: []
   selector:
     matchLabels:
       app: manager
@@ -50,6 +73,10 @@ spec:
         group: lawrjone.xyz
     spec:
       terminationGracePeriodSeconds: 10
+      volumes:
+        - name: google-application-credentials
+          secret:
+            secretName: google-application-credentials
       containers:
         - command:
             - /manager
@@ -61,6 +88,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/run/secrets/google/credentials.json
+          volumeMounts:
+            - mountPath: /var/run/secrets/google
+              name: google-application-credentials
+              readOnly: true
           resources:
             limits:
               cpu: 500m

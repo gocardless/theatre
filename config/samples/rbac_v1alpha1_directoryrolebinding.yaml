@@ -3,12 +3,14 @@ apiVersion: rbac.lawrjone.xyz/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-superuser
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: superuser
-subjects:
-  - kind: GoogleGroup
-    name: platform@gocardless.com
-  - kind: User
-    name: hmac@gocardless.com
+spec:
+  roleBinding:
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: superuser
+    subjects:
+      - kind: GoogleGroup
+        name: platform@gocardless.com
+      - kind: User
+        name: hmac@gocardless.com

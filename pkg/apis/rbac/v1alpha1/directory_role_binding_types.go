@@ -9,8 +9,17 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // DirectoryRoleBinding only extends the standard RoleBinding resource provided by
-// Kubernetes. We shouldn't ever require other fields here.
-type DirectoryRoleBinding rbacv1.RoleBinding
+// Kubernetes.
+type DirectoryRoleBinding struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec DirectoryRoleBindingSpec `json:"spec"`
+}
+
+type DirectoryRoleBindingSpec struct {
+	RoleBinding rbacv1.RoleBinding `json:"roleBinding"`
+}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

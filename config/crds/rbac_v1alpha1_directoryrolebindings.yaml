@@ -31,7 +31,17 @@ spec:
           type: string
         metadata:
           type: object
-        roleRef:
-          type: object
-        subjects:
-          type: array
+        spec:
+          properties:
+            roleBinding:
+              properties:
+                subjects:
+                  type: array
+                roleRef:
+                  properties:
+                    apiGroup:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string

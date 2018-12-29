@@ -107,12 +107,14 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
 	err = r.client.Get(r.ctx, identifier, rb)
 	if err != nil && errors.IsNotFound(err) {
-		rb.ObjectMeta = metav1.ObjectMeta{
-			Name:      drb.Name,
-			Namespace: drb.Namespace,
+		rb := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      drb.Name,
+				Namespace: drb.Namespace,
+			},
+			RoleRef:  drb.Spec.RoleBinding.RoleRef,
+			Subjects: []rbacv1.Subject{},
 		}
-		rb.RoleRef = drb.RoleRef
-		rb.Subjects = []rbacv1.Subject{}
 
 		if err := controllerutil.SetControllerReference(drb, rb, scheme.Scheme); err != nil {
 			return reconcile.Result{}, err
@@ -131,7 +133,7 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 		))
 	}
 
-	subjects, err := r.resolve(drb.Subjects)
+	subjects, err := r.resolve(drb.Spec.RoleBinding.Subjects)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

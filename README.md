@@ -33,10 +33,10 @@ Often organisations make use of Google groups as a directory system, and this
 CRD extends the native Kubernetes RoleBinding resource to provide the
 `GoogleGroup` subject.
 
-- [ ] Can manage permissions using GSuite groups
+- [x] Can manage permissions using GSuite groups
 - [ ] Has unit tests
 - [ ] Has acceptance tests
-- [ ] Refactor to support a more standard CRD interface
+- [x] Refactor to support a more standard CRD interface
 
 ### `SudoRoleBinding`
 

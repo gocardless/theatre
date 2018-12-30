@@ -1,0 +1,14 @@
+# Turn off image pulling for the fake cluster to ensure we only ever run the
+# image we load into the cluster for testing.
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: manager
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: theatre:latest
+          imagePullPolicy: Never

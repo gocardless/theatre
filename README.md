@@ -20,13 +20,30 @@ package:
   - [ ] RBAC roles for the manager
   - [ ] Stateful set for the deployment
 
-## `rbac.lawrjone.xyz`
+## Getting Started
+
+Theatre assumes developers have several tools installed to ensure their
+environment can run sanely. The following will configure an OSX user with all
+the necessary dependencies:
+
+```shell
+brew cask install docker
+brew install go@1.11 kubernetes-cli kustomize
+go get -u sigs.k8s.io/kind 
+curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_darwin_amd64
+```
+
+Running `make` should now compile binaries into `bin`.
+
+## CRDs
+
+### `rbac.lawrjone.xyz`
 
 Collection of utilities to extend the default Kubernetes RBAC resources. These
 CRDs are motivated by problems I've seen using Kubernetes with an organisation
 that works with GSuite, and frequently onboards new developers.
 
-### `DirectoryRoleBinding`
+#### `DirectoryRoleBinding`
 
 Kubernetes- and even GKE- lacks support for integrating RBAC with Google groups.
 Often organisations make use of Google groups as a directory system, and this
@@ -57,7 +74,7 @@ spec:
         name: hmac@gocardless.com
 ```
 
-### `SudoRoleBinding`
+#### `SudoRoleBinding`
 
 In normal cluster usage, you don't want to be using a superadmin account to do
 your work. Doing so runs the disk of causing irrevocable damage to the cluster

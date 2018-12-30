@@ -1,4 +1,4 @@
 .env
 tmp/
 .git/
-/manager
+.kube/

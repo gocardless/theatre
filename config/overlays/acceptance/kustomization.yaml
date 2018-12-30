@@ -1,0 +1,9 @@
+---
+apiVersion: v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+patchesStrategicMerge:
+  - statefulset-image.yaml

@@ -292,11 +292,15 @@
   version = "v1.7.0"
 
 [[projects]]
-  digest = "1:7a137fb7718928e473b7d805434ae563ec41790d3d227cdc64e8b14d1cab8a1f"
+  digest = "1:28ec8420931441ba18ea81668a7c7b52212e00a656a268dd9fa8adaa710bb12e"
   name = "github.com/onsi/gomega"
   packages = [
     ".",
     "format",
+    "gbytes",
+    "gexec",
+    "gstruct",
+    "gstruct/errors",
     "internal/assertion",
     "internal/asyncassertion",
     "internal/oraclematcher",
@@ -380,6 +384,14 @@
   ]
   pruneopts = "UT"
   revision = "1dc9a6cbc91aacc3e8b2d63db4d2e957a5394ac4"
+
+[[projects]]
+  digest = "1:274f67cb6fed9588ea2521ecdac05a6d62a8c51c074c1fccc6a49a40ba80e925"
+  name = "github.com/satori/go.uuid"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
+  version = "v1.2.0"
 
 [[projects]]
   digest = "1:c1b1102241e7f645bc8e0c22ae352e8f0dc6484b6cb4d132fa9f24174e0119e2"
@@ -641,6 +653,20 @@
   version = "kubernetes-1.12.3"
 
 [[projects]]
+  digest = "1:d9e9a6062217111c1b7c548a47bd67b2b518c8da05d124dbca74e246565c76a6"
+  name = "k8s.io/apiextensions-apiserver"
+  packages = [
+    "pkg/apis/apiextensions",
+    "pkg/apis/apiextensions/v1beta1",
+    "pkg/client/clientset/clientset",
+    "pkg/client/clientset/clientset/scheme",
+    "pkg/client/clientset/clientset/typed/apiextensions/v1beta1",
+  ]
+  pruneopts = "UT"
+  revision = "0cd23ebeb6882bd1cdc2cb15fc7b2d72e8a86a5b"
+  version = "kubernetes-1.12.3"
+
+[[projects]]
   digest = "1:f9e57fe82defaffc4b08beec93c4257edce482b124989c8239b7fc6077e8b020"
   name = "k8s.io/apimachinery"
   packages = [
@@ -823,7 +849,7 @@
   revision = "0317810137be915b9cf888946c6e115c1bfac693"
 
 [[projects]]
-  digest = "1:9310be9b57b529fcc8684325ecfb22da3ae9be05f01123ac529926a1ba49f20c"
+  digest = "1:e285cdd02a7fdfd2ef33d83e182778b142e5ec68eb8f5ca255c40b06869edf10"
   name = "sigs.k8s.io/controller-runtime"
   packages = [
     "pkg/cache",
@@ -833,6 +859,8 @@
     "pkg/client/config",
     "pkg/controller",
     "pkg/controller/controllerutil",
+    "pkg/envtest",
+    "pkg/envtest/printer",
     "pkg/event",
     "pkg/handler",
     "pkg/internal/controller",
@@ -858,6 +886,18 @@
   revision = "f6f0bc9611363b43664d08fb097ab13243ef621d"
   version = "v0.1.9"
 
+[[projects]]
+  digest = "1:9070222ca967d09b3966552a161dd4420d62315964bf5e1efd8cc4c7c30ebca8"
+  name = "sigs.k8s.io/testing_frameworks"
+  packages = [
+    "integration",
+    "integration/addr",
+    "integration/internal",
+  ]
+  pruneopts = "UT"
+  revision = "d348cb12705b516376e0c323bacca72b00a78425"
+  version = "v0.1.1"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -868,6 +908,9 @@
     "github.com/go-kit/kit/log/level",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
+    "github.com/onsi/gomega/gstruct",
+    "github.com/onsi/gomega/types",
+    "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
     "k8s.io/api/core/v1",
@@ -883,6 +926,7 @@
     "k8s.io/apimachinery/pkg/watch",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/discovery/fake",
+    "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",
     "k8s.io/client-go/rest",
@@ -897,6 +941,7 @@
     "sigs.k8s.io/controller-runtime/pkg/client/config",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil",
+    "sigs.k8s.io/controller-runtime/pkg/envtest",
     "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",

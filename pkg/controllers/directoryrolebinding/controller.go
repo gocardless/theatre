@@ -6,8 +6,6 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 
-	admin "google.golang.org/api/admin/directory/v1"
-
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/controlflow"
+	"github.com/lawrencejones/theatre/pkg/controllers"
 	"github.com/lawrencejones/theatre/pkg/logging"
 	"github.com/lawrencejones/theatre/pkg/rbacutils"
 )
@@ -40,20 +38,20 @@ const (
 )
 
 // Add instantiates a DirectoryRoleBinding controller and adds it to the manager.
-func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, client client.Client, adminClient *admin.Service) (controller.Controller, error) {
-	c, err := controller.New("directoryrolebinding-controller", mgr,
-		controller.Options{
-			Reconciler: &DirectoryRoleBindingReconciler{
-				ctx:         ctx,
-				logger:      kitlog.With(logger, "component", "DirectoryRoleBinding"),
-				recorder:    mgr.GetRecorder("DirectoryRoleBinding"),
-				client:      client,
-				adminClient: adminClient,
-			},
-		},
+func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory) (controller.Controller, error) {
+	return add(mgr, newReconciler(ctx, mgr, logger, directory))
+}
+
+func add(mgr manager.Manager, ctrl reconcile.Reconciler) (controller.Controller, error) {
+	c, err := controller.New(
+		"directoryrolebinding-controller", mgr, controller.Options{Reconciler: ctrl},
 	)
 
-	err = controlflow.All(
+	if err != nil {
+		return c, err
+	}
+
+	err = controllers.All(
 		func() error {
 			return c.Watch(
 				&source.Kind{Type: &rbacv1alpha1.DirectoryRoleBinding{}}, &handler.EnqueueRequestForObject{},
@@ -72,12 +70,22 @@ func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, client 
 	return c, err
 }
 
+func newReconciler(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory) reconcile.Reconciler {
+	return &DirectoryRoleBindingReconciler{
+		ctx:       ctx,
+		logger:    kitlog.With(logger, "component", "DirectoryRoleBinding"),
+		recorder:  mgr.GetRecorder("DirectoryRoleBinding"),
+		client:    mgr.GetClient(),
+		directory: directory,
+	}
+}
+
 type DirectoryRoleBindingReconciler struct {
-	ctx         context.Context
-	logger      kitlog.Logger
-	recorder    record.EventRecorder
-	client      client.Client
-	adminClient *admin.Service
+	ctx       context.Context
+	logger    kitlog.Logger
+	recorder  record.EventRecorder
+	client    client.Client
+	directory Directory
 }
 
 // Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
@@ -106,7 +114,11 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 	rb := &rbacv1.RoleBinding{}
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
 	err = r.client.Get(r.ctx, identifier, rb)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+
 		rb := &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      drb.Name,
@@ -121,10 +133,6 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 		}
 
 		if err = r.client.Create(r.ctx, rb); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		if err = r.client.Get(r.ctx, identifier, rb); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -163,14 +171,14 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 
 func (r *DirectoryRoleBindingReconciler) membersOf(group string) ([]rbacv1.Subject, error) {
 	subjects := make([]rbacv1.Subject, 0)
-	resp, err := r.adminClient.Members.List(group).Do()
+	members, err := r.directory.MembersOf(r.ctx, group)
 
 	if err == nil {
-		for _, member := range resp.Members {
+		for _, member := range members {
 			subjects = append(subjects, rbacv1.Subject{
 				APIGroup: rbacv1.GroupName,
 				Kind:     rbacv1.UserKind,
-				Name:     member.Email,
+				Name:     member,
 			})
 		}
 	}

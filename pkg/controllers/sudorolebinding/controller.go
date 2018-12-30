@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/controlflow"
+	"github.com/lawrencejones/theatre/pkg/controllers"
 	"github.com/lawrencejones/theatre/pkg/logging"
 	"github.com/lawrencejones/theatre/pkg/rbacutils"
 )
@@ -115,7 +115,7 @@ func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, client 
 		},
 	)
 
-	err = controlflow.All(
+	err = controllers.All(
 		func() error {
 			return c.Watch(
 				&source.Kind{Type: &rbacv1alpha1.SudoRoleBinding{}}, &handler.EnqueueRequestForObject{},

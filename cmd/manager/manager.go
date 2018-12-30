@@ -11,7 +11,7 @@ import (
 	level "github.com/go-kit/kit/log/level"
 
 	"golang.org/x/oauth2/google"
-	admin "google.golang.org/api/admin/directory/v1"
+	directoryv1 "google.golang.org/api/admin/directory/v1"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
@@ -61,7 +61,7 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	adminClient, err := createAdminClient(context.TODO(), *subject)
+	directoryService, err := createDirectoryService(context.TODO(), *subject)
 	if err != nil {
 		app.Fatalf("failed to create Google Admin client: %v", err)
 	}
@@ -76,7 +76,8 @@ func main() {
 	}
 
 	// DirectoryRoleBinding controller
-	if _, err = directoryrolebinding.Add(ctx, mgr, logger, client, adminClient); err != nil {
+	directory := directoryrolebinding.NewGoogleDirectory(directoryService.Members)
+	if _, err = directoryrolebinding.Add(ctx, mgr, logger, directory); err != nil {
 		app.Fatalf(err.Error())
 	}
 
@@ -91,10 +92,10 @@ func main() {
 	}
 }
 
-func createAdminClient(ctx context.Context, subject string) (*admin.Service, error) {
+func createDirectoryService(ctx context.Context, subject string) (*directoryv1.Service, error) {
 	scopes := []string{
-		admin.AdminDirectoryGroupMemberReadonlyScope,
-		admin.AdminDirectoryGroupReadonlyScope,
+		directoryv1.AdminDirectoryGroupMemberReadonlyScope,
+		directoryv1.AdminDirectoryGroupReadonlyScope,
 	}
 
 	creds, err := google.FindDefaultCredentials(ctx, scopes...)
@@ -110,5 +111,5 @@ func createAdminClient(ctx context.Context, subject string) (*admin.Service, err
 	// Access to the directory API must be signed with a Subject to enable domain selection.
 	conf.Subject = subject
 
-	return admin.New(conf.Client(ctx))
+	return directoryv1.New(conf.Client(ctx))
 }

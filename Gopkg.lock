@@ -588,6 +588,14 @@
   version = "v1.4.7"
 
 [[projects]]
+  digest = "1:f1e9221c1e17a438f8758d8da7be7ced1fc6132c4555d589d80f697d2cba7c8a"
+  name = "gopkg.in/h2non/gock.v1"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a6029d17e101ac1594adafea9e63fd8c988a8701"
+  version = "v1.0.12"
+
+[[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
   name = "gopkg.in/inf.v0"
   packages = ["."]
@@ -913,6 +921,7 @@
     "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
+    "gopkg.in/h2non/gock.v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",
     "k8s.io/apimachinery/pkg/api/errors",

@@ -1,4 +1,4 @@
-# Theatre
+# Theatre [![CircleCI](https://circleci.com/gh/lawrencejones/theatre.svg?style=svg)](https://circleci.com/gh/lawrencejones/theatre)
 
 This project contains my personal experiments with Kubernetes operators. The aim
 is to trial several methods of implementing operators and arrive at a

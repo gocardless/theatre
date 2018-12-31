@@ -12,13 +12,21 @@ package:
 - [x] Verify all API groups are registered
 - [x] Integrate Kubernetes events with logging
 - [ ] Use caching informers to power controllers
-- [ ] Unit/integration testing
+- [x] Unit/integration testing
 - [ ] Acceptance testing with real kubernetes
 - [ ] Auto-install CRDs into the cluster
 - [x] Log changes to Kubernetes resources as events
 - [ ] Auto-generate:
   - [ ] RBAC roles for the manager
   - [ ] Stateful set for the deployment
+
+To help me personally, my next steps are:
+
+- Modify sudorolebindings to use new controller Add interface
+- Review small packages, consolidate where necessary, add unit tests
+- Document installation procedure
+- Investigate installing webhooks: can we test admission webhooks with the
+  integration test suite?
 
 ## Getting Started
 

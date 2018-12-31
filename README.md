@@ -31,6 +31,9 @@ brew cask install docker
 brew install go@1.11 kubernetes-cli kustomize
 go get -u sigs.k8s.io/kind 
 curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_darwin_amd64
+mkdir /usr/local/kubebuilder
+curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.7/kubebuilder_1.0.7_linux_amd64.tar.gz \
+  | tar -xvz --strip=1 -C /usr/local/kubebuilder
 ```
 
 Running `make` should now compile binaries into `bin`.

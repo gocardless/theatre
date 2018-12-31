@@ -16,7 +16,7 @@ bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/$*.go
 
 test:
-	go test -v ./...
+	ginkgo -v ./...
 
 codegen:
 	vendor/k8s.io/code-generator/generate-groups.sh all \

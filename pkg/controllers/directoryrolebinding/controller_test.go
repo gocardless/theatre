@@ -23,6 +23,22 @@ var (
 	timeout = 10 * time.Second
 )
 
+func newAdminRole(namespace string) *rbacv1.Role {
+	return &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "admin",
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			rbacv1.PolicyRule{
+				APIGroups: []string{rbacv1.APIGroupAll},
+				Resources: []string{rbacv1.ResourceAll},
+				Verbs:     []string{rbacv1.VerbAll},
+			},
+		},
+	}
+}
+
 func newGoogleGroup(name string) rbacv1.Subject {
 	return rbacv1.Subject{
 		APIGroup: rbacv1alpha1.GroupName,
@@ -41,15 +57,18 @@ func newUser(name string) rbacv1.Subject {
 
 var _ = Describe("DirectoryRoleBindingReconciler", func() {
 	var (
-		ctx    context.Context
-		cancel func()
-		mgr    manager.Manager
-		ctrl   reconcile.Reconciler
-		calls  chan integration.ReconcileCall
+		ctx       context.Context
+		cancel    func()
+		namespace string
+		teardown  func()
+		mgr       manager.Manager
+		ctrl      reconcile.Reconciler
+		calls     chan integration.ReconcileCall
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
+		namespace, teardown = integration.CreateNamespace(clientset)
 		mgr = integration.StartTestManager(ctx, cfg)
 
 		ctrl, calls = integration.CaptureReconcile(
@@ -71,10 +90,16 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 
 		_, err := add(mgr, ctrl)
 		Expect(err).NotTo(HaveOccurred())
+
+		By("Creating fixture 'admin' role")
+		Expect(mgr.GetClient().Create(ctx, newAdminRole(namespace))).NotTo(
+			HaveOccurred(), "failed to create test 'admin' Role",
+		)
 	})
 
 	AfterEach(func() {
 		cancel()
+		teardown()
 	})
 
 	It("Manages the group membership", func() {
@@ -82,7 +107,7 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 		drb := &rbacv1alpha1.DirectoryRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "foo",
-				Namespace: "default",
+				Namespace: namespace,
 			},
 			Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
 				RoleBinding: rbacv1.RoleBinding{
@@ -90,7 +115,7 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 					RoleRef: rbacv1.RoleRef{
 						APIGroup: rbacv1.GroupName,
 						Kind:     "Role",
-						Name:     adminRole.GetName(),
+						Name:     "admin",
 					},
 				},
 			},
@@ -104,7 +129,7 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 		for i := 0; i < 2; i++ { // twice for the follow-up watch of the RoleBinding
 			Eventually(calls, timeout).Should(
 				Receive(
-					integration.ReconcileResourceSuccess("default/foo"),
+					integration.ReconcileResourceSuccess(namespace, "foo"),
 				),
 			)
 		}
@@ -131,13 +156,9 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 		By("Wait for successful reconciliation")
 		Eventually(calls, timeout).Should(
 			Receive(
-				SatisfyAll(
-					integration.ReconcileResource("default/foo"),
-					integration.ReconcileSuccessfully(),
-					integration.ReconcileNoRetry(),
-				),
+				integration.ReconcileResourceSuccess(namespace, "foo"),
 			),
-			"expected to successfully reconcile default/foo",
+			"expected to successfully reconcile",
 		)
 
 		By("Refresh RoleBinding")

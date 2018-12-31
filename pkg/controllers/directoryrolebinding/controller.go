@@ -38,27 +38,34 @@ const (
 )
 
 // Add instantiates a DirectoryRoleBinding controller and adds it to the manager.
-func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory) (controller.Controller, error) {
-	return add(mgr, newReconciler(ctx, mgr, logger, directory))
-}
+func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory, opts ...func(*controller.Options)) (controller.Controller, error) {
+	ctrlOptions := controller.Options{
+		Reconciler: &DirectoryRoleBindingReconciler{
+			ctx:       ctx,
+			logger:    kitlog.With(logger, "component", "DirectoryRoleBinding"),
+			recorder:  mgr.GetRecorder("DirectoryRoleBinding"),
+			client:    mgr.GetClient(),
+			directory: directory,
+		},
+	}
 
-func add(mgr manager.Manager, ctrl reconcile.Reconciler) (controller.Controller, error) {
-	c, err := controller.New(
-		"directoryrolebinding-controller", mgr, controller.Options{Reconciler: ctrl},
-	)
+	for _, opt := range opts {
+		opt(&ctrlOptions)
+	}
 
+	ctrl, err := controller.New("directoryrolebinding-controller", mgr, ctrlOptions)
 	if err != nil {
-		return c, err
+		return ctrl, err
 	}
 
 	err = controllers.All(
 		func() error {
-			return c.Watch(
+			return ctrl.Watch(
 				&source.Kind{Type: &rbacv1alpha1.DirectoryRoleBinding{}}, &handler.EnqueueRequestForObject{},
 			)
 		},
 		func() error {
-			return c.Watch(
+			return ctrl.Watch(
 				&source.Kind{Type: &rbacv1.RoleBinding{}}, &handler.EnqueueRequestForOwner{
 					IsController: true,
 					OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
@@ -67,17 +74,7 @@ func add(mgr manager.Manager, ctrl reconcile.Reconciler) (controller.Controller,
 		},
 	)
 
-	return c, err
-}
-
-func newReconciler(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory) reconcile.Reconciler {
-	return &DirectoryRoleBindingReconciler{
-		ctx:       ctx,
-		logger:    kitlog.With(logger, "component", "DirectoryRoleBinding"),
-		recorder:  mgr.GetRecorder("DirectoryRoleBinding"),
-		client:    mgr.GetClient(),
-		directory: directory,
-	}
+	return ctrl, err
 }
 
 type DirectoryRoleBindingReconciler struct {

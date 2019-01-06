@@ -3,6 +3,7 @@ package directoryrolebinding
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 
@@ -37,15 +38,23 @@ const (
 	EventSubjectsModified   = "SubjectsModified"
 )
 
-// Add instantiates a DirectoryRoleBinding controller and adds it to the manager.
-func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory, opts ...func(*controller.Options)) (controller.Controller, error) {
+// Add instantiates a DirectoryRoleBinding controller and adds it to the manager. To
+// ensure we respond to changes in the directory source, we provide a refreshInterval
+// duration that tells the controller to re-enqueue a reconcile after each successful
+// process. Setting this to 0 will disable the re-enqueue.
+func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory, refreshInterval time.Duration, opts ...func(*controller.Options)) (controller.Controller, error) {
+	logger = kitlog.With(logger, "component", "DirectoryRoleBinding")
 	ctrlOptions := controller.Options{
 		Reconciler: &DirectoryRoleBindingReconciler{
-			ctx:       ctx,
-			logger:    kitlog.With(logger, "component", "DirectoryRoleBinding"),
-			recorder:  mgr.GetRecorder("DirectoryRoleBinding"),
-			client:    mgr.GetClient(),
-			directory: directory,
+			ctx:      ctx,
+			logger:   logger,
+			recorder: mgr.GetRecorder("DirectoryRoleBinding"),
+			client:   mgr.GetClient(),
+			// Cache our directory results for a single refresh period. This should mean we can
+			// scale the number of DRBs in the cluster with respect to the number of groups they
+			// make use of, which more efficiently makes use of our external directory source.
+			directory:       NewCachedDirectory(logger, directory, refreshInterval),
+			refreshInterval: refreshInterval,
 		},
 	}
 
@@ -78,11 +87,12 @@ func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directo
 }
 
 type DirectoryRoleBindingReconciler struct {
-	ctx       context.Context
-	logger    kitlog.Logger
-	recorder  record.EventRecorder
-	client    client.Client
-	directory Directory
+	ctx             context.Context
+	logger          kitlog.Logger
+	recorder        record.EventRecorder
+	client          client.Client
+	directory       Directory
+	refreshInterval time.Duration
 }
 
 // Reconcile achieves the declarative state defined by DirectoryRoleBinding resources.
@@ -163,7 +173,7 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 		}
 	}
 
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: r.refreshInterval}, nil
 }
 
 func (r *DirectoryRoleBindingReconciler) membersOf(group string) ([]rbacv1.Subject, error) {

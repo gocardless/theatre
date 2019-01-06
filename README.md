@@ -24,7 +24,7 @@ To help me personally, my next steps are:
 
 - [x] Cache directory lookups
 - [x] Support pagination for Google directory lookups
-- [ ] Restructure DirectoryRoleBinding to use Spec
+- [x] Restructure DirectoryRoleBinding to use Spec
 - [ ] Modify sudorolebindings to use new controller Add interface
 - [ ] Review small packages, consolidate where necessary, add unit tests
 - [ ] Document installation procedure

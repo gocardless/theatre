@@ -117,13 +117,11 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 					Namespace: namespace,
 				},
 				Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
-					RoleBinding: rbacv1.RoleBinding{
-						Subjects: []rbacv1.Subject{},
-						RoleRef: rbacv1.RoleRef{
-							APIGroup: rbacv1.GroupName,
-							Kind:     "Role",
-							Name:     "admin",
-						},
+					Subjects: []rbacv1.Subject{},
+					RoleRef: rbacv1.RoleRef{
+						APIGroup: rbacv1.GroupName,
+						Kind:     "Role",
+						Name:     "admin",
 					},
 				},
 			}
@@ -147,11 +145,11 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 			err := mgr.GetClient().Get(context.TODO(), identifier, rb)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
-			Expect(rb.RoleRef).To(Equal(drb.Spec.RoleBinding.RoleRef), "associated RoleBinding should reference same Role as DRB")
+			Expect(rb.RoleRef).To(Equal(drb.Spec.RoleRef), "associated RoleBinding should reference same Role as DRB")
 			Expect(rb.Subjects).To(BeEmpty(), "initial RoleBinding should contain no subjects")
 
 			By("Update subject with groups and single user")
-			drb.Spec.RoleBinding.Subjects = []rbacv1.Subject{
+			drb.Spec.Subjects = []rbacv1.Subject{
 				newGoogleGroup("platform@gocardless.com"),
 				newGoogleGroup("all@gocardless.com"),
 				newUser("manuel@gocardless.com"),

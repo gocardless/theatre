@@ -33,15 +33,13 @@ spec:
           type: object
         spec:
           properties:
-            roleBinding:
+            subjects:
+              type: array
+            roleRef:
               properties:
-                subjects:
-                  type: array
-                roleRef:
-                  properties:
-                    apiGroup:
-                      type: string
-                    kind:
-                      type: string
-                    name:
-                      type: string
+                apiGroup:
+                  type: string
+                kind:
+                  type: string
+                name:
+                  type: string

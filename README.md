@@ -19,6 +19,7 @@ package:
 - [ ] Auto-generate:
   - [ ] RBAC roles for the manager
   - [ ] Stateful set for the deployment
+- [ ] Decide on deployment strategy
 
 To help me personally, my next steps are:
 
@@ -65,7 +66,8 @@ CRD extends the native Kubernetes RoleBinding resource to provide the
 `GoogleGroup` subject.
 
 - [x] Can manage permissions using GSuite groups
-- [ ] Has unit tests
+- [x] Has unit tests
+- [x] Has integration tests
 - [ ] Has acceptance tests
 - [x] Refactor to support a more standard CRD interface
 
@@ -76,16 +78,15 @@ kind: DirectoryRoleBinding
 metadata:
   name: platform-superuser
 spec:
-  roleBinding:
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: ClusterRole
-      name: superuser
-    subjects:
-      - kind: GoogleGroup
-        name: platform@gocardless.com
-      - kind: User
-        name: hmac@gocardless.com
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: superuser
+  subjects:
+    - kind: GoogleGroup
+      name: platform@gocardless.com
+    - kind: User
+      name: hmac@gocardless.com
 ```
 
 #### `SudoRoleBinding`

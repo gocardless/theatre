@@ -22,11 +22,14 @@ package:
 
 To help me personally, my next steps are:
 
-- Modify sudorolebindings to use new controller Add interface
-- Review small packages, consolidate where necessary, add unit tests
-- Document installation procedure
-- Investigate installing webhooks: can we test admission webhooks with the
-  integration test suite?
+- [x] Cache directory lookups
+- [ ] Support pagination for Google directory lookups
+- [ ] Restructure DirectoryRoleBinding to use Spec
+- [ ] Modify sudorolebindings to use new controller Add interface
+- [ ] Review small packages, consolidate where necessary, add unit tests
+- [ ] Document installation procedure
+- [ ] Investigate installing webhooks: can we test admission webhooks with the
+      integration test suite?
 
 ## Getting Started
 

@@ -29,10 +29,10 @@ import (
 )
 
 var (
-	app             = kingpin.New("manager", "Manages lawrjone.xyz operators 😷").Version(Version)
-	subject         = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
-	refreshInterval = app.Flag("refresh-interval", "Period to refresh our listeners").Default("10s").Duration()
-	threads         = app.Flag("threads", "Number of threads for the operator").Default("2").Int()
+	app              = kingpin.New("manager", "Manages lawrjone.xyz operators 😷").Version(Version)
+	subject          = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
+	directoryRefresh = app.Flag("directory-refresh", "Refresh interval for directory operations").Default("5m").Duration()
+	threads          = app.Flag("threads", "Number of threads for the operator").Default("2").Int()
 
 	logger = kitlog.NewLogfmtLogger(os.Stderr)
 
@@ -77,7 +77,7 @@ func main() {
 
 	// DirectoryRoleBinding controller
 	directory := directoryrolebinding.NewGoogleDirectory(directoryService.Members)
-	if _, err = directoryrolebinding.Add(ctx, mgr, logger, directory); err != nil {
+	if _, err = directoryrolebinding.Add(ctx, mgr, logger, directory, *directoryRefresh); err != nil {
 		app.Fatalf(err.Error())
 	}
 

@@ -64,20 +64,21 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 		teardown  func()
 		mgr       manager.Manager
 		calls     chan integration.ReconcileCall
-		directory map[string][]string
+		groups    map[string][]string
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
 		namespace, teardown = integration.CreateNamespace(clientset)
 		mgr = integration.StartTestManager(ctx, cfg)
-		directory = map[string][]string{}
+		groups = map[string][]string{}
 
 		_, err := directoryrolebinding.Add(
 			ctx,
 			mgr,
 			kitlog.NewLogfmtLogger(GinkgoWriter),
-			directoryrolebinding.NewFakeDirectory(directory),
+			directoryrolebinding.NewFakeDirectory(groups),
+			time.Duration(0), // don't test our caching/re-enqueue here
 			func(opt *controller.Options) {
 				opt.Reconciler, calls = integration.CaptureReconcile(
 					opt.Reconciler,
@@ -99,10 +100,10 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 
 	Context("With all@ and platform@", func() {
 		BeforeEach(func() {
-			directory["all@gocardless.com"] = []string{
+			groups["all@gocardless.com"] = []string{
 				"lawrence@gocardless.com",
 			}
-			directory["platform@gocardless.com"] = []string{
+			groups["platform@gocardless.com"] = []string{
 				"lawrence@gocardless.com",
 				"chris@gocardless.com",
 			}

@@ -3,13 +3,109 @@ package directoryrolebinding
 import (
 	"context"
 	"net/http"
+	"time"
 
 	directoryv1 "google.golang.org/api/admin/directory/v1"
 	gock "gopkg.in/h2non/gock.v1"
 
+	kitlog "github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+var _ = Describe("NewCachedDirectory", func() {
+	var (
+		directory *cachedDirectory
+		groups    map[string][]string
+		now       time.Time
+		ttl       time.Duration
+	)
+
+	JustBeforeEach(func() {
+		directory = NewCachedDirectory(
+			kitlog.NewLogfmtLogger(GinkgoWriter),
+			NewFakeDirectory(groups),
+			ttl,
+		)
+
+		directory.now = func() time.Time { return now }
+	})
+
+	BeforeEach(func() {
+		ttl = time.Second
+		now = time.Now()
+		groups = map[string][]string{
+			"fellowship@lo.tr": []string{
+				"frodo@lo.tr",
+				"sam@lo.tr",
+				"boromir@lo.tr",
+			},
+		}
+	})
+
+	Describe("MembersOf", func() {
+		var (
+			members []string
+			err     error
+		)
+
+		JustBeforeEach(func() {
+			members, err = directory.MembersOf(context.TODO(), "fellowship@lo.tr")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Returns members from underlying directory", func() {
+			Expect(members).To(
+				ConsistOf(
+					Equal("frodo@lo.tr"),
+					Equal("sam@lo.tr"),
+					Equal("boromir@lo.tr"),
+				),
+			)
+		})
+
+		Context("When called again after directory changed", func() {
+			var (
+				membersAgain []string
+			)
+
+			JustBeforeEach(func() {
+				groups["fellowship@lo.tr"] = []string{
+					"frodo@lo.tr",
+					"sam@lo.tr",
+					// "boromir@lo.tr", // for Gondor!
+				}
+
+				membersAgain, err = directory.MembersOf(context.TODO(), "fellowship@lo.tr")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Returns cached results", func() {
+				Expect(membersAgain).To(
+					ConsistOf(
+						Equal("frodo@lo.tr"),
+						Equal("sam@lo.tr"),
+						Equal("boromir@lo.tr"),
+					),
+				)
+			})
+
+			Context("Beyond TTL", func() {
+				JustBeforeEach(func() {
+					now = now.Add(time.Duration(2) * ttl)
+				})
+
+				It("Returns fresh results", func() {
+					Expect(membersAgain).NotTo(
+						ConsistOf(
+							Equal("boromir@lo.tr"),
+						),
+					)
+				})
+			})
+		})
+	})
+})
 
 var _ = Describe("NewGoogleDirectory", func() {
 	var (

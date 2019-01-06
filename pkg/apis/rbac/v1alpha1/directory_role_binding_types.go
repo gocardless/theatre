@@ -18,7 +18,8 @@ type DirectoryRoleBinding struct {
 }
 
 type DirectoryRoleBindingSpec struct {
-	RoleBinding rbacv1.RoleBinding `json:"roleBinding"`
+	Subjects []rbacv1.Subject `json:"subjects"`
+	RoleRef  rbacv1.RoleRef   `json:"roleRef"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -131,7 +131,7 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 				Name:      drb.Name,
 				Namespace: drb.Namespace,
 			},
-			RoleRef:  drb.Spec.RoleBinding.RoleRef,
+			RoleRef:  drb.Spec.RoleRef,
 			Subjects: []rbacv1.Subject{},
 		}
 
@@ -148,7 +148,7 @@ func (r *DirectoryRoleBindingReconciler) Reconcile(request reconcile.Request) (r
 		))
 	}
 
-	subjects, err := r.resolve(drb.Spec.RoleBinding.Subjects)
+	subjects, err := r.resolve(drb.Spec.Subjects)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

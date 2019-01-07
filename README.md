@@ -93,9 +93,9 @@ spec:
 
 In normal cluster usage, you don't want to be using a superadmin account to do
 your work. Doing so runs the disk of causing irrevocable damage to the cluster
-if any developer accidentally targets the wrong resource: I've personally
-witnessed a developer accidentally destroy every persistent disk in the cluster
-through a scripting error.
+if any developer accidentally targets the wrong resource: it's very easy to make
+a mistake, especially when scripting, and easily destroy resources you didn't
+mean to target.
 
 This CRD would permit developers to temporarily add themselves into a
 RoleBinding that provides the capabilities they need, then remove them once

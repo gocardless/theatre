@@ -26,7 +26,6 @@ To help me personally, my next steps are:
 - [x] Cache directory lookups
 - [x] Support pagination for Google directory lookups
 - [x] Restructure DirectoryRoleBinding to use Spec
-- [ ] Modify sudorolebindings to use new controller Add interface
 - [ ] Review small packages, consolidate where necessary, add unit tests
 - [ ] Document installation procedure
 - [ ] Investigate installing webhooks: can we test admission webhooks with the
@@ -88,19 +87,3 @@ spec:
     - kind: User
       name: hmac@gocardless.com
 ```
-
-#### `SudoRoleBinding`
-
-In normal cluster usage, you don't want to be using a superadmin account to do
-your work. Doing so runs the disk of causing irrevocable damage to the cluster
-if any developer accidentally targets the wrong resource: it's very easy to make
-a mistake, especially when scripting, and easily destroy resources you didn't
-mean to target.
-
-This CRD would permit developers to temporarily add themselves into a
-RoleBinding that provides the capabilities they need, then remove them once
-their grant expires. It functions like `sudo` in a normal linux box, caching
-your permissions for a small period of time.
-
-- [x] Manages membership into a RoleBinding
-- [ ] Exposes mechanism to trigger permission elevation

@@ -55,8 +55,6 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=rbac.lawrjone.xyz, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("directoryrolebindings"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Rbac().V1alpha1().DirectoryRoleBindings().Informer()}, nil
-	case v1alpha1.SchemeGroupVersion.WithResource("sudorolebindings"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Rbac().V1alpha1().SudoRoleBindings().Informer()}, nil
 
 	}
 

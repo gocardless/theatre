@@ -23,9 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/controllers"
 	"github.com/lawrencejones/theatre/pkg/logging"
-	"github.com/lawrencejones/theatre/pkg/rbacutils"
+	rbacutils "github.com/lawrencejones/theatre/pkg/rbac"
 )
 
 const (
@@ -67,19 +66,20 @@ func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directo
 		return ctrl, err
 	}
 
-	err = controllers.All(
-		func() error {
-			return ctrl.Watch(
-				&source.Kind{Type: &rbacv1alpha1.DirectoryRoleBinding{}}, &handler.EnqueueRequestForObject{},
-			)
-		},
-		func() error {
-			return ctrl.Watch(
-				&source.Kind{Type: &rbacv1.RoleBinding{}}, &handler.EnqueueRequestForOwner{
-					IsController: true,
-					OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
-				},
-			)
+	err = ctrl.Watch(
+		&source.Kind{Type: &rbacv1alpha1.DirectoryRoleBinding{}},
+		&handler.EnqueueRequestForObject{},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = ctrl.Watch(
+		&source.Kind{Type: &rbacv1.RoleBinding{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
 		},
 	)
 

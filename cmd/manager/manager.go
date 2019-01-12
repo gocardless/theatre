@@ -24,7 +24,6 @@ import (
 	"github.com/lawrencejones/theatre/pkg/apis"
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/controllers/directoryrolebinding"
-	"github.com/lawrencejones/theatre/pkg/controllers/sudorolebinding"
 	"github.com/lawrencejones/theatre/pkg/signals"
 )
 
@@ -53,7 +52,9 @@ func main() {
 		app.Fatalf("failed to add rbac scheme: %v", err)
 	}
 
-	client, err := client.New(config.GetConfigOrDie(), client.Options{})
+	// TODO: We don't use this clientset, but no doubt we will. Leaving it here until it
+	// becomes useful.
+	_, err := client.New(config.GetConfigOrDie(), client.Options{})
 	if err != nil {
 		app.Fatalf("failed to create kubernetes client: %v", err)
 	}
@@ -78,12 +79,6 @@ func main() {
 	// DirectoryRoleBinding controller
 	directory := directoryrolebinding.NewGoogleDirectory(directoryService.Members)
 	if _, err = directoryrolebinding.Add(ctx, mgr, logger, directory, *directoryRefresh); err != nil {
-		app.Fatalf(err.Error())
-	}
-
-	// SudoRoleBinding controller
-	// TODO: Not yet fully functional, see controller.go for more details
-	if _, err = sudorolebinding.Add(ctx, mgr, logger, client); err != nil {
 		app.Fatalf(err.Error())
 	}
 

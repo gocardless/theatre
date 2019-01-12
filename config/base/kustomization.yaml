@@ -10,7 +10,6 @@ commonLabels:
 
 resources:
   - ../crds/rbac_v1alpha1_directoryrolebindings.yaml
-  - ../crds/rbac_v1alpha1_sudorolebindings.yaml
   - ../manager/manager.yaml
 
 secretGenerator:

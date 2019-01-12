@@ -32,10 +32,6 @@ func (c *FakeRbacV1alpha1) DirectoryRoleBindings(namespace string) v1alpha1.Dire
 	return &FakeDirectoryRoleBindings{c, namespace}
 }
 
-func (c *FakeRbacV1alpha1) SudoRoleBindings(namespace string) v1alpha1.SudoRoleBindingInterface {
-	return &FakeSudoRoleBindings{c, namespace}
-}
-
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeRbacV1alpha1) RESTClient() rest.Interface {

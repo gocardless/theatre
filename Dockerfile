@@ -2,7 +2,7 @@
 FROM golang:1.11 as builder
 WORKDIR /go/src/github.com/lawrencejones/theatre
 COPY . /go/src/github.com/lawrencejones/theatre
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/lawrencejones/theatre/cmd/manager
+RUN CGO_ENABLED=0 make VERSION=$(cat VERSION) all
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:latest
@@ -16,5 +16,5 @@ RUN set -x \
       && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
-COPY --from=builder /go/src/github.com/lawrencejones/theatre/manager .
-ENTRYPOINT ["/manager"]
+COPY --from=builder /go/src/github.com/lawrencejones/theatre/bin/* /
+ENTRYPOINT ["/bin/bash"]

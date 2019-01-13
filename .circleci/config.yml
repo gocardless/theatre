@@ -28,10 +28,10 @@ jobs:
       - checkout
       - run:
           name: Build test binaries
-          command: make bin/manager.linux_amd64 bin/acceptance
+          command: make all
       - persist_to_workspace:
           root: /go/src/github.com/lawrencejones/theatre
-          paths: ['bin/manager.linux_amd64', 'bin/acceptance']
+          paths: ['bin']
 
   acceptance:
     machine: true
@@ -51,7 +51,7 @@ jobs:
             EOF
       - run:
           name: Prepare the cluster
-          command: workspace/bin/acceptance prepare --manager-binary workspace/bin/manager.linux_amd64
+          command: workspace/bin/acceptance prepare --bin workspace/bin
       - run:
           name: Run acceptance tests
           command: workspace/bin/acceptance run

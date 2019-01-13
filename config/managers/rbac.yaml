@@ -7,7 +7,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  name: rbac-manager
 rules:
   # This rule should be removed for clusters that are 1.12 and greater. At that
   # point the subsequent rules that provide the escalate privilege will be
@@ -42,42 +42,39 @@ rules:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: manager
+  name: rbac-manager
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: manager-rolebinding
+  name: rbac-manager
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-role
+  name: rbac-manager
 subjects:
   - kind: ServiceAccount
-    name: manager
+    name: rbac-manager
     namespace: system
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: manager
+  name: rbac-manager
   labels:
-    app: manager
-    group: lawrjone.xyz
+    group: rbac.lawrjone.xyz
 spec:
-  serviceName: manager
+  serviceName: rbac-manager
   volumeClaimTemplates: []
   selector:
     matchLabels:
-      app: manager
-      group: lawrjone.xyz
+      group: rbac.lawrjone.xyz
   template:
     metadata:
       labels:
-        app: manager
-        group: lawrjone.xyz
+        group: rbac.lawrjone.xyz
     spec:
-      serviceAccountName: manager
+      serviceAccountName: rbac-manager
       terminationGracePeriodSeconds: 10
       volumes:
         - name: google-application-credentials
@@ -85,7 +82,7 @@ spec:
             secretName: google-application-credentials
       containers:
         - command:
-            - /manager
+            - /rbac-manager
           image: gcr.io/lawrjone/theatre:latest
           imagePullPolicy: Always
           name: manager

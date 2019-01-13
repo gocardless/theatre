@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"debug/elf"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -26,10 +25,10 @@ var (
 	app    = kingpin.New("acceptance", "Acceptance test suite for theatre").Version("0.0.0")
 	logger = kitlog.NewLogfmtLogger(os.Stderr)
 
-	prepare              = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareName          = prepare.Flag("name", "Name of Kubernetes context to create").Default("e2e").String()
-	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
-	prepareManagerBinary = prepare.Flag("manager-binary", "Path to manager binary to install in cluster").Default("./bin/manager.linux_amd64").ExistingFile()
+	prepare      = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
+	prepareName  = prepare.Flag("name", "Name of Kubernetes context to create").Default("e2e").String()
+	prepareImage = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
+	prepareBin   = prepare.Flag("bin", "Path to manager binaries").Default("./bin").ExistingDir()
 
 	run = app.Command("run", "Runs the acceptance test suite")
 )
@@ -39,7 +38,7 @@ var (
 const AcceptanceDockerfile = `
 FROM alpine:3.8
 RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
-COPY %s /manager
+COPY * /
 `
 
 func init() {
@@ -88,15 +87,9 @@ func main() {
 			app.Fatalf("failed to discover kind cluster config path: %v", err)
 		}
 
-		if _, err := elf.Open(*prepareManagerBinary); err != nil {
-			kingpin.Fatalf("%s is not a valid linux binary: %v, try --help", *prepareManagerBinary, err)
-		}
-
 		logger.Log("msg", "preparing acceptance docker image")
-		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", "-", ".")
-		buildCmd.Stdin = strings.NewReader(
-			fmt.Sprintf(AcceptanceDockerfile, *prepareManagerBinary),
-		)
+		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", "-", *prepareBin)
+		buildCmd.Stdin = strings.NewReader(AcceptanceDockerfile)
 
 		if err := pipeOutput(buildCmd).Run(); err != nil {
 			app.Fatalf("failed to build acceptance docker image: %v", err)

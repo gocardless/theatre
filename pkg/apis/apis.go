@@ -4,6 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
 )
 
 var (
@@ -12,6 +13,7 @@ var (
 	// those resources to a Scheme.
 	AddToSchemes = runtime.SchemeBuilder{
 		rbacv1alpha1.AddToScheme,
+		workloadsv1alpha1.AddToScheme,
 	}
 
 	// AddToScheme when called with a Scheme will add all our CRDs into the RESTClient

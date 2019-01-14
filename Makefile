@@ -1,4 +1,4 @@
-PROG=bin/rbac-manager bin/acceptance
+PROG=bin/rbac-manager bin/workloads-manager bin/acceptance
 PROJECT=github.com/lawrencejones/theatre
 IMAGE=gcr.io/lawrjone/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev

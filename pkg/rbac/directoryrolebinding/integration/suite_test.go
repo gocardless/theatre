@@ -29,5 +29,5 @@ var _ = AfterSuite(func() {
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/controllers/directoryrolebinding/integration")
+	RunSpecs(t, "pkg/rbac/directoryrolebinding/integration")
 }

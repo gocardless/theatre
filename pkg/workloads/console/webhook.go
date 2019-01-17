@@ -17,18 +17,23 @@ import (
 	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
 )
 
-func NewWebhook(logger kitlog.Logger, mgr manager.Manager) (*admission.Webhook, error) {
+func NewWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
+	var handler admission.Handler
+	handler = &ConsoleAuthenticator{
+		logger:  kitlog.With(logger, "component", "ConsoleAuthenticator"),
+		decoder: mgr.GetAdmissionDecoder(),
+	}
+
+	for _, opt := range opts {
+		opt(&handler)
+	}
+
 	return builder.NewWebhookBuilder().
 		Name("console-authenticator.lawrjone.xyz").
 		Mutating().
 		Operations(admissionregistrationv1beta1.Create).
 		ForType(&workloadsv1alpha1.Console{}).
-		Handlers(
-			&ConsoleAuthenticator{
-				logger:  kitlog.With(logger, "component", "ConsoleAuthenticator"),
-				decoder: mgr.GetAdmissionDecoder(),
-			},
-		).
+		Handlers(handler).
 		WithManager(mgr).
 		Build()
 }

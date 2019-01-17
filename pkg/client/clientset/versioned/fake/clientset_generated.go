@@ -22,6 +22,8 @@ import (
 	clientset "github.com/lawrencejones/theatre/pkg/client/clientset/versioned"
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/rbac/v1alpha1"
 	fakerbacv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/rbac/v1alpha1/fake"
+	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
+	fakeworkloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -79,4 +81,14 @@ func (c *Clientset) RbacV1alpha1() rbacv1alpha1.RbacV1alpha1Interface {
 // Rbac retrieves the RbacV1alpha1Client
 func (c *Clientset) Rbac() rbacv1alpha1.RbacV1alpha1Interface {
 	return &fakerbacv1alpha1.FakeRbacV1alpha1{Fake: &c.Fake}
+}
+
+// WorkloadsV1alpha1 retrieves the WorkloadsV1alpha1Client
+func (c *Clientset) WorkloadsV1alpha1() workloadsv1alpha1.WorkloadsV1alpha1Interface {
+	return &fakeworkloadsv1alpha1.FakeWorkloadsV1alpha1{Fake: &c.Fake}
+}
+
+// Workloads retrieves the WorkloadsV1alpha1Client
+func (c *Clientset) Workloads() workloadsv1alpha1.WorkloadsV1alpha1Interface {
+	return &fakeworkloadsv1alpha1.FakeWorkloadsV1alpha1{Fake: &c.Fake}
 }

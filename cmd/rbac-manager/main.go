@@ -17,25 +17,22 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	"k8s.io/klog"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/lawrencejones/theatre/pkg/apis"
-	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/lawrencejones/theatre/pkg/rbac/directoryrolebinding"
 	"github.com/lawrencejones/theatre/pkg/signals"
 )
 
 var (
-	app              = kingpin.New("manager", "Manages lawrjone.xyz operators 😷").Version(Version)
+	app              = kingpin.New("rbac-manager", "Manages rbac.lawrjone.xyz resources").Version(Version)
 	subject          = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
 	directoryRefresh = app.Flag("directory-refresh", "Refresh interval for directory operations").Default("5m").Duration()
-	threads          = app.Flag("threads", "Number of threads for the operator").Default("2").Int()
 
 	logger = kitlog.NewLogfmtLogger(os.Stderr)
 
-	// Version is set by goreleaser
+	// Version is set at compile time
 	Version = "dev"
 )
 
@@ -48,15 +45,8 @@ func init() {
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-	if err := rbacv1alpha1.AddToScheme(scheme.Scheme); err != nil {
-		app.Fatalf("failed to add rbac scheme: %v", err)
-	}
-
-	// TODO: We don't use this clientset, but no doubt we will. Leaving it here until it
-	// becomes useful.
-	_, err := client.New(config.GetConfigOrDie(), client.Options{})
-	if err != nil {
-		app.Fatalf("failed to create kubernetes client: %v", err)
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		app.Fatalf("failed to add schemes: %v", err)
 	}
 
 	ctx, cancel := signals.SetupSignalHandler()
@@ -70,10 +60,6 @@ func main() {
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
-	}
-
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		app.Fatalf("failed to add CRDs to scheme: %v", err)
 	}
 
 	// DirectoryRoleBinding controller

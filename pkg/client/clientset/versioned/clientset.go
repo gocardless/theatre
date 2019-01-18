@@ -20,6 +20,7 @@ package versioned
 
 import (
 	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -30,13 +31,17 @@ type Interface interface {
 	RbacV1alpha1() rbacv1alpha1.RbacV1alpha1Interface
 	// Deprecated: please explicitly pick a version if possible.
 	Rbac() rbacv1alpha1.RbacV1alpha1Interface
+	WorkloadsV1alpha1() workloadsv1alpha1.WorkloadsV1alpha1Interface
+	// Deprecated: please explicitly pick a version if possible.
+	Workloads() workloadsv1alpha1.WorkloadsV1alpha1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
 // version included in a Clientset.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	rbacV1alpha1 *rbacv1alpha1.RbacV1alpha1Client
+	rbacV1alpha1      *rbacv1alpha1.RbacV1alpha1Client
+	workloadsV1alpha1 *workloadsv1alpha1.WorkloadsV1alpha1Client
 }
 
 // RbacV1alpha1 retrieves the RbacV1alpha1Client
@@ -48,6 +53,17 @@ func (c *Clientset) RbacV1alpha1() rbacv1alpha1.RbacV1alpha1Interface {
 // Please explicitly pick a version.
 func (c *Clientset) Rbac() rbacv1alpha1.RbacV1alpha1Interface {
 	return c.rbacV1alpha1
+}
+
+// WorkloadsV1alpha1 retrieves the WorkloadsV1alpha1Client
+func (c *Clientset) WorkloadsV1alpha1() workloadsv1alpha1.WorkloadsV1alpha1Interface {
+	return c.workloadsV1alpha1
+}
+
+// Deprecated: Workloads retrieves the default version of WorkloadsClient.
+// Please explicitly pick a version.
+func (c *Clientset) Workloads() workloadsv1alpha1.WorkloadsV1alpha1Interface {
+	return c.workloadsV1alpha1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -70,6 +86,10 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 	if err != nil {
 		return nil, err
 	}
+	cs.workloadsV1alpha1, err = workloadsv1alpha1.NewForConfig(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
 
 	cs.DiscoveryClient, err = discovery.NewDiscoveryClientForConfig(&configShallowCopy)
 	if err != nil {
@@ -83,6 +103,7 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 func NewForConfigOrDie(c *rest.Config) *Clientset {
 	var cs Clientset
 	cs.rbacV1alpha1 = rbacv1alpha1.NewForConfigOrDie(c)
+	cs.workloadsV1alpha1 = workloadsv1alpha1.NewForConfigOrDie(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClientForConfigOrDie(c)
 	return &cs
@@ -92,6 +113,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
 	cs.rbacV1alpha1 = rbacv1alpha1.New(c)
+	cs.workloadsV1alpha1 = workloadsv1alpha1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

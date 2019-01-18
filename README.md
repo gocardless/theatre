@@ -49,6 +49,21 @@ curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.
 
 Running `make` should now compile binaries into `bin`.
 
+## Deploying to development environments
+
+The Kustomize deployment that can be triggered with a `make deploy` will
+configure managers that point at the latest docker image tag. While this project
+is still in alpha, it may be useful for people to deploy a development image.
+You can do so by tagging your current docker image as latest, after the
+container has been built by CI:
+
+```shell
+git push # wait for CI to build container
+make docker-pull docker-tag docker-push # assigns latest tag to current SHA
+make deploy # deploys to the currently active cluster
+kubectl delete pod -l app=theatre # optionally restart pods
+```
+
 ## CRDs
 
 ### `rbac.lawrjone.xyz`

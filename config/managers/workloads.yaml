@@ -1,0 +1,74 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: workloads-manager
+rules:
+  - apiGroups:
+      - workloads.lawrjone.xyz
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+      - admissionregistration.k8s.io
+    resources:
+      - services
+      - events
+      - mutatingwebhookconfigurations
+    verbs:
+      - "*"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workloads-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: workloads-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: workloads-manager
+subjects:
+  - kind: ServiceAccount
+    name: workloads-manager
+    namespace: system
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: workloads-manager
+  labels:
+    group: workloads.lawrjone.xyz
+spec:
+  serviceName: workloads-manager
+  volumeClaimTemplates: []
+  selector:
+    matchLabels:
+      group: workloads.lawrjone.xyz
+  template:
+    metadata:
+      labels:
+        group: workloads.lawrjone.xyz
+    spec:
+      serviceAccountName: workloads-manager
+      terminationGracePeriodSeconds: 10
+      containers:
+        - command:
+            - /workloads-manager
+          image: gcr.io/lawrjone/theatre:latest
+          imagePullPolicy: Always
+          name: manager
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            limits:
+              cpu: 500m
+              memory: 100Mi

@@ -1,4 +1,4 @@
-PROG=bin/rbac-manager bin/acceptance
+PROG=bin/rbac-manager bin/workloads-manager bin/acceptance
 PROJECT=github.com/lawrencejones/theatre
 IMAGE=gcr.io/lawrjone/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -23,7 +23,7 @@ codegen:
 	vendor/k8s.io/code-generator/generate-groups.sh all \
 		$(PROJECT)/pkg/client \
 		$(PROJECT)/pkg/apis \
-		rbac:v1alpha1
+		"rbac:v1alpha1 workloads:v1alpha1"
 
 deploy:
 	kustomize build config/base | kubectl apply -f -

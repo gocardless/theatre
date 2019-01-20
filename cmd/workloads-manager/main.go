@@ -77,7 +77,7 @@ func main() {
 	}
 
 	// Console controller
-	if _, err = console.Add(ctx, mgr, logger); err != nil {
+	if _, err = console.Add(ctx, logger, mgr); err != nil {
 		app.Fatalf(err.Error())
 	}
 

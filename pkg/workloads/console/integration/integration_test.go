@@ -41,7 +41,7 @@ var _ = Describe("Console", func() {
 		mgr = integration.StartTestManager(ctx, cfg)
 
 		integration.MustController(
-			console.Add(ctx, mgr, logger,
+			console.Add(ctx, logger, mgr,
 				func(opt *controller.Options) {
 					opt.Reconciler, calls = integration.CaptureReconcile(
 						opt.Reconciler,

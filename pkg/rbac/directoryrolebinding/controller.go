@@ -41,7 +41,7 @@ const (
 // ensure we respond to changes in the directory source, we provide a refreshInterval
 // duration that tells the controller to re-enqueue a reconcile after each successful
 // process. Setting this to 0 will disable the re-enqueue.
-func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, directory Directory, refreshInterval time.Duration, opts ...func(*controller.Options)) (controller.Controller, error) {
+func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, directory Directory, refreshInterval time.Duration, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "DirectoryRoleBinding")
 	ctrlOptions := controller.Options{
 		Reconciler: &DirectoryRoleBindingReconciler{

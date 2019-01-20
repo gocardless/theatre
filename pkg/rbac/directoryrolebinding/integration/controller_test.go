@@ -73,19 +73,20 @@ var _ = Describe("DirectoryRoleBindingReconciler", func() {
 		mgr = integration.StartTestManager(ctx, cfg)
 		groups = map[string][]string{}
 
-		_, err := directoryrolebinding.Add(
-			ctx,
-			mgr,
-			kitlog.NewLogfmtLogger(GinkgoWriter),
-			directoryrolebinding.NewFakeDirectory(groups),
-			time.Duration(0), // don't test our caching/re-enqueue here
-			func(opt *controller.Options) {
-				opt.Reconciler, calls = integration.CaptureReconcile(
-					opt.Reconciler,
-				)
-			},
+		integration.MustController(
+			directoryrolebinding.Add(
+				ctx,
+				kitlog.NewLogfmtLogger(GinkgoWriter),
+				mgr,
+				directoryrolebinding.NewFakeDirectory(groups),
+				time.Duration(0), // don't test our caching/re-enqueue here
+				func(opt *controller.Options) {
+					opt.Reconciler, calls = integration.CaptureReconcile(
+						opt.Reconciler,
+					)
+				},
+			),
 		)
-		Expect(err).NotTo(HaveOccurred())
 
 		By("Creating fixture 'admin' role")
 		Expect(mgr.GetClient().Create(ctx, newAdminRole(namespace))).NotTo(

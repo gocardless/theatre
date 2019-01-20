@@ -25,7 +25,7 @@ const (
 	EventError     = "Error"
 )
 
-func Add(ctx context.Context, mgr manager.Manager, logger kitlog.Logger, opts ...func(*controller.Options)) (controller.Controller, error) {
+func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "Console")
 	ctrlOptions := controller.Options{
 		Reconciler: &ConsoleReconciler{

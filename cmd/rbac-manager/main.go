@@ -64,7 +64,7 @@ func main() {
 
 	// DirectoryRoleBinding controller
 	directory := directoryrolebinding.NewGoogleDirectory(directoryService.Members)
-	if _, err = directoryrolebinding.Add(ctx, mgr, logger, directory, *directoryRefresh); err != nil {
+	if _, err = directoryrolebinding.Add(ctx, logger, mgr, directory, *directoryRefresh); err != nil {
 		app.Fatalf(err.Error())
 	}
 

@@ -5,7 +5,7 @@ references:
   docker_golang: &docker_golang
     docker:
       - image: golang:1.11
-    working_directory: /go/src/github.com/lawrencejones/theatre
+    working_directory: /go/src/github.com/gocardless/theatre
 
 jobs:
   unit-integration:
@@ -30,7 +30,7 @@ jobs:
           name: Build test binaries
           command: make all
       - persist_to_workspace:
-          root: /go/src/github.com/lawrencejones/theatre
+          root: /go/src/github.com/gocardless/theatre
           paths: ['bin']
 
   acceptance:

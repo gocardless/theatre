@@ -1,5 +1,5 @@
 package workloads
 
 const (
-	GroupName = "workloads.lawrjone.xyz"
+	GroupName = "workloads.crd.gocardless.com"
 )

@@ -40,7 +40,7 @@ var _ = Describe("AddToSchemes", func() {
 				if ast, err := parser.ParseFile(token.NewFileSet(), path, nil, 0); err == nil {
 					if ast.Scope.Lookup("AddToScheme") != nil {
 						groupVersions = append(groupVersions, schema.GroupVersion{
-							Group:   fmt.Sprintf("%s.lawrjone.xyz", pieces[0]),
+							Group:   fmt.Sprintf("%s.crd.gocardless.com", pieces[0]),
 							Version: pieces[1],
 						})
 					}

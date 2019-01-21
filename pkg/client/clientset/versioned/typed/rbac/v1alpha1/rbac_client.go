@@ -30,7 +30,7 @@ type RbacV1alpha1Interface interface {
 	DirectoryRoleBindingsGetter
 }
 
-// RbacV1alpha1Client is used to interact with features provided by the rbac.lawrjone.xyz group.
+// RbacV1alpha1Client is used to interact with features provided by the rbac.crd.gocardless.com group.
 type RbacV1alpha1Client struct {
 	restClient rest.Interface
 }

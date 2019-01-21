@@ -29,7 +29,7 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admissi
 	}
 
 	return builder.NewWebhookBuilder().
-		Name("console-authenticator.lawrjone.xyz").
+		Name("console-authenticator.crd.gocardless.com").
 		Mutating().
 		Operations(admissionregistrationv1beta1.Create).
 		ForType(&workloadsv1alpha1.Console{}).

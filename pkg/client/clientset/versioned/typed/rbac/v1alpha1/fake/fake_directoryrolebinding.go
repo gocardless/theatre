@@ -34,9 +34,9 @@ type FakeDirectoryRoleBindings struct {
 	ns   string
 }
 
-var directoryrolebindingsResource = schema.GroupVersionResource{Group: "rbac.lawrjone.xyz", Version: "v1alpha1", Resource: "directoryrolebindings"}
+var directoryrolebindingsResource = schema.GroupVersionResource{Group: "rbac.crd.gocardless.com", Version: "v1alpha1", Resource: "directoryrolebindings"}
 
-var directoryrolebindingsKind = schema.GroupVersionKind{Group: "rbac.lawrjone.xyz", Version: "v1alpha1", Kind: "DirectoryRoleBinding"}
+var directoryrolebindingsKind = schema.GroupVersionKind{Group: "rbac.crd.gocardless.com", Version: "v1alpha1", Kind: "DirectoryRoleBinding"}
 
 // Get takes name of the directoryRoleBinding, and returns the corresponding directoryRoleBinding object, and an error if there is any.
 func (c *FakeDirectoryRoleBindings) Get(name string, options v1.GetOptions) (result *v1alpha1.DirectoryRoleBinding, err error) {

@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	app              = kingpin.New("rbac-manager", "Manages rbac.lawrjone.xyz resources").Version(Version)
+	app              = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
 	subject          = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
 	directoryRefresh = app.Flag("directory-refresh", "Refresh interval for directory operations").Default("5m").Duration()
 

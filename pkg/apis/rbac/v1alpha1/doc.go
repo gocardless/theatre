@@ -4,5 +4,5 @@
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=github.com/lawrencejones/theatre/pkg/apis/rbac
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=rbac.lawrjone.xyz
+// +groupName=rbac.crd.gocardless.com
 package v1alpha1

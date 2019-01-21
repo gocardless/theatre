@@ -66,7 +66,7 @@ kubectl delete pod -l app=theatre # optionally restart pods
 
 ## CRDs
 
-### `rbac.lawrjone.xyz`
+### `rbac.crd.gocardless.com`
 
 Collection of utilities to extend the default Kubernetes RBAC resources. These
 CRDs are motivated by problems I've seen using Kubernetes with an organisation
@@ -87,7 +87,7 @@ CRD extends the native Kubernetes RoleBinding resource to provide the
 
 ```yaml
 ---
-apiVersion: rbac.lawrjone.xyz/v1alpha1
+apiVersion: rbac.crd.gocardless.com/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-superuser

@@ -34,9 +34,9 @@ type FakeConsoles struct {
 	ns   string
 }
 
-var consolesResource = schema.GroupVersionResource{Group: "workloads.lawrjone.xyz", Version: "v1alpha1", Resource: "consoles"}
+var consolesResource = schema.GroupVersionResource{Group: "workloads.crd.gocardless.com", Version: "v1alpha1", Resource: "consoles"}
 
-var consolesKind = schema.GroupVersionKind{Group: "workloads.lawrjone.xyz", Version: "v1alpha1", Kind: "Console"}
+var consolesKind = schema.GroupVersionKind{Group: "workloads.crd.gocardless.com", Version: "v1alpha1", Kind: "Console"}
 
 // Get takes name of the console, and returns the corresponding console object, and an error if there is any.
 func (c *FakeConsoles) Get(name string, options v1.GetOptions) (result *v1alpha1.Console, err error) {

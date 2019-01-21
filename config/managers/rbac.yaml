@@ -22,7 +22,7 @@ rules:
     verbs:
       - "*"  # this should include escalated in 1.12 and greater
   - apiGroups:
-      - rbac.lawrjone.xyz
+      - rbac.crd.gocardless.com
     resources:
       - "*"
     verbs:
@@ -57,17 +57,17 @@ kind: StatefulSet
 metadata:
   name: rbac-manager
   labels:
-    group: rbac.lawrjone.xyz
+    group: rbac.crd.gocardless.com
 spec:
   serviceName: rbac-manager
   volumeClaimTemplates: []
   selector:
     matchLabels:
-      group: rbac.lawrjone.xyz
+      group: rbac.crd.gocardless.com
   template:
     metadata:
       labels:
-        group: rbac.lawrjone.xyz
+        group: rbac.crd.gocardless.com
     spec:
       serviceAccountName: rbac-manager
       terminationGracePeriodSeconds: 10

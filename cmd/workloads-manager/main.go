@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	app         = kingpin.New("workloads-manager", "Manages workloads.lawrjone.xyz resources").Version(Version)
+	app         = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(Version)
 	webhookName = app.Flag("webhook-name", "Kubernetes mutating webhook name").Default("theatre-workloads").String()
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()

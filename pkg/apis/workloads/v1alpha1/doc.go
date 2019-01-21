@@ -4,5 +4,5 @@
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=github.com/lawrencejones/theatre/pkg/apis/workloads
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=workloads.lawrjone.xyz
+// +groupName=workloads.crd.gocardless.com
 package v1alpha1

@@ -30,7 +30,7 @@ type WorkloadsV1alpha1Interface interface {
 	ConsolesGetter
 }
 
-// WorkloadsV1alpha1Client is used to interact with features provided by the workloads.lawrjone.xyz group.
+// WorkloadsV1alpha1Client is used to interact with features provided by the workloads.crd.gocardless.com group.
 type WorkloadsV1alpha1Client struct {
 	restClient rest.Interface
 }

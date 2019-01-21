@@ -28,6 +28,9 @@ codegen:
 deploy:
 	kustomize build config/base | kubectl apply -f -
 
+deploy-production:
+	kustomize build config/overlays/production | kubectl apply -f -
+
 clean:
 	rm -rvf dist $(PROG) $(PROG:%=%.linux_amd64)
 

@@ -20,13 +20,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/lawrencejones/theatre/pkg/apis"
-	"github.com/lawrencejones/theatre/pkg/rbac/directoryrolebinding"
-	"github.com/lawrencejones/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
+	"github.com/gocardless/theatre/pkg/signals"
 )
 
 var (
-	app              = kingpin.New("rbac-manager", "Manages rbac.lawrjone.xyz resources").Version(Version)
+	app              = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
 	subject          = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
 	directoryRefresh = app.Flag("directory-refresh", "Refresh interval for directory operations").Default("5m").Duration()
 

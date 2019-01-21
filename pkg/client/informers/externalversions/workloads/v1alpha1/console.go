@@ -21,10 +21,10 @@ package v1alpha1
 import (
 	time "time"
 
-	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
-	versioned "github.com/lawrencejones/theatre/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/lawrencejones/theatre/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/lawrencejones/theatre/pkg/client/listers/workloads/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	versioned "github.com/gocardless/theatre/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/gocardless/theatre/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/gocardless/theatre/pkg/client/listers/workloads/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

@@ -1,16 +1,23 @@
-# Theatre [![CircleCI](https://circleci.com/gh/lawrencejones/theatre.svg?style=svg)](https://circleci.com/gh/lawrencejones/theatre)
+# Theatre [![CircleCI](https://circleci.com/gh/gocardless/theatre.svg?style=svg)](https://circleci.com/gh/gocardless/theatre)
 
-This project contains my personal experiments with Kubernetes operators. The aim
-is to trial several methods of implementing operators and arrive at a
-development environment that is welcoming to developers who are unfamiliar with
-this type of development.
+This project contains GoCardless Kubernetes extensions, mostly in the form of
+operators and admission controller webhooks. The aim of this project is to
+provide a space to write Kubernetes extensions where:
 
-The following checklist details my aims for exploring operator development
-generally, separate from the features I intend to provide via the CRDs in this
-package:
+1. Doing the right thing is easy; it is difficult to make mistakes!
+2. Each category of Kubernetes extension has a well defined implementation pattern
+3. Writing meaningful tests is easy, with minimal boilerplate
+
+## TODO
+
+Theatre is under active development and we're still working out what works best
+for this type of software development. Below is an on-going list of TODOs that
+would help us move toward our three primary goals:
 
 - [x] Verify all API groups are registered
 - [x] Integrate Kubernetes events with logging
+- [x] Investigate installing webhooks: can we test admission webhooks with the
+      integration test suite?
 - [ ] Use caching informers to power controllers
 - [x] Unit/integration testing
 - [ ] Acceptance testing with real kubernetes
@@ -20,16 +27,7 @@ package:
   - [ ] RBAC roles for the manager
   - [ ] Stateful set for the deployment
 - [ ] Decide on deployment strategy
-
-To help me personally, my next steps are:
-
-- [x] Cache directory lookups
-- [x] Support pagination for Google directory lookups
-- [x] Restructure DirectoryRoleBinding to use Spec
-- [ ] Review small packages, consolidate where necessary, add unit tests
 - [ ] Document installation procedure
-- [ ] Investigate installing webhooks: can we test admission webhooks with the
-      integration test suite?
 
 ## Getting Started
 
@@ -66,11 +64,11 @@ kubectl delete pod -l app=theatre # optionally restart pods
 
 ## CRDs
 
-### `rbac.lawrjone.xyz`
+### `rbac.crd.gocardless.com`
 
 Collection of utilities to extend the default Kubernetes RBAC resources. These
-CRDs are motivated by problems I've seen using Kubernetes with an organisation
-that works with GSuite, and frequently onboards new developers.
+CRDs are motivated by real-world use cases when using Kubernetes with an
+organisation that using GSuite, and which frequently onboards new developers.
 
 #### `DirectoryRoleBinding`
 
@@ -79,15 +77,9 @@ Often organisations make use of Google groups as a directory system, and this
 CRD extends the native Kubernetes RoleBinding resource to provide the
 `GoogleGroup` subject.
 
-- [x] Can manage permissions using GSuite groups
-- [x] Has unit tests
-- [x] Has integration tests
-- [ ] Has acceptance tests
-- [x] Refactor to support a more standard CRD interface
-
 ```yaml
 ---
-apiVersion: rbac.lawrjone.xyz/v1alpha1
+apiVersion: rbac.crd.gocardless.com/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
   name: platform-superuser

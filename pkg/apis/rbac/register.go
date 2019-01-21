@@ -1,5 +1,5 @@
 package rbac
 
 const (
-	GroupName = "rbac.lawrjone.xyz"
+	GroupName = "rbac.crd.gocardless.com"
 )

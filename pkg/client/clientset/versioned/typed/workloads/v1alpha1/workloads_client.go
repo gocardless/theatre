@@ -19,8 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/client/clientset/versioned/scheme"
+	v1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	rest "k8s.io/client-go/rest"
 )
@@ -30,7 +30,7 @@ type WorkloadsV1alpha1Interface interface {
 	ConsolesGetter
 }
 
-// WorkloadsV1alpha1Client is used to interact with features provided by the workloads.lawrjone.xyz group.
+// WorkloadsV1alpha1Client is used to interact with features provided by the workloads.crd.gocardless.com group.
 type WorkloadsV1alpha1Client struct {
 	restClient rest.Interface
 }

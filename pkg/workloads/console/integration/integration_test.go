@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/integration"
-	"github.com/lawrencejones/theatre/pkg/workloads/console"
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/integration"
+	"github.com/gocardless/theatre/pkg/workloads/console"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

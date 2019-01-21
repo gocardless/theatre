@@ -12,9 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/integration"
-	"github.com/lawrencejones/theatre/pkg/rbac/directoryrolebinding"
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
+	"github.com/gocardless/theatre/pkg/integration"
+	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

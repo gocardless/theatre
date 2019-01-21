@@ -5,7 +5,7 @@ metadata:
   name: workloads-manager
 rules:
   - apiGroups:
-      - workloads.lawrjone.xyz
+      - workloads.crd.gocardless.com
     resources:
       - "*"
     verbs:
@@ -43,24 +43,24 @@ kind: StatefulSet
 metadata:
   name: workloads-manager
   labels:
-    group: workloads.lawrjone.xyz
+    group: workloads.crd.gocardless.com
 spec:
   serviceName: workloads-manager
   volumeClaimTemplates: []
   selector:
     matchLabels:
-      group: workloads.lawrjone.xyz
+      group: workloads.crd.gocardless.com
   template:
     metadata:
       labels:
-        group: workloads.lawrjone.xyz
+        group: workloads.crd.gocardless.com
     spec:
       serviceAccountName: workloads-manager
       terminationGracePeriodSeconds: 10
       containers:
         - command:
             - /workloads-manager
-          image: gcr.io/lawrjone/theatre:latest
+          image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager
           env:

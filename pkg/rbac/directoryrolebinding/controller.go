@@ -22,9 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/lawrencejones/theatre/pkg/logging"
-	rbacutils "github.com/lawrencejones/theatre/pkg/rbac"
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
+	"github.com/gocardless/theatre/pkg/logging"
+	rbacutils "github.com/gocardless/theatre/pkg/rbac"
 )
 
 const (

@@ -17,14 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/lawrencejones/theatre/pkg/apis"
-	"github.com/lawrencejones/theatre/pkg/apis/workloads"
-	"github.com/lawrencejones/theatre/pkg/signals"
-	"github.com/lawrencejones/theatre/pkg/workloads/console"
+	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/apis/workloads"
+	"github.com/gocardless/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/workloads/console"
 )
 
 var (
-	app         = kingpin.New("workloads-manager", "Manages workloads.lawrjone.xyz resources").Version(Version)
+	app         = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(Version)
 	webhookName = app.Flag("webhook-name", "Kubernetes mutating webhook name").Default("theatre-workloads").String()
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()

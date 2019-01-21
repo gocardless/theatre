@@ -78,7 +78,7 @@ spec:
       containers:
         - command:
             - /rbac-manager
-          image: gcr.io/lawrjone/theatre:latest
+          image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager
           env:

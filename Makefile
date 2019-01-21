@@ -1,5 +1,5 @@
 PROG=bin/rbac-manager bin/workloads-manager bin/acceptance
-PROJECT=github.com/lawrencejones/theatre
+PROJECT=github.com/gocardless/theatre
 IMAGE=gcr.io/lawrjone/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"

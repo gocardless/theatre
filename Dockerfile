@@ -1,7 +1,7 @@
 # Build Go binary without cgo dependencies
 FROM golang:1.11 as builder
-WORKDIR /go/src/github.com/lawrencejones/theatre
-COPY . /go/src/github.com/lawrencejones/theatre
+WORKDIR /go/src/github.com/gocardless/theatre
+COPY . /go/src/github.com/gocardless/theatre
 RUN CGO_ENABLED=0 make VERSION=$(cat VERSION) all
 
 # Use ubuntu as our base package to enable generic system tools
@@ -16,5 +16,5 @@ RUN set -x \
       && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
-COPY --from=builder /go/src/github.com/lawrencejones/theatre/bin/* /
+COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /
 ENTRYPOINT ["/bin/bash"]

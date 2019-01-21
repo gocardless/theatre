@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 
-	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 )
 
 func NewWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {

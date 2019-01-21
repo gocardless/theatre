@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/apis/workloads/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 )
 
 const (

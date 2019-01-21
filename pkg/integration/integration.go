@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lawrencejones/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/apis"
 	types "github.com/onsi/gomega/types"
 	"github.com/satori/go.uuid"
 

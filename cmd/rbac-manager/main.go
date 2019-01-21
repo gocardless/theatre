@@ -20,9 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/lawrencejones/theatre/pkg/apis"
-	"github.com/lawrencejones/theatre/pkg/rbac/directoryrolebinding"
-	"github.com/lawrencejones/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
+	"github.com/gocardless/theatre/pkg/signals"
 )
 
 var (

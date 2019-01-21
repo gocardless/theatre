@@ -19,8 +19,8 @@ limitations under the License.
 package versioned
 
 import (
-	rbacv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/lawrencejones/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/client/clientset/versioned/typed/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

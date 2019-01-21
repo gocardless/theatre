@@ -15,7 +15,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lawrencejones/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/signals"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

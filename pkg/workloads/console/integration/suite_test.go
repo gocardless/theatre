@@ -8,7 +8,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/lawrencejones/theatre/pkg/integration"
+	"github.com/gocardless/theatre/pkg/integration"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

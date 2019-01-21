@@ -19,8 +19,8 @@ limitations under the License.
 package workloads
 
 import (
-	internalinterfaces "github.com/lawrencejones/theatre/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/lawrencejones/theatre/pkg/client/informers/externalversions/workloads/v1alpha1"
+	internalinterfaces "github.com/gocardless/theatre/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/gocardless/theatre/pkg/client/informers/externalversions/workloads/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

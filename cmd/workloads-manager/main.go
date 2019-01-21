@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/lawrencejones/theatre/pkg/apis"
-	"github.com/lawrencejones/theatre/pkg/apis/workloads"
-	"github.com/lawrencejones/theatre/pkg/signals"
-	"github.com/lawrencejones/theatre/pkg/workloads/console"
+	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/apis/workloads"
+	"github.com/gocardless/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/workloads/console"
 )
 
 var (

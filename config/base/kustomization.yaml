@@ -19,5 +19,5 @@ secretGenerator:
   - commands:
       # Assuming the current GOOGLE_APPLICATION_CREDENTIALS env var points at
       # the key we want to use during deployment.
-      credentials.json: cat $GOOGLE_APPLICATION_CREDENTIALS
+      credentials.json: kubectl -n theatre-system get secret theatre-google-application-credentials -o json | jq '.data."credentials.json"' -r | base64 --decode
     name: google-application-credentials

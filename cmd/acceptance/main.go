@@ -38,7 +38,8 @@ var (
 const AcceptanceDockerfile = `
 FROM alpine:3.8
 RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
-COPY * /
+COPY rbac-manager.linux_amd64 /rbac-manager
+COPY workloads-manager.linux_amd64 /workloads-manager
 `
 
 func init() {

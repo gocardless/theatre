@@ -37,6 +37,7 @@ type ConsolesGetter interface {
 type ConsoleInterface interface {
 	Create(*v1alpha1.Console) (*v1alpha1.Console, error)
 	Update(*v1alpha1.Console) (*v1alpha1.Console, error)
+	UpdateStatus(*v1alpha1.Console) (*v1alpha1.Console, error)
 	Delete(name string, options *v1.DeleteOptions) error
 	DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error
 	Get(name string, options v1.GetOptions) (*v1alpha1.Console, error)
@@ -114,6 +115,22 @@ func (c *consoles) Update(console *v1alpha1.Console) (result *v1alpha1.Console, 
 		Namespace(c.ns).
 		Resource("consoles").
 		Name(console.Name).
+		Body(console).
+		Do().
+		Into(result)
+	return
+}
+
+// UpdateStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+
+func (c *consoles) UpdateStatus(console *v1alpha1.Console) (result *v1alpha1.Console, err error) {
+	result = &v1alpha1.Console{}
+	err = c.client.Put().
+		Namespace(c.ns).
+		Resource("consoles").
+		Name(console.Name).
+		SubResource("status").
 		Body(console).
 		Do().
 		Into(result)

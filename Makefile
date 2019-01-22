@@ -4,7 +4,7 @@ IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: all darwin linux test codegen deploy clean docker-build docker-pull docker-push docker-tag
+.PHONY: all darwin linux test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
 
 all: darwin linux
 darwin: $(PROG)
@@ -47,3 +47,6 @@ docker-push:
 
 docker-tag:
 	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
+
+manifests:
+	controller-gen all

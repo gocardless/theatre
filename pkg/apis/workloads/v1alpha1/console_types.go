@@ -1,8 +1,8 @@
 package v1alpha1
 
 import (
-	core_v1 "k8s.io/api/core/v1"
-	rbac_v1 "k8s.io/api/rbac/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbac1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -20,10 +20,10 @@ type Console struct {
 
 // ConsoleSpec defines the specification for a console
 type ConsoleSpec struct {
-	User               string                       `json:"user"`
-	Reason             string                       `json:"reason"`
-	TimeoutSeconds     int                          `json:"timeoutSeconds"`
-	ConsoleTemplateRef core_v1.LocalObjectReference `json:"consoleTemplateRef"`
+	User               string                      `json:"user"`
+	Reason             string                      `json:"reason"`
+	TimeoutSeconds     int                         `json:"timeoutSeconds"`
+	ConsoleTemplateRef corev1.LocalObjectReference `json:"consoleTemplateRef"`
 }
 
 type ConsoleStatus struct {
@@ -52,11 +52,11 @@ type ConsoleTemplate struct {
 }
 
 type ConsoleTemplateSpec struct {
-	User                     string                  `json:"user"`
-	Template                 core_v1.PodTemplateSpec `json:"template"`
-	DefaultTimeoutSeconds    int                     `json:"defaultTimeoutSeconds"`
-	MaxTimeoutSeconds        int                     `json:"maxTimeoutSeconds"`
-	AdditionalAttachSubjects []rbac_v1.Subject       `json:"additionalAttachSubjects"`
+	User                     string                 `json:"user"`
+	Template                 corev1.PodTemplateSpec `json:"template"`
+	DefaultTimeoutSeconds    int                    `json:"defaultTimeoutSeconds"`
+	MaxTimeoutSeconds        int                    `json:"maxTimeoutSeconds"`
+	AdditionalAttachSubjects []rbac1.Subject        `json:"additionalAttachSubjects"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

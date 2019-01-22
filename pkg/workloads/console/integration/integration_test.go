@@ -5,7 +5,7 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
-	core_v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -125,7 +125,7 @@ var _ = Describe("Console", func() {
 			)
 
 			By("Expect pod was created")
-			pod := &core_v1.Pod{}
+			pod := &corev1.Pod{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
 			err := mgr.GetClient().Get(context.TODO(), identifier, pod)
 

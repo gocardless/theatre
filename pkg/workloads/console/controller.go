@@ -3,9 +3,9 @@ package console
 import (
 	"context"
 
-	core_v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
@@ -81,7 +81,7 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		return res, err
 	}
 
-	pod := &core_v1.Pod{}
+	pod := &corev1.Pod{}
 	err = r.client.Get(r.ctx, request.NamespacedName, pod)
 
 	if err != nil {
@@ -101,15 +101,15 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	return res, err
 }
 
-func newPod(name types.NamespacedName) *core_v1.Pod {
-	return &core_v1.Pod{
-		ObjectMeta: meta_v1.ObjectMeta{
+func newPod(name types.NamespacedName) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
 		},
-		Spec: core_v1.PodSpec{
-			Containers: []core_v1.Container{
-				core_v1.Container{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				corev1.Container{
 					Image:   "alpine:latest",
 					Name:    "console-container-0",
 					Command: []string{"sleep", "100"},

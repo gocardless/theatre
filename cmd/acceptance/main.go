@@ -30,6 +30,9 @@ var (
 	prepareImage = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
 	prepareBin   = prepare.Flag("bin", "Path to manager binaries").Default("./bin").ExistingDir()
 
+	destroy     = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
+	destroyName = destroy.Flag("name", "Name of Kubernetes context to destroy").Default("e2e").String()
+
 	run = app.Command("run", "Runs the acceptance test suite")
 )
 
@@ -124,6 +127,16 @@ func main() {
 		if err := pipeOutput(applyCmd).Run(); err != nil {
 			app.Fatalf("failed to install manager: %v", err)
 		}
+
+	case destroy.FullCommand():
+		logger = kitlog.With(logger, "clusterName", *destroyName)
+
+		_, err := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", *destroyName).CombinedOutput()
+		if err != nil {
+			app.Fatalf("failed to destroy kubernetes cluster with kind: %v", err)
+		}
+
+		logger.Log("msg", "successfully destroyed cluster")
 
 	case run.FullCommand():
 		RegisterFailHandler(Fail)

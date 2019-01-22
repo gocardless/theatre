@@ -1,0 +1,10 @@
+---
+apiVersion: v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+imageTags:
+  - name: eu.gcr.io/gc-containers/gocardless/theatre
+    newTag: f22156b9886373b35c067ab90d1bbaf91fd5d5a4

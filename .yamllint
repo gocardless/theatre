@@ -1,0 +1,15 @@
+# vi: syntax=yaml
+---
+extends: default
+rules:
+  document-start:
+    # Match on just the filename, not the full path. This allows ALE, which
+    # copies the file to a temporary directory when running yamllint, to still
+    # adhere to the ignore rule.
+    ignore: |
+      workloads_v1alpha1_*.yaml
+      rbac_v1alpha1_*.yaml
+  line-length:
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+    max: 120

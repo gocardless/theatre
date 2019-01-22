@@ -48,5 +48,7 @@ docker-push:
 docker-tag:
 	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
 
+# npm install -g prettier
 manifests:
 	controller-gen all
+	prettier --parser yaml --write config/crds/*

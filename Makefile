@@ -4,9 +4,11 @@ IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: all test codegen deploy clean docker-build docker-pull docker-push docker-tag
+.PHONY: all darwin linux test codegen deploy clean docker-build docker-pull docker-push docker-tag
 
-all: $(PROG)
+all: darwin linux
+darwin: $(PROG)
+linux: $(PROG:=.linux_amd64)
 
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX

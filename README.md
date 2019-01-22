@@ -38,7 +38,8 @@ the necessary dependencies:
 ```shell
 brew cask install docker
 brew install go@1.11 kubernetes-cli kustomize
-go get -u sigs.k8s.io/kind 
+curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/0.1.0/kind-darwin-amd64 \
+  && chmod a+x /usr/local/bin/kind
 curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_darwin_amd64
 mkdir /usr/local/kubebuilder
 curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.7/kubebuilder_1.0.7_linux_amd64.tar.gz \
@@ -46,6 +47,46 @@ curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.
 ```
 
 Running `make` should now compile binaries into `bin`.
+
+## Deploying locally
+
+For testing development changes, you can make use of the acceptance testing
+infrastructure to install the code into a local kubernetes-in-docker cluster.
+Ensure `kind` is installed (as per getting started steps) and then run the
+following:
+
+```
+make linux # build the linux binaries
+go run cmd/acceptance/main.go prepare # prepare the cluster, install theatre
+```
+
+At this point a development cluster has been provisioned. You can access this
+cluster using the following, as is suggested to save as an alias in your shell
+environment:
+
+```
+function e2e() {
+  export KUBECONFIG="$(kind get kubeconfig-path --name="e2e")"
+}
+
+$ e2e
+$ kubectl get pods --all-namespaces
+NAMESPACE        NAME                                             READY   STATUS    RESTARTS   AGE
+kube-system      coredns-86c58d9df4-6mw6z                         1/1     Running   0          12m
+kube-system      coredns-86c58d9df4-fhnwg                         1/1     Running   0          12m
+kube-system      etcd-kind-e2e-control-plane                      1/1     Running   0          11m
+kube-system      kube-apiserver-kind-e2e-control-plane            1/1     Running   0          11m
+kube-system      kube-controller-manager-kind-e2e-control-plane   1/1     Running   0          11m
+kube-system      kube-proxy-rs29h                                 1/1     Running   0          12m
+kube-system      kube-scheduler-kind-e2e-control-plane            1/1     Running   0          11m
+kube-system      weave-net-jzx8c                                  2/2     Running   0          12m
+theatre-system   theatre-rbac-manager-0                           1/1     Running   7          12m
+theatre-system   theatre-workloads-manager-0                      1/1     Running   0          4m52s
+```
+
+To develop against this cluster, either run the managers locally with the
+exported Kubernetes config, or re-run `make linux` followed by acceptance
+prepare flow.
 
 ## Deploying to development environments
 

@@ -23,6 +23,7 @@ rules:
       - services
       - events
       - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
     verbs:
       - "*"
 ---

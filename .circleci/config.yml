@@ -13,10 +13,6 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install controller-gen
-          command: |
-            go get sigs.k8s.io/controller-tools/cmd/controller-gen
-      - run:
           name: Install prettier
           command: |
             curl -sL https://deb.nodesource.com/setup_10.x > setup-node_10.x

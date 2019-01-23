@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	rbac1 "k8s.io/api/rbac/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -56,7 +56,7 @@ type ConsoleTemplateSpec struct {
 	Template                 corev1.PodTemplateSpec `json:"template"`
 	DefaultTimeoutSeconds    int                    `json:"defaultTimeoutSeconds"`
 	MaxTimeoutSeconds        int                    `json:"maxTimeoutSeconds"`
-	AdditionalAttachSubjects []rbac1.Subject        `json:"additionalAttachSubjects"`
+	AdditionalAttachSubjects []rbacv1.Subject       `json:"additionalAttachSubjects"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

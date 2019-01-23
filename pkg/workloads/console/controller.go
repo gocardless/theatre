@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,40 +82,54 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		return res, err
 	}
 
-	pod := &corev1.Pod{}
-	err = r.client.Get(r.ctx, request.NamespacedName, pod)
+	logger.Log("msg", "found console")
 
+	// Fetch the template for this console
+	consoleTemplateName := types.NamespacedName{
+		Name:      csl.Spec.ConsoleTemplateRef.Name,
+		Namespace: request.NamespacedName.Namespace,
+	}
+	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
+	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
+		return res, err
+	}
+
+	// Try to find the job for this console
+	logger.Log("msg", "looking for job")
+	job := &batchv1.Job{}
+	err = r.client.Get(r.ctx, request.NamespacedName, job)
+
+	// If it can't be found, create it
 	if err != nil {
 		if errors.IsNotFound(err) {
-			err = r.client.Create(r.ctx, newPod(request.NamespacedName))
+			logger.Log("msg", "job not found")
+			err = r.client.Create(r.ctx, buildJob(request.NamespacedName, consoleTemplate.Spec.Template))
 			if err != nil {
 				return res, err
 			}
-			logger.Log("pod", "created", "name", request.NamespacedName.Name, "user", csl.Spec.User)
+			logger.Log("job", "created", "name", request.NamespacedName.Name, "user", csl.Spec.User)
 		}
 
 		return res, err
 	}
 
-	logger.Log("pod", "already exists", "name", request.NamespacedName.Name, "user", csl.Spec.User)
+	// If it exists:
+	//   Terminate if necessary
+	//   GC if necessary
+	logger.Log("job", "already exists", "name", request.NamespacedName.Name, "user", csl.Spec.User)
+
 	logger.Log("event", "Reconciled")
 	return res, err
 }
 
-func newPod(name types.NamespacedName) *corev1.Pod {
-	return &corev1.Pod{
+func buildJob(name types.NamespacedName, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
+	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				corev1.Container{
-					Image:   "alpine:latest",
-					Name:    "console-container-0",
-					Command: []string{"sleep", "100"},
-				},
-			},
+		Spec: batchv1.JobSpec{
+			Template: podTemplate,
 		},
 	}
 }

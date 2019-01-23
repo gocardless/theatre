@@ -23,10 +23,16 @@ import (
 )
 
 const (
-	EventReconcile = "Reconcile"
-	EventNotFound  = "NotFound"
-	EventCreated   = "Created"
-	EventError     = "Error"
+	EventStart    = "reconcile.start"
+	EventComplete = "reconcile.end"
+	EventFound    = "found"
+	EventNotFound = "not_found"
+	EventCreated  = "created"
+	EventError    = "error"
+
+	Job             = "job"
+	Console         = "console"
+	ConsoleTemplate = "consoletemplate"
 )
 
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
@@ -65,7 +71,7 @@ type ConsoleReconciler struct {
 
 func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
 	logger := kitlog.With(r.logger, "request", request)
-	logger.Log("event", EventReconcile)
+	logger.Log("event", EventStart)
 
 	defer func() {
 		if err != nil {
@@ -76,13 +82,11 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	csl := &workloadsv1alpha1.Console{}
 	if err := r.client.Get(r.ctx, request.NamespacedName, csl); err != nil {
 		if errors.IsNotFound(err) {
-			return res, logger.Log("event", EventNotFound)
+			return res, logger.Log("event", EventNotFound, "resource", Console)
 		}
 
 		return res, err
 	}
-
-	logger.Log("msg", "found console")
 
 	// Fetch the template for this console
 	consoleTemplateName := types.NamespacedName{
@@ -91,23 +95,30 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	}
 	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
+		}
 		return res, err
 	}
 
 	// Try to find the job for this console
-	logger.Log("msg", "looking for job")
 	job := &batchv1.Job{}
 	err = r.client.Get(r.ctx, request.NamespacedName, job)
 
 	// If it can't be found, create it
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Log("msg", "job not found")
+			logger.Log("event", EventNotFound, "resource", Job)
 			err = r.client.Create(r.ctx, buildJob(request.NamespacedName, consoleTemplate.Spec.Template))
 			if err != nil {
 				return res, err
 			}
-			logger.Log("job", "created", "name", request.NamespacedName.Name, "user", csl.Spec.User)
+			logger.Log(
+				"event", EventCreated,
+				"resource", Job,
+				"name", request.NamespacedName.Name,
+				"user", csl.Spec.User,
+			)
 		}
 
 		return res, err
@@ -116,9 +127,14 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	// If it exists:
 	//   Terminate if necessary
 	//   GC if necessary
-	logger.Log("job", "already exists", "name", request.NamespacedName.Name, "user", csl.Spec.User)
+	logger.Log(
+		"event", EventFound,
+		"resource", Job,
+		"name", request.NamespacedName.Name,
+		"user", csl.Spec.User,
+	)
 
-	logger.Log("event", "Reconciled")
+	logger.Log("event", EventComplete)
 	return res, err
 }
 

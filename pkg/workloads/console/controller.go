@@ -5,8 +5,10 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
@@ -14,12 +16,15 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
+	"github.com/gocardless/theatre/pkg/logging"
 )
 
 const (
@@ -30,9 +35,11 @@ const (
 	EventCreated  = "created"
 	EventError    = "error"
 
-	Job             = "job"
-	Console         = "console"
-	ConsoleTemplate = "consoletemplate"
+	Job             = "Job"
+	Console         = "Console"
+	ConsoleTemplate = "ConsoleTemplate"
+	Role            = "Role"
+	RoleBinding     = "RoleBindings"
 )
 
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
@@ -79,8 +86,9 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		}
 	}()
 
+	name := request.NamespacedName
 	csl := &workloadsv1alpha1.Console{}
-	if err := r.client.Get(r.ctx, request.NamespacedName, csl); err != nil {
+	if err := r.client.Get(r.ctx, name, csl); err != nil {
 		if errors.IsNotFound(err) {
 			return res, logger.Log("event", EventNotFound, "resource", Console)
 		}
@@ -88,10 +96,12 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		return res, err
 	}
 
-	// Fetch the template for this console
+	logger = logging.WithRecorder(logger, r.recorder, csl)
+
+	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      csl.Spec.ConsoleTemplateRef.Name,
-		Namespace: request.NamespacedName.Namespace,
+		Namespace: name.Namespace,
 	}
 	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
@@ -101,41 +111,78 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		return res, err
 	}
 
-	// Try to find the job for this console
+	// Try to find the job
 	job := &batchv1.Job{}
-	err = r.client.Get(r.ctx, request.NamespacedName, job)
+	err = r.client.Get(r.ctx, name, job)
 
 	// If it can't be found, create it
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.Log("event", EventNotFound, "resource", Job)
-			err = r.client.Create(r.ctx, buildJob(request.NamespacedName, consoleTemplate.Spec.Template))
-			if err != nil {
-				return res, err
-			}
-			logger.Log(
-				"event", EventCreated,
-				"resource", Job,
-				"name", request.NamespacedName.Name,
-				"user", csl.Spec.User,
-			)
+		if !errors.IsNotFound(err) {
+			return res, err
 		}
 
-		return res, err
+		logger.Log("event", EventNotFound, "resource", Job)
+		job = buildJob(name, consoleTemplate.Spec.Template)
+		if err := controllerutil.SetControllerReference(csl, job, scheme.Scheme); err != nil {
+			return res, err
+		}
+		if err = r.client.Create(r.ctx, job); err != nil {
+			return res, err
+		}
+		logger.Log(
+			"event", EventCreated,
+			"resource", Job,
+			"name", job.ObjectMeta.Name,
+			"user", csl.Spec.User,
+		)
 	}
 
-	// If it exists:
-	//   Terminate if necessary
-	//   GC if necessary
 	logger.Log(
 		"event", EventFound,
 		"resource", Job,
-		"name", request.NamespacedName.Name,
+		"name", name.Name,
 		"user", csl.Spec.User,
 	)
 
+	// Find or create the role and role bindings
+	if err := r.updateRoleBindings(csl, consoleTemplate, name); err != nil {
+		return res, err
+	}
+
+	// TODO:
+	//   Terminate the console if it has expired
+	//   GC the terminated console if necessary
+
 	logger.Log("event", EventComplete)
 	return res, err
+}
+
+func (r *ConsoleReconciler) updateRoleBindings(csl *workloadsv1alpha1.Console, tmpl *workloadsv1alpha1.ConsoleTemplate, name types.NamespacedName) error {
+	role := buildRole(name)
+	if err := controllerutil.SetControllerReference(csl, role, scheme.Scheme); err != nil {
+		return err
+	}
+	if err := findOrCreate(r.ctx, r.client, role, name); err != nil {
+		r.logger.Log("event", EventError, "resource", Role, "error", err)
+		return err
+	}
+	r.logger.Log("event", EventCreated, "resource", Role)
+
+	subjects := append(
+		tmpl.Spec.AdditionalAttachSubjects,
+		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
+	)
+
+	rb := buildRoleBinding(name, role, subjects)
+	if err := controllerutil.SetControllerReference(csl, rb, scheme.Scheme); err != nil {
+		return err
+	}
+	if err := findOrCreate(r.ctx, r.client, rb, name); err != nil {
+		return err
+	}
+	r.logger.Log("event", EventCreated, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
+
+	return nil
 }
 
 func buildJob(name types.NamespacedName, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
@@ -148,4 +195,48 @@ func buildJob(name types.NamespacedName, podTemplate corev1.PodTemplateSpec) *ba
 			Template: podTemplate,
 		},
 	}
+}
+
+func buildRole(name types.NamespacedName) *rbacv1.Role {
+	return &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			rbacv1.PolicyRule{
+				Verbs:         []string{"*"},
+				APIGroups:     []string{"core"},
+				Resources:     []string{"pods/exec"},
+				ResourceNames: []string{name.Name},
+			},
+		},
+	}
+}
+
+func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Subjects: subjects,
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     name.Name,
+		},
+	}
+}
+
+func findOrCreate(ctx context.Context, c client.Client, obj runtime.Object, name types.NamespacedName) error {
+	key := client.ObjectKey{
+		Name:      name.Name,
+		Namespace: name.Namespace,
+	}
+	err := c.Get(ctx, key, obj)
+	if errors.IsNotFound(err) {
+		err = c.Create(ctx, obj)
+	}
+	return err
 }

@@ -2,7 +2,7 @@
 kind: Console
 apiVersion: workloads.crd.gocardless.com/v1alpha1
 spec:
-  user: hmac@gocardless.com
+  user: user@example.com
   reason: some-reason
   timeoutSeconds: 300
   consoleTemplateRef:

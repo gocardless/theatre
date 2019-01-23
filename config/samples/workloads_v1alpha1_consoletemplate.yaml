@@ -2,7 +2,11 @@
 kind: ConsoleTemplate
 apiVersion: workloads.crd.gocardless.com/v1alpha1
 spec:
-  additionalAttachSubjects: []
+  additionalAttachSubjects:
+    - kind: User
+      name: foo@example.com
+    - kind: User
+      name: bar@example.com
   defaultTimeoutSeconds: 300
   maxTimeoutSeconds: 300
   template:

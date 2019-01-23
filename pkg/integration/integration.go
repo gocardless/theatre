@@ -65,8 +65,13 @@ func StartAPIServer(crdDirectoryPath string) (*rest.Config, *envtest.Environment
 // Given this will prevent any of the normal admission controller behaviour, along with
 // preventing us from integration testing webhooks, we omit this flag and instead enable
 // the AlwaysAdmit plugin which does not clobber the webhook plugin.
+//
+// TODO: why is the ServiceAccount plugin disabled? Does it need to be?
 func kubeAPIServerFlags() []string {
-	flags, found := []string{"--enable-admission-plugins=AlwaysAdmit"}, false
+	flags, found := []string{
+		"--disable-admission-plugins=ServiceAccount",
+		"--enable-admission-plugins=AlwaysAdmit",
+	}, false
 	for _, flag := range envtest.DefaultKubeAPIServerFlags {
 		if flag == "--admission-control=AlwaysAdmit" {
 			found = true
@@ -153,7 +158,7 @@ func NewServer(mgr manager.Manager, awhs ...*admission.Webhook) *webhook.Server 
 		BootstrapOptions: &webhook.BootstrapOptions{
 			MutatingWebhookConfigName:   "theatre-integration-webhook",
 			ValidatingWebhookConfigName: "theatre-integration-webhook",
-			Host: &localhost,
+			Host:                        &localhost,
 		},
 	}
 

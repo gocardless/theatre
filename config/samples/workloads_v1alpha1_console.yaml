@@ -1,0 +1,11 @@
+---
+kind: Console
+apiVersion: workloads.crd.gocardless.com/v1alpha1
+spec:
+  user: hmac@gocardless.com
+  reason: some-reason
+  timeoutSeconds: 300
+  consoleTemplateRef:
+    name: console-template-0
+metadata:
+  name: console-0

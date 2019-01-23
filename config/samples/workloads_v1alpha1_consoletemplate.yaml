@@ -1,0 +1,20 @@
+---
+kind: ConsoleTemplate
+apiVersion: workloads.crd.gocardless.com/v1alpha1
+spec:
+  additionalAttachSubjects: []
+  user: remove-me
+  defaultTimeoutSeconds: 300
+  maxTimeoutSeconds: 300
+  template:
+    spec:
+      containers:
+        - image: alpine:latest
+          name: container-name-0
+          command:
+            - sleep
+          args:
+            - "100"
+      restartPolicy: Never
+metadata:
+  name: console-template-0

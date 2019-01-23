@@ -35,14 +35,22 @@ spec:
             reason:
               type: string
             timeoutSeconds:
+              description:
+                Number of seconds that the console should run for. If the
+                process running within the console has not exited before this timeout
+                is reached, then the console will be terminated. If this value exceeds
+                the Maximum Timeout Seconds specified in the ConsoleTemplate that
+                this console refers to, then this timeout will be clamped to that
+                value. Maximum value of 1 week (as per ConsoleTemplate.Spec.MaxTimeoutSeconds).
               format: int64
+              maximum: 604800
+              minimum: 0
               type: integer
             user:
               type: string
           required:
             - user
             - reason
-            - timeoutSeconds
             - consoleTemplateRef
           type: object
         status:

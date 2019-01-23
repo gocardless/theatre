@@ -11,6 +11,12 @@ rules:
     verbs:
       - "*"
   - apiGroups:
+      - batch
+    resources:
+      - "jobs"
+    verbs:
+      - "*"
+  - apiGroups:
       - ""
       - admissionregistration.k8s.io
     resources:

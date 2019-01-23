@@ -56,12 +56,10 @@ spec:
               type: string
           required:
             - podName
-            - expiryTime
             - phase
           type: object
       required:
         - spec
-        - status
   version: v1alpha1
 status:
   acceptedNames:

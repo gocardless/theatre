@@ -15,7 +15,7 @@ type Console struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   ConsoleSpec   `json:"spec"`
-	Status ConsoleStatus `json:"status"`
+	Status ConsoleStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
 // ConsoleSpec defines the specification for a console
@@ -27,9 +27,9 @@ type ConsoleSpec struct {
 }
 
 type ConsoleStatus struct {
-	PodName    string      `json:"podName"`
-	ExpiryTime metav1.Time `json:"expiryTime"`
-	Phase      string      `json:"phase"`
+	PodName    string       `json:"podName" protobuf:"bytes,1,opt,name=podName"`
+	ExpiryTime *metav1.Time `json:"expiryTime,omitempty" protobuf:"bytes,2,opt,name=expiryTime"`
+	Phase      string       `json:"phase" protobuf:"bytes,3,opt,name=phase"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -42,14 +42,10 @@ spec:
               type: integer
             template:
               type: object
-            user:
-              type: string
           required:
-            - user
             - template
             - defaultTimeoutSeconds
             - maxTimeoutSeconds
-            - additionalAttachSubjects
           type: object
       required:
         - spec

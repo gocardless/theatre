@@ -3,7 +3,6 @@ kind: ConsoleTemplate
 apiVersion: workloads.crd.gocardless.com/v1alpha1
 spec:
   additionalAttachSubjects: []
-  user: remove-me
   defaultTimeoutSeconds: 300
   maxTimeoutSeconds: 300
   template:

@@ -15,7 +15,7 @@ type Console struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   ConsoleSpec   `json:"spec"`
-	Status ConsoleStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
+	Status ConsoleStatus `json:"status,omitempty"`
 }
 
 // ConsoleSpec defines the specification for a console
@@ -26,10 +26,11 @@ type ConsoleSpec struct {
 	ConsoleTemplateRef corev1.LocalObjectReference `json:"consoleTemplateRef"`
 }
 
+// ConsoleStatus defines the status of a created console, populated at runtime
 type ConsoleStatus struct {
-	PodName    string       `json:"podName" protobuf:"bytes,1,opt,name=podName"`
-	ExpiryTime *metav1.Time `json:"expiryTime,omitempty" protobuf:"bytes,2,opt,name=expiryTime"`
-	Phase      string       `json:"phase" protobuf:"bytes,3,opt,name=phase"`
+	PodName    string       `json:"podName"`
+	ExpiryTime *metav1.Time `json:"expiryTime,omitempty"`
+	Phase      string       `json:"phase"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -37,13 +38,14 @@ type ConsoleStatus struct {
 // ConsoleList is a list of consoles
 type ConsoleList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []Console `json:"items"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ConsoleTemplate declares a console template that can be instantiated through a Console object
 type ConsoleTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -51,19 +53,20 @@ type ConsoleTemplate struct {
 	Spec ConsoleTemplateSpec `json:"spec"`
 }
 
+// ConsoleTemplateSpec defines the parameters that a created console will adhere to
 type ConsoleTemplateSpec struct {
-	User                     string                 `json:"user"`
 	Template                 corev1.PodTemplateSpec `json:"template"`
 	DefaultTimeoutSeconds    int                    `json:"defaultTimeoutSeconds"`
 	MaxTimeoutSeconds        int                    `json:"maxTimeoutSeconds"`
-	AdditionalAttachSubjects []rbacv1.Subject       `json:"additionalAttachSubjects"`
+	AdditionalAttachSubjects []rbacv1.Subject       `json:"additionalAttachSubjects,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ConsoleTemplateList is a list of console templates
 type ConsoleTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []ConsoleTemplate `json:"items"`
 }

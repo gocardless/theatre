@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
@@ -31,14 +30,14 @@ var (
 
 var _ = Describe("Console", func() {
 	var (
-		ctx               context.Context
-		cancel            func()
-		namespace         string
-		teardown          func()
-		mgr               manager.Manager
-		consoleController controller.Controller
-		calls             chan integration.ReconcileCall
-		whcalls           chan integration.HandleCall
+		ctx       context.Context
+		cancel    func()
+		namespace string
+		teardown  func()
+		mgr       manager.Manager
+		calls     chan integration.ReconcileCall
+		whcalls   chan integration.HandleCall
+		csl       *workloadsv1alpha1.Console
 	)
 
 	BeforeEach(func() {
@@ -46,7 +45,7 @@ var _ = Describe("Console", func() {
 		namespace, teardown = integration.CreateNamespace(clientset)
 		mgr = integration.StartTestManager(ctx, cfg)
 
-		consoleController = integration.MustController(
+		integration.MustController(
 			console.Add(ctx, logger, mgr,
 				func(opt *controller.Options) {
 					opt.Reconciler, calls = integration.CaptureReconcile(
@@ -63,6 +62,36 @@ var _ = Describe("Console", func() {
 				},
 			),
 		))
+
+		By("Creating console template")
+		consoleTemplate := buildConsoleTemplate(namespace)
+		Expect(mgr.GetClient().Create(context.TODO(), &consoleTemplate)).NotTo(
+			HaveOccurred(), "failed to create Console Template",
+		)
+
+		csl = &workloadsv1alpha1.Console{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "console-0",
+				Namespace: namespace,
+			},
+			Spec: workloadsv1alpha1.ConsoleSpec{
+				ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
+				User:               "", // deliberately blank: this should be set by the webhook
+			},
+		}
+
+		By("Creating console")
+		Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
+			HaveOccurred(), "failed to create Console",
+		)
+
+		By("Expect reconcile succeeded")
+		Eventually(calls, timeout).Should(
+			Receive(
+				integration.ReconcileResourceSuccess(namespace, "console-0"),
+			),
+		)
+
 	})
 
 	AfterEach(func() {
@@ -72,60 +101,10 @@ var _ = Describe("Console", func() {
 
 	Describe("Creating resources", func() {
 		It("Sets console.spec.user from rbac", func() {
-			consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-console-template",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-					AdditionalAttachSubjects: []rbacv1.Subject{},
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								corev1.Container{
-									Image:   "alpine:latest",
-									Name:    "console-container-0",
-									Command: []string{"sleep", "100"},
-								},
-							},
-							RestartPolicy: "Never",
-						},
-					},
-				},
-			}
-
-			By("Creating console template")
-			Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-				HaveOccurred(), "failed to create Console Template",
-			)
-
-			csl := &workloadsv1alpha1.Console{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-console",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleSpec{
-					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "my-first-console-template"},
-					User:               "", // deliberately not configured, this should be set by the webhook
-				},
-			}
-
-			By("Creating console")
-			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-				HaveOccurred(), "failed to create Console",
-			)
-
 			By("Expect webhook was invoked")
 			Eventually(whcalls, timeout).Should(
 				Receive(
-					integration.HandleResource(namespace, "my-first-console"),
-				),
-			)
-
-			By("Expect reconcile succeeded")
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "my-first-console"),
+					integration.HandleResource(namespace, "console-0"),
 				),
 			)
 
@@ -134,124 +113,51 @@ var _ = Describe("Console", func() {
 		})
 
 		It("Creates a job", func() {
-			consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-console-template",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-					AdditionalAttachSubjects: []rbacv1.Subject{},
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								corev1.Container{
-									Image:   "alpine:latest",
-									Name:    "console-container-0",
-									Command: []string{"sleep", "100"},
-								},
-							},
-							RestartPolicy: "Never",
-						},
-					},
-				},
-			}
-
-			By("Creating console template")
-			Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-				HaveOccurred(), "failed to create Console Template",
-			)
-
-			csl := &workloadsv1alpha1.Console{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-console",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleSpec{
-					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "my-first-console-template"},
-				},
-			}
-
-			By("Creating console")
-			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-				HaveOccurred(), "failed to create Console",
-			)
-
-			By("Expect reconcile succeeded")
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "my-first-console"),
-				),
-			)
-
 			By("Expect job was created")
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
 			err := mgr.GetClient().Get(context.TODO(), identifier, job)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
-			// Expect(job.Spec.Template).To(Equal(consoleTemplate.Spec.Template), "the job's pod spec should match the console template")
 			Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine:latest"), "the job's pod runs the same container as specified in the console template")
 			// TODO: Test for correct logs
 		})
 
 		It("Only creates one job when reconciling twice", func() {
-			consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-console-template",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-					AdditionalAttachSubjects: []rbacv1.Subject{},
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{
-								corev1.Container{
-									Image:   "alpine:latest",
-									Name:    "console-container-0",
-									Command: []string{"sleep", "100"},
-								},
-							},
-							RestartPolicy: "Never",
-						},
-					},
-				},
-			}
-
-			By("Creating console template")
-			Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-				HaveOccurred(), "failed to create Console Template",
-			)
-			csl := &workloadsv1alpha1.Console{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-first-pod",
-					Namespace: namespace,
-				},
-				Spec: workloadsv1alpha1.ConsoleSpec{
-					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "my-first-console-template"},
-				},
-			}
-
-			By("Creating console")
-			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-				HaveOccurred(), "failed to create Console",
-			)
-
-			By("Expect reconcile succeeded")
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "my-first-pod"),
-				),
-			)
-
 			By("Reconciling again")
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			go func() { consoleController.Reconcile(reconcile.Request{identifier}) }()
+			csl.Spec.Reason = "a different reason"
+			mgr.GetClient().Update(context.TODO(), csl)
+
 			Eventually(calls, timeout).Should(
 				Receive(
-					integration.ReconcileResourceSuccess(namespace, "my-first-pod"),
+					integration.ReconcileResourceSuccess(namespace, "console-0"),
 				),
 			)
 			// TODO: check that the 'already exists' event was logged
 		})
 	})
 })
+
+func buildConsoleTemplate(namespace string) workloadsv1alpha1.ConsoleTemplate {
+	return workloadsv1alpha1.ConsoleTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "console-template-0",
+			Namespace: namespace,
+		},
+		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
+			AdditionalAttachSubjects: []rbacv1.Subject{},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						corev1.Container{
+							Image:   "alpine:latest",
+							Name:    "console-container-0",
+							Command: []string{"sleep", "100"},
+						},
+					},
+					RestartPolicy: "Never",
+				},
+			},
+		},
+	}
+}

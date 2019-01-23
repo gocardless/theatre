@@ -35,10 +35,20 @@ spec:
                 type: object
               type: array
             defaultTimeoutSeconds:
+              description:
+                Default time, in seconds, that a Console will be created
+                for. Maximum value of 1 week (as per MaxTimeoutSeconds).
               format: int64
+              maximum: 604800
+              minimum: 0
               type: integer
             maxTimeoutSeconds:
+              description:
+                Maximum time, in seconds, that a Console can be created
+                for. Maximum value of 1 week.
               format: int64
+              maximum: 604800
+              minimum: 0
               type: integer
             template:
               type: object

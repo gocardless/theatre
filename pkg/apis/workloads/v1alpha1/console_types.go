@@ -20,9 +20,20 @@ type Console struct {
 
 // ConsoleSpec defines the specification for a console
 type ConsoleSpec struct {
-	User               string                      `json:"user"`
-	Reason             string                      `json:"reason"`
-	TimeoutSeconds     int                         `json:"timeoutSeconds"`
+	User   string `json:"user"`
+	Reason string `json:"reason"`
+
+	// Number of seconds that the console should run for.
+	// If the process running within the console has not exited before this
+	// timeout is reached, then the console will be terminated.
+	// If this value exceeds the Maximum Timeout Seconds specified in the
+	// ConsoleTemplate that this console refers to, then this timeout will be
+	// clamped to that value.
+	// Maximum value of 1 week (as per ConsoleTemplate.Spec.MaxTimeoutSeconds).
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=604800
+	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
+
 	ConsoleTemplateRef corev1.LocalObjectReference `json:"consoleTemplateRef"`
 }
 
@@ -55,10 +66,20 @@ type ConsoleTemplate struct {
 
 // ConsoleTemplateSpec defines the parameters that a created console will adhere to
 type ConsoleTemplateSpec struct {
-	Template                 corev1.PodTemplateSpec `json:"template"`
-	DefaultTimeoutSeconds    int                    `json:"defaultTimeoutSeconds"`
-	MaxTimeoutSeconds        int                    `json:"maxTimeoutSeconds"`
-	AdditionalAttachSubjects []rbacv1.Subject       `json:"additionalAttachSubjects,omitempty"`
+	Template corev1.PodTemplateSpec `json:"template"`
+
+	// Default time, in seconds, that a Console will be created for.
+	// Maximum value of 1 week (as per MaxTimeoutSeconds).
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=604800
+	DefaultTimeoutSeconds int `json:"defaultTimeoutSeconds"`
+
+	// Maximum time, in seconds, that a Console can be created for.
+	// Maximum value of 1 week.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=604800
+	MaxTimeoutSeconds        int              `json:"maxTimeoutSeconds"`
+	AdditionalAttachSubjects []rbacv1.Subject `json:"additionalAttachSubjects,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -285,7 +285,6 @@ func ReconcileResourceSuccess(namespace, name string) types.GomegaMatcher {
 	return SatisfyAll(
 		ReconcileResource(namespace, name),
 		ReconcileSuccessfully(),
-		ReconcileNoRetry(),
 	)
 }
 

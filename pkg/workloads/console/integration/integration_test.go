@@ -2,12 +2,14 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 var (
@@ -30,14 +33,15 @@ var (
 
 var _ = Describe("Console", func() {
 	var (
-		ctx       context.Context
-		cancel    func()
-		namespace string
-		teardown  func()
-		mgr       manager.Manager
-		calls     chan integration.ReconcileCall
-		whcalls   chan integration.HandleCall
-		csl       *workloadsv1alpha1.Console
+		ctx                        context.Context
+		cancel                     func()
+		namespace                  string
+		teardown                   func()
+		mgr                        manager.Manager
+		calls                      chan integration.ReconcileCall
+		whcalls                    chan integration.HandleCall
+		csl                        *workloadsv1alpha1.Console
+		waitForSuccessfulReconcile func(int)
 	)
 
 	BeforeEach(func() {
@@ -76,6 +80,7 @@ var _ = Describe("Console", func() {
 			},
 			Spec: workloadsv1alpha1.ConsoleSpec{
 				ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
+				TimeoutSeconds:     3600,
 				User:               "", // deliberately blank: this should be set by the webhook
 			},
 		}
@@ -85,12 +90,21 @@ var _ = Describe("Console", func() {
 			HaveOccurred(), "failed to create Console",
 		)
 
-		By("Expect reconcile succeeded")
-		Eventually(calls, timeout).Should(
-			Receive(
-				integration.ReconcileResourceSuccess(namespace, "console-0"),
-			),
-		)
+		waitForSuccessfulReconcile = func(times int) {
+			// Wait twice for reconcile: the second reconciliation is triggered due to
+			// the update of the status field with an expiry time
+			for i := 1; i <= times; i++ {
+				By(fmt.Sprintf("Expect reconcile succeeded (%d of %d)", i, times))
+				Eventually(calls, timeout).Should(
+					Receive(
+						integration.ReconcileResourceSuccess(namespace, "console-0"),
+					),
+				)
+			}
+			By("Reconcile done")
+		}
+
+		waitForSuccessfulReconcile(2)
 
 	})
 
@@ -119,20 +133,26 @@ var _ = Describe("Console", func() {
 			err := mgr.GetClient().Get(context.TODO(), identifier, job)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
-			Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine:latest"), "the job's pod runs the same container as specified in the console template")
+			Expect(
+				job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine:latest"),
+				"the job's pod runs the same container as specified in the console template",
+			)
 			// TODO: Test for correct logs
 		})
 
 		It("Only creates one job when reconciling twice", func() {
-			By("Reconciling again")
-			csl.Spec.Reason = "a different reason"
-			mgr.GetClient().Update(context.TODO(), csl)
+			By("Retrieving latest console object")
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
 
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "console-0"),
-				),
-			)
+			By("Reconciling again")
+			updatedCsl.Spec.Reason = "a different reason"
+			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to update console")
+
+			waitForSuccessfulReconcile(1)
 			// TODO: check that the 'already exists' event was logged
 		})
 
@@ -174,6 +194,77 @@ var _ = Describe("Console", func() {
 					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
 				}),
 			)
+		})
+
+		It("Updates the status with expiry time", func() {
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+
+			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
+			Expect(updatedCsl.Status.ExpiryTime).NotTo(BeNil(), "the console expiry time should be set")
+			Expect(
+				updatedCsl.Status.ExpiryTime.Time.After(time.Now())).To(BeTrue(),
+				"the console expiry time should be after now()",
+			)
+		})
+
+		It("Deletes the job after the expiry time", func() {
+			By("Retrieving latest console object")
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+
+			By("Updating timeout to trigger console expiration")
+			updatedCsl.Spec.TimeoutSeconds = 0
+			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to update console")
+
+			waitForSuccessfulReconcile(2)
+
+			job := &batchv1.Job{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			statusError, _ := err.(*errors.StatusError)
+			Expect(err).To(HaveOccurred(), "the job should be deleted, but it still exists")
+			Expect(err).To(BeAssignableToTypeOf(statusError), "error should be an API error")
+			Expect(statusError.Status()).To(MatchFields(IgnoreExtras, Fields{"Code": BeEquivalentTo(404)}))
+		})
+
+		It("Does not recreate a console once it has expired", func() {
+			By("Retrieving latest console object")
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+
+			By("Updating timeout to trigger console expiration")
+			updatedCsl.Spec.TimeoutSeconds = 0
+			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to update console")
+
+			waitForSuccessfulReconcile(2)
+
+			By("Updating console spec with a large timeout")
+			err = mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+			updatedCsl.Spec.TimeoutSeconds = 1000
+			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to update console")
+
+			waitForSuccessfulReconcile(1)
+
+			job := &batchv1.Job{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			statusError, _ := err.(*errors.StatusError)
+			Expect(err).To(HaveOccurred(), "the job should remain deleted, but it has been recreated")
+			Expect(err).To(BeAssignableToTypeOf(statusError), "error should be an API error")
+			Expect(statusError.Status()).To(MatchFields(IgnoreExtras, Fields{"Code": BeEquivalentTo(404)}))
 		})
 	})
 })

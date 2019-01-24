@@ -3,6 +3,7 @@ required = [
   "github.com/onsi/gomega",
   "k8s.io/code-generator/cmd/client-gen",
   "k8s.io/code-generator/cmd/deepcopy-gen",
+  "sigs.k8s.io/controller-tools/cmd/controller-gen",
 ]
 
 [[override]]
@@ -14,8 +15,8 @@ required = [
   version="v0.1.1"
 
 [[constraint]]
-  name="sigs.k8s.io/controller-tools"
-  version="v0.1.1"
+  name = "sigs.k8s.io/controller-tools"
+  version = "0.1.8"
 
 [[constraint]]
   name = "github.com/onsi/gomega"

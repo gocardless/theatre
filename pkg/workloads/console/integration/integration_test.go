@@ -120,20 +120,11 @@ var _ = Describe("Console", func() {
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
 			Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine:latest"), "the job's pod runs the same container as specified in the console template")
+
+			By("Expect job is owned by console controller")
+			Expect(job.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(job.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 			// TODO: Test for correct logs
-		})
-
-		It("Only creates one job when reconciling twice", func() {
-			By("Reconciling again")
-			csl.Spec.Reason = "a different reason"
-			mgr.GetClient().Update(context.TODO(), csl)
-
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "console-0"),
-				),
-			)
-			// TODO: check that the 'already exists' event was logged
 		})
 
 		It("Creates a pods/exec rolebinding for the user", func() {
@@ -157,6 +148,10 @@ var _ = Describe("Console", func() {
 				"role rule did not match expectation",
 			)
 
+			By("Expect role is owned by console controller")
+			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+
 			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
 			rb := &rbacv1.RoleBinding{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
@@ -174,6 +169,42 @@ var _ = Describe("Console", func() {
 					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
 				}),
 			)
+
+			By("Expect rolebinding is owned by console controller")
+			Expect(rb.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(rb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+		})
+
+		It("Reconciles correctly if the resources already exist", func() {
+			By("Reconciling again")
+			csl.Spec.Reason = "a different reason"
+			mgr.GetClient().Update(context.TODO(), csl)
+
+			Eventually(calls, timeout).Should(
+				Receive(
+					integration.ReconcileResourceSuccess(namespace, "console-0"),
+				),
+			)
+
+			By("Expect job was created")
+			job := &batchv1.Job{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
+			By("Expect role was created")
+			role := &rbacv1.Role{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, role)
+			Expect(err).NotTo(HaveOccurred(), "failed to find role")
+
+			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
+			rb := &rbacv1.RoleBinding{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, rb)
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding")
+
+			// TODO: check that the 'already exists' event was logged
 		})
 	})
 })

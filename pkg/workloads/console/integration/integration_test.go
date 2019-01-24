@@ -135,6 +135,46 @@ var _ = Describe("Console", func() {
 			)
 			// TODO: check that the 'already exists' event was logged
 		})
+
+		It("Creates a pods/exec rolebinding for the user", func() {
+			By("Expect role was created")
+			role := &rbacv1.Role{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, role)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to find role")
+			Expect(role.Rules).To(
+				Equal(
+					[]rbacv1.PolicyRule{
+						rbacv1.PolicyRule{
+							Verbs:         []string{"*"},
+							APIGroups:     []string{"core"},
+							Resources:     []string{"pods/exec"},
+							ResourceNames: []string{"console-0"},
+						},
+					},
+				),
+				"role rule did not match expectation",
+			)
+
+			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
+			rb := &rbacv1.RoleBinding{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, rb)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding")
+			Expect(rb.RoleRef).To(
+				Equal(
+					rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "console-0"},
+				),
+			)
+			Expect(rb.Subjects).To(
+				ConsistOf([]rbacv1.Subject{
+					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: csl.Spec.User},
+					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
+				}),
+			)
+		})
 	})
 })
 
@@ -145,7 +185,7 @@ func buildConsoleTemplate(namespace string) workloadsv1alpha1.ConsoleTemplate {
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			AdditionalAttachSubjects: []rbacv1.Subject{},
+			AdditionalAttachSubjects: []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{

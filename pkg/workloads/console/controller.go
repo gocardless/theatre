@@ -29,15 +29,15 @@ import (
 )
 
 const (
-	EventStart    = "reconcile.start"
-	EventComplete = "reconcile.end"
-	EventFound    = "found"
-	EventNotFound = "not_found"
-	EventCreated  = "created"
-	EventError    = "error"
-	EventRecreate = "recreated"
-	EventUpdate   = "updated"
-	EventNoOp     = "no-op"
+	EventStart    = "ReconcileStart"
+	EventComplete = "ReconcileEnd"
+	EventFound    = "Found"
+	EventNotFound = "NotFound"
+	EventCreated  = "Created"
+	EventError    = "Error"
+	EventRecreate = "Recreated"
+	EventUpdate   = "Updated"
+	EventNoOp     = "NoOp"
 
 	Job             = "Job"
 	Console         = "Console"
@@ -96,17 +96,16 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 	logger.Log("event", EventFound, "resource", Console)
 
 	// This is disabled for now because our logs don't pass k8s event validation
-	// logger = logging.WithRecorder(logger, r.recorder, csl)
+	// logger = logging.WithRecorder(logger, c.recorder, csl)
 
 	reconciler := &ConsoleReconciler{
-		ctx:      c.ctx,
-		logger:   logger,
-		recorder: c.recorder,
-		client:   c.client,
-		name:     request.NamespacedName,
-		console:  csl,
+		ctx:     c.ctx,
+		logger:  logger,
+		client:  c.client,
+		name:    request.NamespacedName,
+		console: csl,
 	}
-	result, err := reconciler.Reconcile(request)
+	result, err := reconciler.Reconcile()
 	if err != nil {
 		logger.Log("event", EventError, "error", err)
 	}
@@ -115,15 +114,14 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 }
 
 type ConsoleReconciler struct {
-	ctx      context.Context
-	logger   kitlog.Logger
-	recorder record.EventRecorder
-	client   client.Client
-	name     types.NamespacedName
-	console  *workloadsv1alpha1.Console
+	ctx     context.Context
+	logger  kitlog.Logger
+	client  client.Client
+	name    types.NamespacedName
+	console *workloadsv1alpha1.Console
 }
 
-func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
+func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      r.console.Spec.ConsoleTemplateRef.Name,
@@ -140,13 +138,13 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 
 	// Find or create the job
 	job := r.buildJob(consoleTemplate.Spec.Template)
-	if err := r.createOrUpdate(job, "Job", jobDiff, r.logger); err != nil {
+	if err := r.createOrUpdate(job, "Job", jobDiff); err != nil {
 		return res, err
 	}
 
 	// Find or create the role
 	role := r.buildRole()
-	if err := r.createOrUpdate(role, "Role", roleDiff, r.logger); err != nil {
+	if err := r.createOrUpdate(role, "Role", roleDiff); err != nil {
 		return res, err
 	}
 
@@ -156,7 +154,7 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
 	)
 	rb := r.buildRoleBinding(role, subjects)
-	if err := r.createOrUpdate(rb, "RoleBinding", roleBindingDiff, r.logger); err != nil {
+	if err := r.createOrUpdate(rb, "RoleBinding", roleBindingDiff); err != nil {
 		return res, err
 	}
 
@@ -212,19 +210,23 @@ func (r *ConsoleReconciler) buildRoleBinding(role *rbacv1.Role, subjects []rbacv
 	}
 }
 
+type ObjectAndMeta interface {
+	metav1.Object
+	runtime.Object
+}
+
 // createOrUpdate takes a Kubernetes object and a "diff function" and attempts to ensure
 // that the the object exists in the cluster with the correct state. It will use the diff
 // function to determine any differences between the cluster state and the local state and
 // use that to decide how to update it.
-func (r *ConsoleReconciler) createOrUpdate(objAsMeta metav1.Object, kind string, diffFunc DiffFunc, logger kitlog.Logger) error {
-	if err := controllerutil.SetControllerReference(r.console, objAsMeta, scheme.Scheme); err != nil {
+func (r *ConsoleReconciler) createOrUpdate(existing ObjectAndMeta, kind string, diffFunc DiffFunc) error {
+	if err := controllerutil.SetControllerReference(r.console, existing, scheme.Scheme); err != nil {
 		return err
 	}
 
 	key := client.ObjectKey{Name: r.name.Name, Namespace: r.name.Namespace}
 
-	expected := objAsMeta.(runtime.Object).DeepCopyObject()
-	existing := objAsMeta.(runtime.Object)
+	expected := existing.(runtime.Object).DeepCopyObject()
 	err := r.client.Get(r.ctx, key, existing)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -233,10 +235,10 @@ func (r *ConsoleReconciler) createOrUpdate(objAsMeta metav1.Object, kind string,
 		if err := r.client.Create(r.ctx, existing); err != nil {
 			return err
 		}
-		logger.Log("event", EventCreated, "resource", kind)
+		r.logger.Log("event", EventCreated, "resource", kind)
 		return nil
 	}
-	logger.Log("event", EventFound, "resource", kind)
+	r.logger.Log("event", EventFound, "resource", kind)
 
 	// existing contains the state we just fetched from Kubernetes.
 	// expected contains the state we're trying to reconcile towards.
@@ -245,7 +247,7 @@ func (r *ConsoleReconciler) createOrUpdate(objAsMeta metav1.Object, kind string,
 
 	switch diffFunc(expected, existing) {
 	case ReconcileRecreate:
-		logger.Log("event", EventRecreate, "resource", kind)
+		r.logger.Log("event", EventRecreate, "resource", kind)
 		if err := r.client.Delete(r.ctx, existing); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
@@ -253,12 +255,12 @@ func (r *ConsoleReconciler) createOrUpdate(objAsMeta metav1.Object, kind string,
 			return err
 		}
 	case ReconcileUpdate:
-		logger.Log("event", EventUpdate, "resource", kind)
+		r.logger.Log("event", EventUpdate, "resource", kind)
 		if err := r.client.Update(r.ctx, existing); err != nil {
 			return err
 		}
 	case ReconcileNone:
-		logger.Log("event", EventNoOp, "resource", kind)
+		r.logger.Log("event", EventNoOp, "resource", kind)
 		// no-op
 	}
 	return nil

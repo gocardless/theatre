@@ -20,11 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	k8rec "sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
+	"github.com/gocardless/theatre/pkg/reconcile"
 	// "github.com/gocardless/theatre/pkg/logging"
 )
 
@@ -80,7 +81,7 @@ type Controller struct {
 	client   client.Client
 }
 
-func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 	logger := kitlog.With(c.logger, "request", request)
 	logger.Log("event", EventStart)
 
@@ -91,7 +92,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 		if errors.IsNotFound(err) {
 			logger.Log("event", EventNotFound, "resource", Console)
 		}
-		return reconcile.Result{}, err
+		return k8rec.Result{}, err
 	}
 	logger.Log("event", EventFound, "resource", Console)
 
@@ -121,7 +122,7 @@ type ConsoleReconciler struct {
 	console *workloadsv1alpha1.Console
 }
 
-func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
+func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      r.console.Spec.ConsoleTemplateRef.Name,
@@ -144,7 +145,7 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Find or create the role
 	role := r.buildRole()
-	if err := r.createOrUpdate(role, "Role", roleDiff); err != nil {
+	if err := r.createOrUpdate(role, "Role", reconcile.RoleDiff); err != nil {
 		return res, err
 	}
 
@@ -154,7 +155,7 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
 	)
 	rb := r.buildRoleBinding(role, subjects)
-	if err := r.createOrUpdate(rb, "RoleBinding", roleBindingDiff); err != nil {
+	if err := r.createOrUpdate(rb, "RoleBinding", reconcile.RoleBindingDiff); err != nil {
 		return res, err
 	}
 
@@ -210,123 +211,26 @@ func (r *ConsoleReconciler) buildRoleBinding(role *rbacv1.Role, subjects []rbacv
 	}
 }
 
-type ObjectAndMeta interface {
-	metav1.Object
-	runtime.Object
-}
-
-// createOrUpdate takes a Kubernetes object and a "diff function" and attempts to ensure
-// that the the object exists in the cluster with the correct state. It will use the diff
-// function to determine any differences between the cluster state and the local state and
-// use that to decide how to update it.
-func (r *ConsoleReconciler) createOrUpdate(existing ObjectAndMeta, kind string, diffFunc DiffFunc) error {
+func (r *ConsoleReconciler) createOrUpdate(existing reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
 	if err := controllerutil.SetControllerReference(r.console, existing, scheme.Scheme); err != nil {
 		return err
 	}
 
-	key := client.ObjectKey{Name: r.name.Name, Namespace: r.name.Namespace}
-
-	expected := existing.(runtime.Object).DeepCopyObject()
-	err := r.client.Get(r.ctx, key, existing)
+	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, existing, kind, diffFunc)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		if err := r.client.Create(r.ctx, existing); err != nil {
-			return err
-		}
-		r.logger.Log("event", EventCreated, "resource", kind)
-		return nil
+		return err
 	}
-	r.logger.Log("event", EventFound, "resource", kind)
 
-	// existing contains the state we just fetched from Kubernetes.
-	// expected contains the state we're trying to reconcile towards.
-	// If an update is required, diffFunc will set the relevant fields on existing such that we
-	// can just resubmit it to the cluster to achieve our desired state.
-
-	switch diffFunc(expected, existing) {
-	case ReconcileRecreate:
-		r.logger.Log("event", EventRecreate, "resource", kind)
-		if err := r.client.Delete(r.ctx, existing); err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-		if err := r.client.Create(r.ctx, expected); err != nil {
-			return err
-		}
-	case ReconcileUpdate:
-		r.logger.Log("event", EventUpdate, "resource", kind)
-		if err := r.client.Update(r.ctx, existing); err != nil {
-			return err
-		}
-	case ReconcileNone:
-		r.logger.Log("event", EventNoOp, "resource", kind)
-		// no-op
-	}
+	r.logger.Log("event", operation, "resource", kind)
 	return nil
 }
 
-// DiffFunc takes two Kubernetes resources: expected and existing. Both are assumed to be
-// the same Kind. It compares the two, and returns a ReconcileOperation indicating how to
-// transition from existing to expected. If an update is required, it will set the
-// relevant fields on existing to their intended values. This is so that we can simply
-// resubmit the existing resource, and any fields automatically set by the Kubernetes API
-// server will be retained.
-type DiffFunc func(runtime.Object, runtime.Object) ReconcileOperation
-type ReconcileOperation string
-
-var (
-	ReconcileRecreate ReconcileOperation = "recreate"
-	ReconcileUpdate   ReconcileOperation = "update"
-	ReconcileNone     ReconcileOperation = "none"
-)
-
-// roleDiff is a DiffFunc for Roles
-func roleDiff(expectedObj runtime.Object, existingObj runtime.Object) ReconcileOperation {
-	expected := expectedObj.(*rbacv1.Role)
-	existing := existingObj.(*rbacv1.Role)
-
-	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return ReconcileRecreate
-	}
-
-	if !reflect.DeepEqual(expected.Rules, existing.Rules) {
-		existing.Rules = expected.Rules
-		return ReconcileUpdate
-	}
-
-	return ReconcileNone
-}
-
-// roleBindingDiff is a DiffFunc for RoleBindings
-func roleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) ReconcileOperation {
-	expected := expectedObj.(*rbacv1.RoleBinding)
-	existing := existingObj.(*rbacv1.RoleBinding)
-	operation := ReconcileNone
-
-	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return ReconcileRecreate
-	}
-
-	if !reflect.DeepEqual(expected.Subjects, existing.Subjects) {
-		existing.Subjects = expected.Subjects
-		operation = ReconcileUpdate
-	}
-
-	if !reflect.DeepEqual(expected.RoleRef, existing.RoleRef) {
-		existing.RoleRef = expected.RoleRef
-		operation = ReconcileUpdate
-	}
-
-	return operation
-}
-
-// jobDiff is a DiffFunc for Jobs
-func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) ReconcileOperation {
+// jobDiff is a reconcile.DiffFunc for Jobs
+func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Operation {
 	expected := expectedObj.(*batchv1.Job)
 	existing := existingObj.(*batchv1.Job)
 	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return ReconcileRecreate
+		return reconcile.Recreate
 	}
 
 	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
@@ -334,8 +238,8 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) ReconcileOp
 		// k8s and we're not allowed to clobber some of those values.
 		existing.Spec.Template.Spec = expected.Spec.Template.Spec
 
-		return ReconcileUpdate
+		return reconcile.Update
 	}
 
-	return ReconcileNone
+	return reconcile.None
 }

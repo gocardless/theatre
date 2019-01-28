@@ -10,6 +10,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
@@ -132,52 +133,28 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 	}
 
 	// Try to find the job
-	jobExists := false
 	job := &batchv1.Job{}
-	err = r.client.Get(r.ctx, r.name, job)
-
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return res, err
-		}
-	} else {
-		// Clear the 'not found' error, as we don't want this to cause a retry of
-		// the reconciliation.
-		err = nil
-		jobExists = true
+	if err := r.client.Get(r.ctx, r.name, job); err != nil && !errors.IsNotFound(err) {
+		return res, err
 	}
 
-	// If it can't be found, create it
-	if !jobExists {
-		// Only create a job if it hasn't already expired (and therefore been
-		// deleted)
-		if !isJobExpired(r.console) {
-			job = buildJob(r.name, consoleTemplate.Spec.Template)
-			if err = r.client.Create(r.ctx, job); err != nil {
-				return res, err
-			}
-			r.logger.Log(
-				"event", EventCreated,
-				"resource", Job,
-				"name", r.name.Name,
-				"user", r.console.Spec.User,
-			)
+	jobExists := err != nil && !errors.IsNotFound(err)
 
-		} else {
-			r.logger.Log(
-				"event", EventExpired,
-				"resource", Job,
-				"name", r.name.Name,
-				"msg", "Not creating new job for expired console",
-			)
+	if !isJobExpired(r.console) {
+		job = buildJob(r.name, consoleTemplate.Spec.Template)
+		operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, job, Job, jobDiff)
+		if err != nil {
+			r.logger.Log("event", EventError, "resource", Job, "error", err)
+			return res, err
 		}
+		r.logger.Log("event", operation, "resource", Job)
+		jobExists = true
 	} else {
-		// The console already exists
 		r.logger.Log(
-			"event", EventFound,
+			"event", EventExpired,
 			"resource", Job,
 			"name", r.name.Name,
-			"user", r.console.Spec.User,
+			"msg", "Not creating new job for expired console",
 		)
 	}
 
@@ -198,6 +175,7 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 			"event", EventExpired,
 			"kind", Job,
 			"resource", r.name,
+			"jobname", job.ObjectMeta.Name,
 		)
 
 		err = r.client.Delete(
@@ -209,7 +187,6 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 			// If we fail to delete then the reconciliation will be retried
 			return res, err
 		}
-		jobExists = false
 
 		r.logger.Log(
 			"event", EventDeleted,
@@ -218,7 +195,7 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 		)
 	}
 
-	if jobExists {
+	if !isJobExpired(r.console) {
 		// Requeue a reconciliation for when we expect the console expiry to fire
 		res = requeueForExpiration(r.logger, r.console.Status)
 	}
@@ -253,10 +230,10 @@ func (r *ConsoleReconciler) updateRoleBindings(tmpl *workloadsv1alpha1.ConsoleTe
 	}
 	operation, err = reconcile.CreateOrUpdate(r.ctx, r.client, rb, RoleBinding, reconcile.RoleBindingDiff)
 	if err != nil {
-		r.logger.Log("event", EventError, "resource", Role, "error", err)
+		r.logger.Log("event", EventError, "resource", RoleBinding, "error", err)
 		return err
 	}
-	r.logger.Log("event", operation, "resource", Role, "subjectcount", len(rb.Subjects))
+	r.logger.Log("event", operation, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
 
 	return nil
 }
@@ -369,4 +346,23 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloads
 
 func isJobExpired(csl *workloadsv1alpha1.Console) bool {
 	return csl.Status.ExpiryTime != nil && csl.Status.ExpiryTime.Time.Before(time.Now())
+}
+
+// jobDiff is a reconcile.DiffFunc for Jobs
+func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Operation {
+	expected := expectedObj.(*batchv1.Job)
+	existing := existingObj.(*batchv1.Job)
+	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
+		return reconcile.Recreate
+	}
+
+	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
+		// We don't update the pod template's metadata, as this has already been modified by
+		// k8s and we're not allowed to clobber some of those values.
+		existing.Spec.Template.Spec = expected.Spec.Template.Spec
+
+		return reconcile.Update
+	}
+
+	return reconcile.None
 }

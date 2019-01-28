@@ -29,15 +29,15 @@ import (
 )
 
 const (
-	EventStart    = "reconcile.start"
-	EventComplete = "reconcile.end"
-	EventRequeued = "reconcile.requeued"
-	EventFound    = "found"
-	EventNotFound = "not_found"
-	EventCreated  = "created"
-	EventExpired  = "expired"
-	EventDeleted  = "deleted"
-	EventError    = "error"
+	EventStart    = "ReconcileStart"
+	EventComplete = "ReconcileEnd"
+	EventRequeued = "ReconcileRequeued"
+	EventFound    = "Found"
+	EventNotFound = "NotFound"
+	EventCreated  = "Created"
+	EventExpired  = "Expired"
+	EventDeleted  = "Deleted"
+	EventError    = "Error"
 
 	Job             = "Job"
 	Console         = "Console"

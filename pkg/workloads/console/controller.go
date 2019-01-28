@@ -10,7 +10,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
@@ -27,6 +26,7 @@ import (
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
 	"github.com/gocardless/theatre/pkg/logging"
+	"github.com/gocardless/theatre/pkg/reconcile"
 )
 
 const (
@@ -234,11 +234,12 @@ func (r *ConsoleReconciler) updateRoleBindings(tmpl *workloadsv1alpha1.ConsoleTe
 	if err := controllerutil.SetControllerReference(r.console, role, scheme.Scheme); err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, role, r.name); err != nil {
+	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, role, Role, reconcile.RoleDiff)
+	if err != nil {
 		r.logger.Log("event", EventError, "resource", Role, "error", err)
 		return err
 	}
-	r.logger.Log("event", EventCreated, "resource", Role)
+	r.logger.Log("event", operation, "resource", Role)
 
 	subjects := append(
 		tmpl.Spec.AdditionalAttachSubjects,
@@ -249,10 +250,12 @@ func (r *ConsoleReconciler) updateRoleBindings(tmpl *workloadsv1alpha1.ConsoleTe
 	if err := controllerutil.SetControllerReference(r.console, rb, scheme.Scheme); err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, rb, r.name); err != nil {
+	operation, err = reconcile.CreateOrUpdate(r.ctx, r.client, rb, RoleBinding, reconcile.RoleBindingDiff)
+	if err != nil {
+		r.logger.Log("event", EventError, "resource", Role, "error", err)
 		return err
 	}
-	r.logger.Log("event", EventCreated, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
+	r.logger.Log("event", operation, "resource", Role, "subjectcount", len(rb.Subjects))
 
 	return nil
 }
@@ -321,18 +324,6 @@ func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []r
 			Name:     name.Name,
 		},
 	}
-}
-
-func findOrCreate(ctx context.Context, c client.Client, obj runtime.Object, name types.NamespacedName) error {
-	key := client.ObjectKey{
-		Name:      name.Name,
-		Namespace: name.Namespace,
-	}
-	err := c.Get(ctx, key, obj)
-	if errors.IsNotFound(err) {
-		err = c.Create(ctx, obj)
-	}
-	return err
 }
 
 func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) k8rec.Result {

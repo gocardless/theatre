@@ -97,7 +97,6 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		if errors.IsNotFound(err) {
 			return res, logger.Log("event", EventNotFound, "resource", Console)
 		}
-
 		return res, err
 	}
 
@@ -117,21 +116,28 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	}
 
 	// Try to find the job
+	jobExists := false
 	job := &batchv1.Job{}
 	err = r.client.Get(r.ctx, name, job)
 
-	// If it can't be found, create it
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return res, err
 		}
+	} else {
+		// Clear the 'not found' error, as we don't want this to cause a retry of
+		// the reconciliation.
+		err = nil
+		jobExists = true
+	}
 
-		// Only create a console if it hasn't already expired (and therefore been
+	// If it can't be found, create it
+	if !jobExists {
+		// Only create a job if it hasn't already expired (and therefore been
 		// deleted)
-		if csl.Status.ExpiryTime == nil {
+		if !isJobExpired(csl) {
 			job = buildJob(request.NamespacedName, consoleTemplate.Spec.Template)
-			err = r.client.Create(r.ctx, job)
-			if err != nil {
+			if err = r.client.Create(r.ctx, job); err != nil {
 				return res, err
 			}
 			logger.Log(
@@ -141,15 +147,6 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 				"user", csl.Spec.User,
 			)
 
-			// Now that we've spawned a console job we can update the status, as
-			// the expiry and phase will have changed.
-			csl, err = r.updateStatus(csl, job)
-			if err != nil {
-				return res, err
-			}
-
-			// Requeue a reconciliation for when we expect the console expiry to fire
-			res = requeueForExpiration(logger, csl.Status)
 		} else {
 			logger.Log(
 				"event", EventExpired,
@@ -157,19 +154,16 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 				"name", name.Name,
 				"msg", "Not creating new job for expired console",
 			)
-			return res, nil
 		}
-
-		return res, err
+	} else {
+		// The console already exists
+		logger.Log(
+			"event", EventFound,
+			"resource", Job,
+			"name", name.Name,
+			"user", csl.Spec.User,
+		)
 	}
-
-	// The console already exists
-	logger.Log(
-		"event", EventFound,
-		"resource", Job,
-		"name", name.Name,
-		"user", csl.Spec.User,
-	)
 
 	// Find or create the role and role bindings
 	if err := r.updateRoleBindings(csl, consoleTemplate, name); err != nil {
@@ -178,13 +172,12 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	csl, err = r.updateStatus(csl, job)
-	if err != nil {
+	if csl, err = r.updateStatus(csl, job); err != nil {
 		return res, err
 	}
 
 	// Terminate if necessary
-	if isJobExpired(csl) {
+	if jobExists && isJobExpired(csl) {
 		logger.Log(
 			"event", EventExpired,
 			"kind", Job,
@@ -200,15 +193,17 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 			// If we fail to delete then the reconciliation will be retried
 			return res, err
 		}
+		jobExists = false
 
 		logger.Log(
 			"event", EventDeleted,
 			"kind", Job,
 			"resource", request.NamespacedName,
 		)
-	} else {
-		// Reconcile was called too early to expire the job, or the
-		// timeout/expiry was updated
+	}
+
+	if jobExists {
+		// Requeue a reconciliation for when we expect the console expiry to fire
 		res = requeueForExpiration(logger, csl.Status)
 	}
 
@@ -343,7 +338,9 @@ func (r *ConsoleReconciler) updateStatus(csl *workloadsv1alpha1.Console, job *ba
 func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloadsv1alpha1.ConsoleStatus {
 	newStatus := csl.DeepCopy().Status
 
-	if job != nil {
+	// We may have been passed an empty Job struct, if the job no longer exists,
+	// so determine whether it's a real job by checking if it has a name.
+	if job != nil && len(job.Name) != 0 {
 		// We want to give the console session *at least* the time specified in the
 		// timeout, therefore base the expiry time on the job creation time, rather
 		// than the console creation time, to take into account any delays in

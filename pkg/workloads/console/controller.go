@@ -2,6 +2,8 @@ package console
 
 import (
 	"context"
+	"reflect"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,16 +32,19 @@ import (
 const (
 	EventStart    = "reconcile.start"
 	EventComplete = "reconcile.end"
+	EventRequeued = "reconcile.requeued"
 	EventFound    = "found"
 	EventNotFound = "not_found"
 	EventCreated  = "created"
+	EventExpired  = "expired"
+	EventDeleted  = "deleted"
 	EventError    = "error"
 
 	Job             = "Job"
 	Console         = "Console"
 	ConsoleTemplate = "ConsoleTemplate"
 	Role            = "Role"
-	RoleBinding     = "RoleBindings"
+	RoleBinding     = "RoleBinding"
 )
 
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
@@ -92,7 +97,6 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		if errors.IsNotFound(err) {
 			return res, logger.Log("event", EventNotFound, "resource", Console)
 		}
-
 		return res, err
 	}
 
@@ -112,45 +116,98 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 	}
 
 	// Try to find the job
+	jobExists := false
 	job := &batchv1.Job{}
 	err = r.client.Get(r.ctx, name, job)
 
-	// If it can't be found, create it
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return res, err
 		}
+	} else {
+		// Clear the 'not found' error, as we don't want this to cause a retry of
+		// the reconciliation.
+		err = nil
+		jobExists = true
+	}
 
-		logger.Log("event", EventNotFound, "resource", Job)
-		job = buildJob(name, consoleTemplate.Spec.Template)
-		if err := controllerutil.SetControllerReference(csl, job, scheme.Scheme); err != nil {
-			return res, err
+	// If it can't be found, create it
+	if !jobExists {
+		// Only create a job if it hasn't already expired (and therefore been
+		// deleted)
+		if !isJobExpired(csl) {
+			job = buildJob(request.NamespacedName, consoleTemplate.Spec.Template)
+			if err = r.client.Create(r.ctx, job); err != nil {
+				return res, err
+			}
+			logger.Log(
+				"event", EventCreated,
+				"resource", Job,
+				"name", name.Name,
+				"user", csl.Spec.User,
+			)
+
+		} else {
+			logger.Log(
+				"event", EventExpired,
+				"resource", Job,
+				"name", name.Name,
+				"msg", "Not creating new job for expired console",
+			)
 		}
-		if err = r.client.Create(r.ctx, job); err != nil {
-			return res, err
-		}
+	} else {
+		// The console already exists
 		logger.Log(
-			"event", EventCreated,
+			"event", EventFound,
 			"resource", Job,
-			"name", job.ObjectMeta.Name,
+			"name", name.Name,
 			"user", csl.Spec.User,
 		)
 	}
-
-	logger.Log(
-		"event", EventFound,
-		"resource", Job,
-		"name", name.Name,
-		"user", csl.Spec.User,
-	)
 
 	// Find or create the role and role bindings
 	if err := r.updateRoleBindings(csl, consoleTemplate, name); err != nil {
 		return res, err
 	}
 
+	// Update the status fields in case they're out of sync, or the console spec
+	// has been updated
+	if csl, err = r.updateStatus(csl, job); err != nil {
+		return res, err
+	}
+
+	// Terminate if necessary
+	if jobExists && isJobExpired(csl) {
+		logger.Log(
+			"event", EventExpired,
+			"kind", Job,
+			"resource", request.NamespacedName,
+		)
+
+		err = r.client.Delete(
+			r.ctx,
+			job,
+			client.PropagationPolicy(metav1.DeletePropagationBackground),
+		)
+		if err != nil {
+			// If we fail to delete then the reconciliation will be retried
+			return res, err
+		}
+		jobExists = false
+
+		logger.Log(
+			"event", EventDeleted,
+			"kind", Job,
+			"resource", request.NamespacedName,
+		)
+	}
+
+	if jobExists {
+		// Requeue a reconciliation for when we expect the console expiry to fire
+		res = requeueForExpiration(logger, csl.Status)
+	}
+
 	// TODO:
-	//   Terminate the console if it has expired
 	//   GC the terminated console if necessary
 
 	logger.Log("event", EventComplete)
@@ -239,4 +296,67 @@ func findOrCreate(ctx context.Context, c client.Client, obj runtime.Object, name
 		err = c.Create(ctx, obj)
 	}
 	return err
+}
+
+func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) reconcile.Result {
+	// Requeue after the expiry is hit. Add a second to be on the safe side,
+	// ensuring that we'll always re-reconcile *after* the expiry time has been
+	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
+	requeueTime := status.ExpiryTime.Time.Add(time.Second)
+	sleepDuration := requeueTime.Sub(time.Now())
+
+	res := reconcile.Result{}
+	res.RequeueAfter = sleepDuration
+
+	logger.Log(
+		"event", EventRequeued,
+		"reconcile_at", requeueTime,
+	)
+
+	return res
+}
+
+func (r *ConsoleReconciler) updateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
+	newStatus := calculateStatus(csl, job)
+
+	// If there's no changes in status, don't unnecessarily update the object.
+	// This would cause an infinite loop!
+	if reflect.DeepEqual(csl.Status, newStatus) {
+		return csl, nil
+	}
+
+	updatedCsl := csl.DeepCopy()
+	updatedCsl.Status = newStatus
+
+	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
+	// the CustomResourceSubresources feature will be available.
+	err := r.client.Update(r.ctx, updatedCsl)
+
+	return updatedCsl, err
+}
+
+func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloadsv1alpha1.ConsoleStatus {
+	newStatus := csl.DeepCopy().Status
+
+	// We may have been passed an empty Job struct, if the job no longer exists,
+	// so determine whether it's a real job by checking if it has a name.
+	if job != nil && len(job.Name) != 0 {
+		// We want to give the console session *at least* the time specified in the
+		// timeout, therefore base the expiry time on the job creation time, rather
+		// than the console creation time, to take into account any delays in
+		// reconciling the console object.
+		// TODO: We may actually want to use a base of when the Pod entered the
+		// Running phase, as image pull time could be significant in some cases.
+		jobCreationTime := job.ObjectMeta.CreationTimestamp.Time
+		expiryTime := metav1.NewTime(
+			jobCreationTime.Add(time.Second * time.Duration(csl.Spec.TimeoutSeconds)),
+		)
+		newStatus.ExpiryTime = &expiryTime
+	}
+
+	return newStatus
+}
+
+func isJobExpired(csl *workloadsv1alpha1.Console) bool {
+	return csl.Status.ExpiryTime != nil && csl.Status.ExpiryTime.Time.Before(time.Now())
 }

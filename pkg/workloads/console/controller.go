@@ -117,10 +117,6 @@ type ConsoleReconciler struct {
 }
 
 func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
-	logger := r.logger
-	name := r.name
-	csl := r.console
-
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      r.console.Spec.ConsoleTemplateRef.Name,
@@ -129,7 +125,7 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
+			r.logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
 		}
 		return res, err
 	}
@@ -137,7 +133,7 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 	// Try to find the job
 	jobExists := false
 	job := &batchv1.Job{}
-	err = r.client.Get(r.ctx, name, job)
+	err = r.client.Get(r.ctx, r.name, job)
 
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -154,53 +150,53 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 	if !jobExists {
 		// Only create a job if it hasn't already expired (and therefore been
 		// deleted)
-		if !isJobExpired(csl) {
-			job = buildJob(name, consoleTemplate.Spec.Template)
+		if !isJobExpired(r.console) {
+			job = buildJob(r.name, consoleTemplate.Spec.Template)
 			if err = r.client.Create(r.ctx, job); err != nil {
 				return res, err
 			}
-			logger.Log(
+			r.logger.Log(
 				"event", EventCreated,
 				"resource", Job,
-				"name", name.Name,
-				"user", csl.Spec.User,
+				"name", r.name.Name,
+				"user", r.console.Spec.User,
 			)
 
 		} else {
-			logger.Log(
+			r.logger.Log(
 				"event", EventExpired,
 				"resource", Job,
-				"name", name.Name,
+				"name", r.name.Name,
 				"msg", "Not creating new job for expired console",
 			)
 		}
 	} else {
 		// The console already exists
-		logger.Log(
+		r.logger.Log(
 			"event", EventFound,
 			"resource", Job,
-			"name", name.Name,
-			"user", csl.Spec.User,
+			"name", r.name.Name,
+			"user", r.console.Spec.User,
 		)
 	}
 
 	// Find or create the role and role bindings
-	if err := r.updateRoleBindings(csl, consoleTemplate, name); err != nil {
+	if err := r.updateRoleBindings(consoleTemplate); err != nil {
 		return res, err
 	}
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	if csl, err = r.updateStatus(csl, job); err != nil {
+	if err = r.updateStatus(job); err != nil {
 		return res, err
 	}
 
 	// Terminate if necessary
-	if jobExists && isJobExpired(csl) {
-		logger.Log(
+	if jobExists && isJobExpired(r.console) {
+		r.logger.Log(
 			"event", EventExpired,
 			"kind", Job,
-			"resource", name,
+			"resource", r.name,
 		)
 
 		err = r.client.Delete(
@@ -214,31 +210,31 @@ func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
 		}
 		jobExists = false
 
-		logger.Log(
+		r.logger.Log(
 			"event", EventDeleted,
 			"kind", Job,
-			"resource", name,
+			"resource", r.name,
 		)
 	}
 
 	if jobExists {
 		// Requeue a reconciliation for when we expect the console expiry to fire
-		res = requeueForExpiration(logger, csl.Status)
+		res = requeueForExpiration(r.logger, r.console.Status)
 	}
 
 	// TODO:
 	//   GC the terminated console if necessary
 
-	logger.Log("event", EventComplete)
+	r.logger.Log("event", EventComplete)
 	return res, err
 }
 
-func (r *ConsoleReconciler) updateRoleBindings(csl *workloadsv1alpha1.Console, tmpl *workloadsv1alpha1.ConsoleTemplate, name types.NamespacedName) error {
-	role := buildRole(name)
-	if err := controllerutil.SetControllerReference(csl, role, scheme.Scheme); err != nil {
+func (r *ConsoleReconciler) updateRoleBindings(tmpl *workloadsv1alpha1.ConsoleTemplate) error {
+	role := buildRole(r.name)
+	if err := controllerutil.SetControllerReference(r.console, role, scheme.Scheme); err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, role, name); err != nil {
+	if err := findOrCreate(r.ctx, r.client, role, r.name); err != nil {
 		r.logger.Log("event", EventError, "resource", Role, "error", err)
 		return err
 	}
@@ -246,18 +242,40 @@ func (r *ConsoleReconciler) updateRoleBindings(csl *workloadsv1alpha1.Console, t
 
 	subjects := append(
 		tmpl.Spec.AdditionalAttachSubjects,
-		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
+		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
 	)
 
-	rb := buildRoleBinding(name, role, subjects)
-	if err := controllerutil.SetControllerReference(csl, rb, scheme.Scheme); err != nil {
+	rb := buildRoleBinding(r.name, role, subjects)
+	if err := controllerutil.SetControllerReference(r.console, rb, scheme.Scheme); err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, rb, name); err != nil {
+	if err := findOrCreate(r.ctx, r.client, rb, r.name); err != nil {
 		return err
 	}
 	r.logger.Log("event", EventCreated, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
 
+	return nil
+}
+
+func (r *ConsoleReconciler) updateStatus(job *batchv1.Job) error {
+	newStatus := calculateStatus(r.console, job)
+
+	// If there's no changes in status, don't unnecessarily update the object.
+	// This would cause an infinite loop!
+	if reflect.DeepEqual(r.console.Status, newStatus) {
+		return nil
+	}
+
+	updatedCsl := r.console.DeepCopy()
+	updatedCsl.Status = newStatus
+
+	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
+	// the CustomResourceSubresources feature will be available.
+	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
+		return err
+	}
+
+	r.console = updatedCsl
 	return nil
 }
 
@@ -333,25 +351,6 @@ func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.Console
 	)
 
 	return res
-}
-
-func (r *ConsoleReconciler) updateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
-	newStatus := calculateStatus(csl, job)
-
-	// If there's no changes in status, don't unnecessarily update the object.
-	// This would cause an infinite loop!
-	if reflect.DeepEqual(csl.Status, newStatus) {
-		return csl, nil
-	}
-
-	updatedCsl := csl.DeepCopy()
-	updatedCsl.Status = newStatus
-
-	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
-	// the CustomResourceSubresources feature will be available.
-	err := r.client.Update(r.ctx, updatedCsl)
-
-	return updatedCsl, err
 }
 
 func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloadsv1alpha1.ConsoleStatus {

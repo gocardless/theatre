@@ -25,7 +25,6 @@ import (
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
-	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/reconcile"
 )
 
@@ -92,7 +91,9 @@ func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 		}
 		return k8rec.Result{}, err
 	}
-	logger = logging.WithRecorder(logger, c.recorder, csl)
+
+	// This is temporarily disabled as our logs don't pass k8s event validation
+	// logger = logging.WithRecorder(logger, c.recorder, csl)
 
 	reconciler := &ConsoleReconciler{
 		ctx:     c.ctx,

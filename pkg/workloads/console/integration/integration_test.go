@@ -105,7 +105,6 @@ var _ = Describe("Console", func() {
 		}
 
 		waitForSuccessfulReconcile(2)
-
 	})
 
 	AfterEach(func() {
@@ -177,6 +176,10 @@ var _ = Describe("Console", func() {
 				"role rule did not match expectation",
 			)
 
+			By("Expect role is owned by console controller")
+			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+
 			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
 			rb := &rbacv1.RoleBinding{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
@@ -194,6 +197,10 @@ var _ = Describe("Console", func() {
 					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
 				}),
 			)
+
+			By("Expect rolebinding is owned by console controller")
+			Expect(rb.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(rb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 		})
 
 		It("Updates the status with expiry time", func() {

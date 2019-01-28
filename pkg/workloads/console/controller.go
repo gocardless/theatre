@@ -140,14 +140,12 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 
 	jobExists := err != nil && !errors.IsNotFound(err)
 
+	// If the job hasn't expired, ensure it exists and is up to date
 	if !isJobExpired(r.console) {
 		job = buildJob(r.name, consoleTemplate.Spec.Template)
-		operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, job, Job, jobDiff)
-		if err != nil {
-			r.logger.Log("event", EventError, "resource", Job, "error", err)
+		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 			return res, err
 		}
-		r.logger.Log("event", operation, "resource", Job)
 		jobExists = true
 	} else {
 		r.logger.Log(
@@ -158,8 +156,19 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 		)
 	}
 
-	// Find or create the role and role bindings
-	if err := r.updateRoleBindings(consoleTemplate); err != nil {
+	// Create or update the role
+	role := buildRole(r.name)
+	if err := r.createOrUpdate(role, Role, reconcile.RoleDiff); err != nil {
+		return res, err
+	}
+
+	// Create or update the role binding
+	subjects := append(
+		consoleTemplate.Spec.AdditionalAttachSubjects,
+		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
+	)
+	rb := buildRoleBinding(r.name, role, subjects)
+	if err := r.createOrUpdate(rb, RoleBinding, reconcile.RoleBindingDiff); err != nil {
 		return res, err
 	}
 
@@ -171,12 +180,7 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 
 	// Terminate if necessary
 	if jobExists && isJobExpired(r.console) {
-		r.logger.Log(
-			"event", EventExpired,
-			"kind", Job,
-			"resource", r.name,
-			"jobname", job.ObjectMeta.Name,
-		)
+		r.logger.Log("event", EventExpired, "kind", Job, "resource", r.name)
 
 		err = r.client.Delete(
 			r.ctx,
@@ -188,11 +192,7 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 			return res, err
 		}
 
-		r.logger.Log(
-			"event", EventDeleted,
-			"kind", Job,
-			"resource", r.name,
-		)
+		r.logger.Log("event", EventDeleted, "kind", Job, "resource", r.name)
 	}
 
 	if !isJobExpired(r.console) {
@@ -207,34 +207,17 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 	return res, err
 }
 
-func (r *ConsoleReconciler) updateRoleBindings(tmpl *workloadsv1alpha1.ConsoleTemplate) error {
-	role := buildRole(r.name)
-	if err := controllerutil.SetControllerReference(r.console, role, scheme.Scheme); err != nil {
+func (r *ConsoleReconciler) createOrUpdate(existing reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
+	if err := controllerutil.SetControllerReference(r.console, existing, scheme.Scheme); err != nil {
 		return err
 	}
-	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, role, Role, reconcile.RoleDiff)
+
+	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, existing, kind, diffFunc)
 	if err != nil {
-		r.logger.Log("event", EventError, "resource", Role, "error", err)
 		return err
 	}
-	r.logger.Log("event", operation, "resource", Role)
 
-	subjects := append(
-		tmpl.Spec.AdditionalAttachSubjects,
-		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
-	)
-
-	rb := buildRoleBinding(r.name, role, subjects)
-	if err := controllerutil.SetControllerReference(r.console, rb, scheme.Scheme); err != nil {
-		return err
-	}
-	operation, err = reconcile.CreateOrUpdate(r.ctx, r.client, rb, RoleBinding, reconcile.RoleBindingDiff)
-	if err != nil {
-		r.logger.Log("event", EventError, "resource", RoleBinding, "error", err)
-		return err
-	}
-	r.logger.Log("event", operation, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
-
+	r.logger.Log("event", operation, "resource", kind)
 	return nil
 }
 

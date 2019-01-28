@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	k8rec "sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
@@ -81,7 +81,7 @@ type Controller struct {
 	client   client.Client
 }
 
-func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 	logger := kitlog.With(c.logger, "request", request)
 	logger.Log("event", EventStart)
 
@@ -90,7 +90,7 @@ func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, err
 		if errors.IsNotFound(err) {
 			logger.Log("event", EventNotFound, "resource", Console)
 		}
-		return reconcile.Result{}, err
+		return k8rec.Result{}, err
 	}
 	logger = logging.WithRecorder(logger, c.recorder, csl)
 
@@ -116,7 +116,7 @@ type ConsoleReconciler struct {
 	console *workloadsv1alpha1.Console
 }
 
-func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
+func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      r.console.Spec.ConsoleTemplateRef.Name,
@@ -335,14 +335,14 @@ func findOrCreate(ctx context.Context, c client.Client, obj runtime.Object, name
 	return err
 }
 
-func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) reconcile.Result {
+func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) k8rec.Result {
 	// Requeue after the expiry is hit. Add a second to be on the safe side,
 	// ensuring that we'll always re-reconcile *after* the expiry time has been
 	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
 	requeueTime := status.ExpiryTime.Time.Add(time.Second)
 	sleepDuration := requeueTime.Sub(time.Now())
 
-	res := reconcile.Result{}
+	res := k8rec.Result{}
 	res.RequeueAfter = sleepDuration
 
 	logger.Log(

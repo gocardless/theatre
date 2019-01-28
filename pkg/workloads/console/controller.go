@@ -50,7 +50,7 @@ const (
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "Console")
 	ctrlOptions := controller.Options{
-		Reconciler: &ConsoleReconciler{
+		Reconciler: &Controller{
 			ctx:      ctx,
 			logger:   logger,
 			recorder: mgr.GetRecorder("Console"),
@@ -74,38 +74,57 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 	return ctrl, err
 }
 
-type ConsoleReconciler struct {
+type Controller struct {
 	ctx      context.Context
 	logger   kitlog.Logger
 	recorder record.EventRecorder
 	client   client.Client
 }
 
-func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
-	logger := kitlog.With(r.logger, "request", request)
+func (c *Controller) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	logger := kitlog.With(c.logger, "request", request)
 	logger.Log("event", EventStart)
 
-	defer func() {
-		if err != nil {
-			logger.Log("event", EventError, "error", err)
-		}
-	}()
-
-	name := request.NamespacedName
 	csl := &workloadsv1alpha1.Console{}
-	if err := r.client.Get(r.ctx, name, csl); err != nil {
+	if err := c.client.Get(c.ctx, request.NamespacedName, csl); err != nil {
 		if errors.IsNotFound(err) {
-			return res, logger.Log("event", EventNotFound, "resource", Console)
+			logger.Log("event", EventNotFound, "resource", Console)
 		}
-		return res, err
+		return reconcile.Result{}, err
 	}
+	logger = logging.WithRecorder(logger, c.recorder, csl)
 
-	logger = logging.WithRecorder(logger, r.recorder, csl)
+	reconciler := &ConsoleReconciler{
+		ctx:     c.ctx,
+		logger:  logger,
+		client:  c.client,
+		name:    request.NamespacedName,
+		console: csl,
+	}
+	result, err := reconciler.Reconcile()
+	if err != nil {
+		logger.Log("event", EventError, "error", err)
+	}
+	return result, err
+}
+
+type ConsoleReconciler struct {
+	ctx     context.Context
+	logger  kitlog.Logger
+	client  client.Client
+	name    types.NamespacedName
+	console *workloadsv1alpha1.Console
+}
+
+func (r *ConsoleReconciler) Reconcile() (res reconcile.Result, err error) {
+	logger := r.logger
+	name := r.name
+	csl := r.console
 
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
-		Name:      csl.Spec.ConsoleTemplateRef.Name,
-		Namespace: name.Namespace,
+		Name:      r.console.Spec.ConsoleTemplateRef.Name,
+		Namespace: r.name.Namespace,
 	}
 	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
@@ -136,7 +155,7 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		// Only create a job if it hasn't already expired (and therefore been
 		// deleted)
 		if !isJobExpired(csl) {
-			job = buildJob(request.NamespacedName, consoleTemplate.Spec.Template)
+			job = buildJob(name, consoleTemplate.Spec.Template)
 			if err = r.client.Create(r.ctx, job); err != nil {
 				return res, err
 			}
@@ -181,7 +200,7 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		logger.Log(
 			"event", EventExpired,
 			"kind", Job,
-			"resource", request.NamespacedName,
+			"resource", name,
 		)
 
 		err = r.client.Delete(
@@ -198,7 +217,7 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 		logger.Log(
 			"event", EventDeleted,
 			"kind", Job,
-			"resource", request.NamespacedName,
+			"resource", name,
 		)
 	}
 

@@ -207,12 +207,12 @@ func (r *ConsoleReconciler) Reconcile() (res k8rec.Result, err error) {
 	return res, err
 }
 
-func (r *ConsoleReconciler) createOrUpdate(existing reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
-	if err := controllerutil.SetControllerReference(r.console, existing, scheme.Scheme); err != nil {
+func (r *ConsoleReconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
+	if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
 		return err
 	}
 
-	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, existing, kind, diffFunc)
+	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
 	if err != nil {
 		return err
 	}

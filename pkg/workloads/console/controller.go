@@ -336,7 +336,7 @@ func isJobExpired(csl *workloadsv1alpha1.Console) bool {
 }
 
 // jobDiff is a reconcile.DiffFunc for Jobs
-func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Operation {
+func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Outcome {
 	expected := expectedObj.(*batchv1.Job)
 	existing := existingObj.(*batchv1.Job)
 

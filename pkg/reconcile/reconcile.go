@@ -14,21 +14,21 @@ import (
 )
 
 // DiffFunc takes two Kubernetes resources: expected and existing. Both are assumed to be
-// the same Kind. It compares the two, and returns an Operation indicating how to
+// the same Kind. It compares the two, and returns an Outcome indicating how to
 // transition from existing to expected. If an update is required, it will set the
 // relevant fields on existing to their intended values. This is so that we can simply
 // resubmit the existing resource, and any fields automatically set by the Kubernetes API
 // server will be retained.
-type DiffFunc func(runtime.Object, runtime.Object) Operation
+type DiffFunc func(runtime.Object, runtime.Object) Outcome
 
-// Operation describes the operation performed by CreateOrUpdate.
-type Operation string
+// Outcome describes the operation performed by CreateOrUpdate.
+type Outcome string
 
 var (
-	Create Operation = "create"
-	Update Operation = "update"
-	None   Operation = "none"
-	Error  Operation = "error"
+	Create Outcome = "create"
+	Update Outcome = "update"
+	None   Outcome = "none"
+	Error  Outcome = "error"
 )
 
 // ObjWithMeta describes a Kubernetes resource with a metadata field. It's a combination
@@ -43,7 +43,7 @@ type ObjWithMeta interface {
 // that the the object exists in the cluster with the correct state. It will use the diff
 // function to determine any differences between the cluster state and the local state and
 // use that to decide how to update it.
-func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, kind string, diffFunc DiffFunc) (Operation, error) {
+func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, kind string, diffFunc DiffFunc) (Outcome, error) {
 	name := types.NamespacedName{
 		Namespace: existing.GetNamespace(),
 		Name:      existing.GetName(),
@@ -80,7 +80,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 }
 
 // RoleDiff is a DiffFunc for Roles
-func RoleDiff(expectedObj runtime.Object, existingObj runtime.Object) Operation {
+func RoleDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
 	expected := expectedObj.(*rbacv1.Role)
 	existing := existingObj.(*rbacv1.Role)
 
@@ -93,7 +93,7 @@ func RoleDiff(expectedObj runtime.Object, existingObj runtime.Object) Operation 
 }
 
 // RoleBindingDiff is a DiffFunc for RoleBindings
-func RoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Operation {
+func RoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
 	expected := expectedObj.(*rbacv1.RoleBinding)
 	existing := existingObj.(*rbacv1.RoleBinding)
 	operation := None

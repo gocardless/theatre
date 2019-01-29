@@ -105,7 +105,6 @@ var _ = Describe("Console", func() {
 		}
 
 		waitForSuccessfulReconcile(2)
-
 	})
 
 	AfterEach(func() {
@@ -177,6 +176,10 @@ var _ = Describe("Console", func() {
 				"role rule did not match expectation",
 			)
 
+			By("Expect role is owned by console controller")
+			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+
 			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
 			rb := &rbacv1.RoleBinding{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
@@ -194,6 +197,10 @@ var _ = Describe("Console", func() {
 					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
 				}),
 			)
+
+			By("Expect rolebinding is owned by console controller")
+			Expect(rb.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(rb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 		})
 
 		It("Updates the status with expiry time", func() {
@@ -235,10 +242,17 @@ var _ = Describe("Console", func() {
 		})
 
 		It("Does not recreate a console once it has expired", func() {
+			By("Expect that a job was created")
+			job := &batchv1.Job{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
 			By("Retrieving latest console object")
 			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
 			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
 
 			By("Updating timeout to trigger console expiration")
@@ -257,14 +271,12 @@ var _ = Describe("Console", func() {
 
 			waitForSuccessfulReconcile(1)
 
-			job := &batchv1.Job{}
+			job = &batchv1.Job{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
 			err = mgr.GetClient().Get(context.TODO(), identifier, job)
 
-			statusError, _ := err.(*errors.StatusError)
 			Expect(err).To(HaveOccurred(), "the job should remain deleted, but it has been recreated")
-			Expect(err).To(BeAssignableToTypeOf(statusError), "error should be an API error")
-			Expect(statusError.Status()).To(MatchFields(IgnoreExtras, Fields{"Code": BeEquivalentTo(404)}))
+			Expect(errors.IsNotFound(err)).To(Equal(true), "a NotFound error was expected, but got a different error")
 		})
 	})
 })

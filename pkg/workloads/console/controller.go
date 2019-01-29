@@ -21,24 +21,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	k8rec "sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
-	"github.com/gocardless/theatre/pkg/logging"
+	"github.com/gocardless/theatre/pkg/reconcile"
 )
 
 const (
-	EventStart    = "reconcile.start"
-	EventComplete = "reconcile.end"
-	EventRequeued = "reconcile.requeued"
-	EventFound    = "found"
-	EventNotFound = "not_found"
-	EventCreated  = "created"
-	EventExpired  = "expired"
-	EventDeleted  = "deleted"
-	EventError    = "error"
+	EventStart    = "Start"
+	EventComplete = "End"
+	EventRequeued = "Requeued"
+	EventFound    = "Found"
+	EventNotFound = "NotFound"
+	EventCreated  = "Created"
+	EventExpired  = "Expired"
+	EventDeleted  = "Deleted"
+	EventError    = "Error"
 
 	Job             = "Job"
 	Console         = "Console"
@@ -50,7 +50,7 @@ const (
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "Console")
 	ctrlOptions := controller.Options{
-		Reconciler: &ConsoleReconciler{
+		Reconciler: &Controller{
 			ctx:      ctx,
 			logger:   logger,
 			recorder: mgr.GetRecorder("Console"),
@@ -74,115 +74,117 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 	return ctrl, err
 }
 
-type ConsoleReconciler struct {
+type Controller struct {
 	ctx      context.Context
 	logger   kitlog.Logger
 	recorder record.EventRecorder
 	client   client.Client
 }
 
-func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.Result, err error) {
-	logger := kitlog.With(r.logger, "request", request)
+func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
+	logger := kitlog.With(c.logger, "request", request)
 	logger.Log("event", EventStart)
 
-	defer func() {
-		if err != nil {
-			logger.Log("event", EventError, "error", err)
-		}
-	}()
-
-	name := request.NamespacedName
 	csl := &workloadsv1alpha1.Console{}
-	if err := r.client.Get(r.ctx, name, csl); err != nil {
+	if err := c.client.Get(c.ctx, request.NamespacedName, csl); err != nil {
 		if errors.IsNotFound(err) {
-			return res, logger.Log("event", EventNotFound, "resource", Console)
+			logger.Log("event", EventNotFound, "resource", Console)
 		}
-		return res, err
+		// If we can't find the console, no meaningful reconciliation we can do. For example,
+		// the console may have been deleted. We don't want to retry in this case, as we'll be
+		// retrying forever. So just return a successful reconcile result.
+		return k8rec.Result{}, nil
 	}
 
-	logger = logging.WithRecorder(logger, r.recorder, csl)
+	// This is temporarily disabled as our logs don't pass k8s event validation
+	// logger = logging.WithRecorder(logger, c.recorder, csl)
 
+	reconciler := &reconciler{
+		ctx:     c.ctx,
+		logger:  logger,
+		client:  c.client,
+		name:    request.NamespacedName,
+		console: csl,
+	}
+	result, err := reconciler.Reconcile()
+	if err != nil {
+		logger.Log("event", EventError, "error", err)
+	}
+	return result, err
+}
+
+type reconciler struct {
+	ctx     context.Context
+	logger  kitlog.Logger
+	client  client.Client
+	name    types.NamespacedName
+	console *workloadsv1alpha1.Console
+}
+
+func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
-		Name:      csl.Spec.ConsoleTemplateRef.Name,
-		Namespace: name.Namespace,
+		Name:      r.console.Spec.ConsoleTemplateRef.Name,
+		Namespace: r.name.Namespace,
 	}
 	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
+			r.logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
 		}
 		return res, err
 	}
 
 	// Try to find the job
-	jobExists := false
 	job := &batchv1.Job{}
-	err = r.client.Get(r.ctx, name, job)
-
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return res, err
-		}
-	} else {
-		// Clear the 'not found' error, as we don't want this to cause a retry of
-		// the reconciliation.
-		err = nil
-		jobExists = true
+	err = r.client.Get(r.ctx, r.name, job)
+	if err != nil && !errors.IsNotFound(err) {
+		return res, err
 	}
 
-	// If it can't be found, create it
-	if !jobExists {
-		// Only create a job if it hasn't already expired (and therefore been
-		// deleted)
-		if !isJobExpired(csl) {
-			job = buildJob(request.NamespacedName, consoleTemplate.Spec.Template)
-			if err = r.client.Create(r.ctx, job); err != nil {
-				return res, err
-			}
-			logger.Log(
-				"event", EventCreated,
-				"resource", Job,
-				"name", name.Name,
-				"user", csl.Spec.User,
-			)
+	jobExists := err != nil && !errors.IsNotFound(err)
 
-		} else {
-			logger.Log(
-				"event", EventExpired,
-				"resource", Job,
-				"name", name.Name,
-				"msg", "Not creating new job for expired console",
-			)
+	// If the job hasn't expired, ensure it exists and is up to date
+	if !isJobExpired(r.console) {
+		job = buildJob(r.name, consoleTemplate.Spec.Template)
+		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
+			return res, err
 		}
+		jobExists = true
 	} else {
-		// The console already exists
-		logger.Log(
-			"event", EventFound,
+		r.logger.Log(
+			"event", EventExpired,
 			"resource", Job,
-			"name", name.Name,
-			"user", csl.Spec.User,
+			"name", r.name.Name,
+			"msg", "Not creating new job for expired console",
 		)
 	}
 
-	// Find or create the role and role bindings
-	if err := r.updateRoleBindings(csl, consoleTemplate, name); err != nil {
+	// Create or update the role
+	role := buildRole(r.name)
+	if err := r.createOrUpdate(role, Role, reconcile.RoleDiff); err != nil {
+		return res, err
+	}
+
+	// Create or update the role binding
+	subjects := append(
+		consoleTemplate.Spec.AdditionalAttachSubjects,
+		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
+	)
+	rb := buildRoleBinding(r.name, role, subjects)
+	if err := r.createOrUpdate(rb, RoleBinding, reconcile.RoleBindingDiff); err != nil {
 		return res, err
 	}
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	if csl, err = r.updateStatus(csl, job); err != nil {
+	if err = r.updateStatus(job); err != nil {
 		return res, err
 	}
 
 	// Terminate if necessary
-	if jobExists && isJobExpired(csl) {
-		logger.Log(
-			"event", EventExpired,
-			"kind", Job,
-			"resource", request.NamespacedName,
-		)
+	if jobExists && isJobExpired(r.console) {
+		r.logger.Log("event", EventExpired, "kind", Job, "resource", r.name)
 
 		err = r.client.Delete(
 			r.ctx,
@@ -193,52 +195,55 @@ func (r *ConsoleReconciler) Reconcile(request reconcile.Request) (res reconcile.
 			// If we fail to delete then the reconciliation will be retried
 			return res, err
 		}
-		jobExists = false
 
-		logger.Log(
-			"event", EventDeleted,
-			"kind", Job,
-			"resource", request.NamespacedName,
-		)
+		r.logger.Log("event", EventDeleted, "kind", Job, "resource", r.name)
 	}
 
-	if jobExists {
+	if !isJobExpired(r.console) {
 		// Requeue a reconciliation for when we expect the console expiry to fire
-		res = requeueForExpiration(logger, csl.Status)
+		res = requeueForExpiration(r.logger, r.console.Status)
 	}
 
 	// TODO:
 	//   GC the terminated console if necessary
 
-	logger.Log("event", EventComplete)
+	r.logger.Log("event", EventComplete)
 	return res, err
 }
 
-func (r *ConsoleReconciler) updateRoleBindings(csl *workloadsv1alpha1.Console, tmpl *workloadsv1alpha1.ConsoleTemplate, name types.NamespacedName) error {
-	role := buildRole(name)
-	if err := controllerutil.SetControllerReference(csl, role, scheme.Scheme); err != nil {
+func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
+	if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, role, name); err != nil {
-		r.logger.Log("event", EventError, "resource", Role, "error", err)
-		return err
-	}
-	r.logger.Log("event", EventCreated, "resource", Role)
 
-	subjects := append(
-		tmpl.Spec.AdditionalAttachSubjects,
-		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
-	)
-
-	rb := buildRoleBinding(name, role, subjects)
-	if err := controllerutil.SetControllerReference(csl, rb, scheme.Scheme); err != nil {
+	outcome, err := reconcile.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
+	if err != nil {
 		return err
 	}
-	if err := findOrCreate(r.ctx, r.client, rb, name); err != nil {
+
+	r.logger.Log("event", "CreatedOrUpdated", "outcome", outcome, "resource", kind)
+	return nil
+}
+
+func (r *reconciler) updateStatus(job *batchv1.Job) error {
+	newStatus := calculateStatus(r.console, job)
+
+	// If there's no changes in status, don't unnecessarily update the object.
+	// This would cause an infinite loop!
+	if reflect.DeepEqual(r.console.Status, newStatus) {
+		return nil
+	}
+
+	updatedCsl := r.console.DeepCopy()
+	updatedCsl.Status = newStatus
+
+	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
+	// the CustomResourceSubresources feature will be available.
+	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
 		return err
 	}
-	r.logger.Log("event", EventCreated, "resource", RoleBinding, "subjectcount", len(rb.Subjects))
 
+	r.console = updatedCsl
 	return nil
 }
 
@@ -286,26 +291,14 @@ func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []r
 	}
 }
 
-func findOrCreate(ctx context.Context, c client.Client, obj runtime.Object, name types.NamespacedName) error {
-	key := client.ObjectKey{
-		Name:      name.Name,
-		Namespace: name.Namespace,
-	}
-	err := c.Get(ctx, key, obj)
-	if errors.IsNotFound(err) {
-		err = c.Create(ctx, obj)
-	}
-	return err
-}
-
-func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) reconcile.Result {
+func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) k8rec.Result {
 	// Requeue after the expiry is hit. Add a second to be on the safe side,
 	// ensuring that we'll always re-reconcile *after* the expiry time has been
 	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
 	requeueTime := status.ExpiryTime.Time.Add(time.Second)
 	sleepDuration := requeueTime.Sub(time.Now())
 
-	res := reconcile.Result{}
+	res := k8rec.Result{}
 	res.RequeueAfter = sleepDuration
 
 	logger.Log(
@@ -314,25 +307,6 @@ func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.Console
 	)
 
 	return res
-}
-
-func (r *ConsoleReconciler) updateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
-	newStatus := calculateStatus(csl, job)
-
-	// If there's no changes in status, don't unnecessarily update the object.
-	// This would cause an infinite loop!
-	if reflect.DeepEqual(csl.Status, newStatus) {
-		return csl, nil
-	}
-
-	updatedCsl := csl.DeepCopy()
-	updatedCsl.Status = newStatus
-
-	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
-	// the CustomResourceSubresources feature will be available.
-	err := r.client.Update(r.ctx, updatedCsl)
-
-	return updatedCsl, err
 }
 
 func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloadsv1alpha1.ConsoleStatus {
@@ -359,4 +333,21 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloads
 
 func isJobExpired(csl *workloadsv1alpha1.Console) bool {
 	return csl.Status.ExpiryTime != nil && csl.Status.ExpiryTime.Time.Before(time.Now())
+}
+
+// jobDiff is a reconcile.DiffFunc for Jobs
+func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Outcome {
+	expected := expectedObj.(*batchv1.Job)
+	existing := existingObj.(*batchv1.Job)
+
+	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
+		// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
+		// it has set (for example, the controller-uid label). To avoid this we only update
+		// the pod template spec.
+		existing.Spec.Template.Spec = expected.Spec.Template.Spec
+
+		return reconcile.Update
+	}
+
+	return reconcile.None
 }

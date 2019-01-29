@@ -99,7 +99,7 @@ func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 	// This is temporarily disabled as our logs don't pass k8s event validation
 	// logger = logging.WithRecorder(logger, c.recorder, csl)
 
-	reconciler := &Reconciler{
+	reconciler := &reconciler{
 		ctx:     c.ctx,
 		logger:  logger,
 		client:  c.client,
@@ -113,7 +113,7 @@ func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 	return result, err
 }
 
-type Reconciler struct {
+type reconciler struct {
 	ctx     context.Context
 	logger  kitlog.Logger
 	client  client.Client
@@ -121,7 +121,7 @@ type Reconciler struct {
 	console *workloadsv1alpha1.Console
 }
 
-func (r *Reconciler) Reconcile() (res k8rec.Result, err error) {
+func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 	// Fetch the console template
 	consoleTemplateName := types.NamespacedName{
 		Name:      r.console.Spec.ConsoleTemplateRef.Name,
@@ -211,7 +211,7 @@ func (r *Reconciler) Reconcile() (res k8rec.Result, err error) {
 	return res, err
 }
 
-func (r *Reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
+func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
 	if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func (r *Reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string,
 	return nil
 }
 
-func (r *Reconciler) updateStatus(job *batchv1.Job) error {
+func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	newStatus := calculateStatus(r.console, job)
 
 	// If there's no changes in status, don't unnecessarily update the object.

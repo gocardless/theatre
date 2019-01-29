@@ -32,6 +32,10 @@ func (c *FakeWorkloadsV1alpha1) Consoles(namespace string) v1alpha1.ConsoleInter
 	return &FakeConsoles{c, namespace}
 }
 
+func (c *FakeWorkloadsV1alpha1) ConsoleTemplates(namespace string) v1alpha1.ConsoleTemplateInterface {
+	return &FakeConsoleTemplates{c, namespace}
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeWorkloadsV1alpha1) RESTClient() rest.Interface {

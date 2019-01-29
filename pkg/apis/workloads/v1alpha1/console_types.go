@@ -54,6 +54,7 @@ type ConsoleList struct {
 	Items []Console `json:"items"`
 }
 
+// +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ConsoleTemplate declares a console template that can be instantiated through a Console object

@@ -28,6 +28,7 @@ import (
 type WorkloadsV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConsolesGetter
+	ConsoleTemplatesGetter
 }
 
 // WorkloadsV1alpha1Client is used to interact with features provided by the workloads.crd.gocardless.com group.
@@ -37,6 +38,10 @@ type WorkloadsV1alpha1Client struct {
 
 func (c *WorkloadsV1alpha1Client) Consoles(namespace string) ConsoleInterface {
 	return newConsoles(c, namespace)
+}
+
+func (c *WorkloadsV1alpha1Client) ConsoleTemplates(namespace string) ConsoleTemplateInterface {
+	return newConsoleTemplates(c, namespace)
 }
 
 // NewForConfig creates a new WorkloadsV1alpha1Client for the given config.

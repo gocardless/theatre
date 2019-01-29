@@ -26,6 +26,8 @@ import (
 type Interface interface {
 	// Consoles returns a ConsoleInformer.
 	Consoles() ConsoleInformer
+	// ConsoleTemplates returns a ConsoleTemplateInformer.
+	ConsoleTemplates() ConsoleTemplateInformer
 }
 
 type version struct {
@@ -42,4 +44,9 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // Consoles returns a ConsoleInformer.
 func (v *version) Consoles() ConsoleInformer {
 	return &consoleInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// ConsoleTemplates returns a ConsoleTemplateInformer.
+func (v *version) ConsoleTemplates() ConsoleTemplateInformer {
+	return &consoleTemplateInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

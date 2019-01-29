@@ -60,6 +60,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		// Group=workloads.crd.gocardless.com, Version=v1alpha1
 	case workloadsv1alpha1.SchemeGroupVersion.WithResource("consoles"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Workloads().V1alpha1().Consoles().Informer()}, nil
+	case workloadsv1alpha1.SchemeGroupVersion.WithResource("consoletemplates"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Workloads().V1alpha1().ConsoleTemplates().Informer()}, nil
 
 	}
 

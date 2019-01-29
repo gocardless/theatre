@@ -344,8 +344,9 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.O
 	}
 
 	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
-		// We don't update the pod template's metadata, as this has already been modified by
-		// k8s and we're not allowed to clobber some of those values.
+		// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
+		// it has set (for example, the controller-uid label). To avoid this we only update
+		// the pod template spec.
 		existing.Spec.Template.Spec = expected.Spec.Template.Spec
 
 		return reconcile.Update

@@ -16,6 +16,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gocardless/theatre/pkg/signals"
+	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -144,12 +145,16 @@ func main() {
 		SetDefaultEventuallyTimeout(time.Minute)
 		SetDefaultEventuallyPollingInterval(100 * time.Millisecond)
 
-		RunSpecs(new(testing.T), "theatre/cmd/acceptance")
+		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
+			os.Exit(0)
+		} else {
+			os.Exit(1)
+		}
 	}
 }
 
 var _ = Specify("Acceptance", func() {
-	// TODO: Accept some stuff here
+	consoleAcceptance.Run(kitlog.NewLogfmtLogger(GinkgoWriter))
 })
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

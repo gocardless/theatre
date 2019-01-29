@@ -69,7 +69,7 @@ jobs:
           command: workspace/bin/acceptance prepare --bin workspace/bin
       - run:
           name: Run acceptance tests
-          command: workspace/bin/acceptance run
+          command: KUBECONFIG="$(kind get kubeconfig-path --name='e2e')" workspace/bin/acceptance run
 
 workflows:
   version: 2

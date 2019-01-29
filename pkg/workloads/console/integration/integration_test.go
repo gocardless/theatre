@@ -242,10 +242,17 @@ var _ = Describe("Console", func() {
 		})
 
 		It("Does not recreate a console once it has expired", func() {
+			By("Expect that a job was created")
+			job := &batchv1.Job{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
 			By("Retrieving latest console object")
 			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
 			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
 
 			By("Updating timeout to trigger console expiration")
@@ -264,14 +271,12 @@ var _ = Describe("Console", func() {
 
 			waitForSuccessfulReconcile(1)
 
-			job := &batchv1.Job{}
+			job = &batchv1.Job{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
 			err = mgr.GetClient().Get(context.TODO(), identifier, job)
 
-			statusError, _ := err.(*errors.StatusError)
 			Expect(err).To(HaveOccurred(), "the job should remain deleted, but it has been recreated")
-			Expect(err).To(BeAssignableToTypeOf(statusError), "error should be an API error")
-			Expect(statusError.Status()).To(MatchFields(IgnoreExtras, Fields{"Code": BeEquivalentTo(404)}))
+			Expect(errors.IsNotFound(err)).To(Equal(true), "a NotFound error was expected, but got a different error")
 		})
 	})
 })

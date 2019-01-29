@@ -90,7 +90,10 @@ func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
 		if errors.IsNotFound(err) {
 			logger.Log("event", EventNotFound, "resource", Console)
 		}
-		return k8rec.Result{}, err
+		// If we can't find the console, no meaningful reconciliation we can do. For example,
+		// the console may have been deleted. We don't want to retry in this case, as we'll be
+		// retrying forever. So just return a successful reconcile result.
+		return k8rec.Result{}, nil
 	}
 
 	// This is temporarily disabled as our logs don't pass k8s event validation
@@ -134,7 +137,8 @@ func (r *Reconciler) Reconcile() (res k8rec.Result, err error) {
 
 	// Try to find the job
 	job := &batchv1.Job{}
-	if err := r.client.Get(r.ctx, r.name, job); err != nil && !errors.IsNotFound(err) {
+	err = r.client.Get(r.ctx, r.name, job)
+	if err != nil && !errors.IsNotFound(err) {
 		return res, err
 	}
 

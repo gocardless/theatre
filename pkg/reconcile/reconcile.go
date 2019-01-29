@@ -25,11 +25,10 @@ type DiffFunc func(runtime.Object, runtime.Object) Operation
 type Operation string
 
 var (
-	Create   Operation = "create"
-	Recreate Operation = "recreate"
-	Update   Operation = "update"
-	None     Operation = "none"
-	Error    Operation = "error"
+	Create Operation = "create"
+	Update Operation = "update"
+	None   Operation = "none"
+	Error  Operation = "error"
 )
 
 // ObjWithMeta describes a Kubernetes resource with a metadata field. It's a combination
@@ -68,14 +67,6 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 
 	op := diffFunc(expected, existing)
 	switch op {
-	case Recreate:
-		if err := c.Delete(ctx, existing); err != nil && !apierror.IsNotFound(err) {
-			return Error, err
-		}
-		if err := c.Create(ctx, expected); err != nil {
-			return Error, err
-		}
-		return Recreate, nil
 	case Update:
 		if err := c.Update(ctx, existing); err != nil {
 			return Error, err
@@ -93,10 +84,6 @@ func RoleDiff(expectedObj runtime.Object, existingObj runtime.Object) Operation 
 	expected := expectedObj.(*rbacv1.Role)
 	existing := existingObj.(*rbacv1.Role)
 
-	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return Recreate
-	}
-
 	if !reflect.DeepEqual(expected.Rules, existing.Rules) {
 		existing.Rules = expected.Rules
 		return Update
@@ -110,10 +97,6 @@ func RoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Ope
 	expected := expectedObj.(*rbacv1.RoleBinding)
 	existing := existingObj.(*rbacv1.RoleBinding)
 	operation := None
-
-	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return Recreate
-	}
 
 	if !reflect.DeepEqual(expected.Subjects, existing.Subjects) {
 		existing.Subjects = expected.Subjects

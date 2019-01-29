@@ -339,9 +339,6 @@ func isJobExpired(csl *workloadsv1alpha1.Console) bool {
 func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Operation {
 	expected := expectedObj.(*batchv1.Job)
 	existing := existingObj.(*batchv1.Job)
-	if expected.ObjectMeta.Name != existing.ObjectMeta.Name {
-		return reconcile.Recreate
-	}
 
 	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
 		// k8s manages the job's metadata, and doesn't allow us to clobber some of the values

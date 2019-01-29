@@ -30,9 +30,9 @@ import (
 )
 
 const (
-	EventStart    = "ReconcileStart"
-	EventComplete = "ReconcileEnd"
-	EventRequeued = "ReconcileRequeued"
+	EventStart    = "Start"
+	EventComplete = "End"
+	EventRequeued = "Requeued"
 	EventFound    = "Found"
 	EventNotFound = "NotFound"
 	EventCreated  = "Created"

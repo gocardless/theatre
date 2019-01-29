@@ -216,12 +216,12 @@ func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string,
 		return err
 	}
 
-	operation, err := reconcile.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
+	outcome, err := reconcile.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
 	if err != nil {
 		return err
 	}
 
-	r.logger.Log("event", operation, "resource", kind)
+	r.logger.Log("event", "CreatedOrUpdated", "outcome", outcome, "resource", kind)
 	return nil
 }
 

@@ -24,7 +24,7 @@ type DiffFunc func(runtime.Object, runtime.Object) Outcome
 // Outcome describes the operation performed by CreateOrUpdate.
 type Outcome string
 
-var (
+const (
 	Create Outcome = "create"
 	Update Outcome = "update"
 	None   Outcome = "none"

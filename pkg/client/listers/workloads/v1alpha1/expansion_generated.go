@@ -25,3 +25,11 @@ type ConsoleListerExpansion interface{}
 // ConsoleNamespaceListerExpansion allows custom methods to be added to
 // ConsoleNamespaceLister.
 type ConsoleNamespaceListerExpansion interface{}
+
+// ConsoleTemplateListerExpansion allows custom methods to be added to
+// ConsoleTemplateLister.
+type ConsoleTemplateListerExpansion interface{}
+
+// ConsoleTemplateNamespaceListerExpansion allows custom methods to be added to
+// ConsoleTemplateNamespaceLister.
+type ConsoleTemplateNamespaceListerExpansion interface{}

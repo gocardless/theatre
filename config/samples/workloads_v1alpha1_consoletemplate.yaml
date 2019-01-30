@@ -21,3 +21,6 @@ spec:
       restartPolicy: Never
 metadata:
   name: console-template-0
+  labels:
+    app: myapp
+    release: myapp-sandbox

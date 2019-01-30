@@ -41,6 +41,7 @@ var _ = Describe("Console", func() {
 		csl                        *workloadsv1alpha1.Console
 		waitForSuccessfulReconcile func(int)
 		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
+		createConsole              func(int)
 	)
 
 	BeforeEach(func() {
@@ -72,22 +73,24 @@ var _ = Describe("Console", func() {
 			HaveOccurred(), "failed to create Console Template",
 		)
 
-		csl = &workloadsv1alpha1.Console{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "console-0",
-				Namespace: namespace,
-			},
-			Spec: workloadsv1alpha1.ConsoleSpec{
-				ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
-				TimeoutSeconds:     3600,
-				User:               "", // deliberately blank: this should be set by the webhook
-			},
-		}
+		createConsole = func(timeout int) {
+			csl = &workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "console-0",
+					Namespace: namespace,
+				},
+				Spec: workloadsv1alpha1.ConsoleSpec{
+					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
+					TimeoutSeconds:     timeout,
+					User:               "", // deliberately blank: this should be set by the webhook
+				},
+			}
 
-		By("Creating console")
-		Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-			HaveOccurred(), "failed to create Console",
-		)
+			By("Creating console")
+			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
+				HaveOccurred(), "failed to create Console",
+			)
+		}
 
 		waitForSuccessfulReconcile = func(times int) {
 			// Wait twice for reconcile: the second reconciliation is triggered due to
@@ -102,8 +105,6 @@ var _ = Describe("Console", func() {
 			}
 			By("Reconcile done")
 		}
-
-		waitForSuccessfulReconcile(2)
 	})
 
 	AfterEach(func() {
@@ -111,7 +112,65 @@ var _ = Describe("Console", func() {
 		teardown()
 	})
 
+	Describe("enforcing valid timeout values", func() {
+		It("Enforces the console template's MaxTimeoutSeconds", func() {
+			By("Creating a console with a timeout > MaxTimeoutSeconds")
+			createConsole(7201)
+
+			waitForSuccessfulReconcile(2)
+
+			By("Expect console has timeout == MaxTimeoutSeconds")
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+			Expect(
+				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7200),
+				"console's timeout does not match template's MaxTimeoutSeconds",
+			)
+		})
+
+		It("Uses the template's DefaultTimeoutSeconds if the template's timeout is zero", func() {
+			By("Creating a console with a timeout of 0")
+			createConsole(0)
+
+			waitForSuccessfulReconcile(2)
+
+			By("Expect console has timeout == MaxTimeoutSeconds")
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+			Expect(
+				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 600),
+				"console's timeout does not match template's DefaultTimeoutSeconds",
+			)
+		})
+
+		It("Keeps the console's timeout if it is valid", func() {
+			By("Creating a console with a timeout > MaxTimeoutSeconds")
+			createConsole(7199)
+
+			waitForSuccessfulReconcile(2)
+
+			By("Expect console has timeout == MaxTimeoutSeconds")
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+			Expect(
+				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7199),
+				"console's timeout does not match template's MaxTimeoutSeconds",
+			)
+		})
+
+		// Negative timeouts are not permitted by the openapi validations, so we don't need to
+		// test that here.
+	})
+
 	Describe("Creating resources", func() {
+		BeforeEach(func() {
+			createConsole(3600)
+			waitForSuccessfulReconcile(2)
+		})
+
 		It("Sets console.spec.user from rbac", func() {
 			By("Expect webhook was invoked")
 			Eventually(whcalls, timeout).Should(
@@ -241,6 +300,8 @@ func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
+			DefaultTimeoutSeconds:    600,
+			MaxTimeoutSeconds:        7200,
 			AdditionalAttachSubjects: []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

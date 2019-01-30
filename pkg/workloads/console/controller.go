@@ -143,8 +143,13 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 		return res, err
 	}
 
+	// Clamp the console timeout
+	if err := r.clampTimeout(consoleTemplate); err != nil {
+		return res, err
+	}
+
 	// Create or update the job
-	job := buildJob(r.name, r.console, consoleTemplate.Spec.Template)
+	job := buildJob(r.name, r.console, consoleTemplate)
 	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 		return res, err
 	}
@@ -210,6 +215,32 @@ func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string,
 	}
 
 	r.logger.Log("resource", kind, "event", "CreateOrUpdate", "outcome", outcome)
+	return nil
+}
+
+// Ensure the console timeout is between [0, template.MaxTimeoutSeconds]
+func (r *reconciler) clampTimeout(template *workloadsv1alpha1.ConsoleTemplate) error {
+	var timeout int
+	switch {
+	case r.console.Spec.TimeoutSeconds < 1:
+		timeout = template.Spec.DefaultTimeoutSeconds
+	case r.console.Spec.TimeoutSeconds > template.Spec.MaxTimeoutSeconds:
+		timeout = template.Spec.MaxTimeoutSeconds
+	default:
+		timeout = r.console.Spec.TimeoutSeconds
+	}
+
+	if timeout == r.console.Spec.TimeoutSeconds {
+		return nil
+	}
+
+	updatedCsl := r.console.DeepCopy()
+	updatedCsl.Spec.TimeoutSeconds = timeout
+	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
+		return err
+	}
+
+	r.console = updatedCsl
 	return nil
 }
 
@@ -314,8 +345,9 @@ func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) k8rec.Re
 	return k8rec.Result{Requeue: true, RequeueAfter: interval}
 }
 
-func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
+func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
+
 	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -324,7 +356,7 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, podTemp
 			Labels:    map[string]string{"user": sanitiseLabel(username)},
 		},
 		Spec: batchv1.JobSpec{
-			Template:              podTemplate,
+			Template:              template.Spec.Template,
 			ActiveDeadlineSeconds: &timeout,
 		},
 	}

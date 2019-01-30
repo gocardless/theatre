@@ -137,6 +137,7 @@ func buildConsoleTemplate() *workloadsv1alpha1.ConsoleTemplate {
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
+			MaxTimeoutSeconds:        60,
 			AdditionalAttachSubjects: []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

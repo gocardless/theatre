@@ -80,6 +80,7 @@ var _ = Describe("Console", func() {
 					Namespace: namespace,
 				},
 				Spec: workloadsv1alpha1.ConsoleSpec{
+					Command:            []string{"bin/rails", "console"},
 					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
 					TimeoutSeconds:     timeout,
 					User:               "", // deliberately blank: this should be set by the webhook
@@ -199,6 +200,18 @@ var _ = Describe("Console", func() {
 			Expect(
 				*job.Spec.ActiveDeadlineSeconds).To(BeNumerically("==", csl.Spec.TimeoutSeconds),
 				"job's ActiveDeadlineSeconds does not match console's timeout",
+			)
+			Expect(
+				job.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"bin/rails", "console"}),
+				"job's command does not match the command in the spec",
+			)
+			Expect(
+				job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
+				"job's first container should have stdin true",
+			)
+			Expect(
+				job.Spec.Template.Spec.Containers[0].TTY).To(BeTrue(),
+				"job's first container should have tty true",
 			)
 		})
 

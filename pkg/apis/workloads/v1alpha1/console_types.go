@@ -43,6 +43,10 @@ type ConsoleSpec struct {
 	// +kubebuilder:validation:Maximum=604800
 	// +optional
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// The command and arguments to execute. If not specified the command from
+	// the template specification will be used.
+	Command []string `json:"command,omitempty"`
 }
 
 // ConsoleStatus defines the status of a created console, populated at runtime

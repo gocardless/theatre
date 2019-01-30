@@ -182,7 +182,7 @@ func buildConsoleTemplate(ttl *int32) *workloadsv1alpha1.ConsoleTemplate {
 						corev1.Container{
 							Image:   "alpine:latest",
 							Name:    "console-container-0",
-							Command: []string{"sleep", "30"},
+							Command: []string{"false"},
 						},
 					},
 					RestartPolicy: "Never",
@@ -199,6 +199,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
+			Command:            []string{"sleep", "30"},
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
 			TimeoutSeconds:     6,
 		},

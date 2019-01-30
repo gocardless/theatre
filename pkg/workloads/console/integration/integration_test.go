@@ -135,6 +135,8 @@ var _ = Describe("Console", func() {
 				"the job's pod runs the same container as specified in the console template",
 			)
 			Expect(
+				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"))
+			Expect(
 				*job.Spec.ActiveDeadlineSeconds).To(BeNumerically("==", csl.Spec.TimeoutSeconds),
 				"job's ActiveDeadlineSeconds does not match console's timeout",
 			)

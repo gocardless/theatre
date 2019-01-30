@@ -22,6 +22,9 @@ var (
 
 var _ = BeforeSuite(func() {
 	cfg, env, clientset = integration.StartAPIServer("../../../../config/crds")
+	cfg.Impersonate = rest.ImpersonationConfig{
+		UserName: "user@example.com",
+	}
 })
 
 var _ = AfterSuite(func() {

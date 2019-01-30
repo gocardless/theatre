@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"reflect"
+	"regexp"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -295,10 +297,12 @@ func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) k8rec.Re
 
 func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
+	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
+			Labels:    map[string]string{"user": sanitiseLabel(username)},
 		},
 		Spec: batchv1.JobSpec{
 			Template:              podTemplate,
@@ -359,4 +363,13 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.O
 	}
 
 	return operation
+}
+
+// Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?
+// We don't bother with the first and last character sanitisation here - just anything
+// dodgy in the middle.
+// This is mostly so that, in tests, we correctly handle the system:unsecured user.
+
+func sanitiseLabel(l string) string {
+	return regexp.MustCompile("[^A-z0-9\\-_.]").ReplaceAllString(l, "-")
 }

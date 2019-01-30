@@ -41,8 +41,20 @@ type ConsoleSpec struct {
 type ConsoleStatus struct {
 	PodName    string       `json:"podName"`
 	ExpiryTime *metav1.Time `json:"expiryTime,omitempty"`
-	Phase      string       `json:"phase"`
+	Phase      ConsolePhase `json:"phase"`
 }
+
+type ConsolePhase string
+
+// These are valid phases for a console
+const (
+	// ConsolePending means the console has been created but its pod is not yet ready
+	ConsolePending ConsolePhase = "Pending"
+	// ConsoleRunning means the pod has started and is running
+	ConsoleRunning ConsolePhase = "Running"
+	// ConsoleStopped means the console has completed or timed out
+	ConsoleStopped ConsolePhase = "Stopped"
+)
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

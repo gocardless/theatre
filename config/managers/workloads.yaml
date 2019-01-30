@@ -17,6 +17,14 @@ rules:
     verbs:
       - "*"
   - apiGroups:
+      - ""
+    resources:
+      - "pods"
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
       - rbac.authorization.k8s.io
     resources:
       - roles

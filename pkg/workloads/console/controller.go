@@ -135,29 +135,10 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 		return res, err
 	}
 
-	// Try to find the job
-	job := &batchv1.Job{}
-	err = r.client.Get(r.ctx, r.name, job)
-	if err != nil && !errors.IsNotFound(err) {
+	// Create or update the job
+	job := buildJob(r.name, r.console, consoleTemplate.Spec.Template)
+	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 		return res, err
-	}
-
-	jobExists := err != nil && !errors.IsNotFound(err)
-
-	// If the job hasn't expired, ensure it exists and is up to date
-	if !isJobExpired(r.console) {
-		job = buildJob(r.name, consoleTemplate.Spec.Template)
-		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
-			return res, err
-		}
-		jobExists = true
-	} else {
-		r.logger.Log(
-			"event", EventExpired,
-			"resource", Job,
-			"name", r.name.Name,
-			"msg", "Not creating new job for expired console",
-		)
 	}
 
 	// Create or update the role
@@ -180,28 +161,6 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 	// has been updated
 	if err = r.updateStatus(job); err != nil {
 		return res, err
-	}
-
-	// Terminate if necessary
-	if jobExists && isJobExpired(r.console) {
-		r.logger.Log("event", EventExpired, "kind", Job, "resource", r.name)
-
-		err = r.client.Delete(
-			r.ctx,
-			job,
-			client.PropagationPolicy(metav1.DeletePropagationBackground),
-		)
-		if err != nil {
-			// If we fail to delete then the reconciliation will be retried
-			return res, err
-		}
-
-		r.logger.Log("event", EventDeleted, "kind", Job, "resource", r.name)
-	}
-
-	if !isJobExpired(r.console) {
-		// Requeue a reconciliation for when we expect the console expiry to fire
-		res = requeueForExpiration(r.logger, r.console.Status)
 	}
 
 	// TODO:
@@ -247,14 +206,16 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	return nil
 }
 
-func buildJob(name types.NamespacedName, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
+func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, podTemplate corev1.PodTemplateSpec) *batchv1.Job {
+	timeout := int64(csl.Spec.TimeoutSeconds)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
 		},
 		Spec: batchv1.JobSpec{
-			Template: podTemplate,
+			Template:              podTemplate,
+			ActiveDeadlineSeconds: &timeout,
 		},
 	}
 }
@@ -291,24 +252,6 @@ func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []r
 	}
 }
 
-func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) k8rec.Result {
-	// Requeue after the expiry is hit. Add a second to be on the safe side,
-	// ensuring that we'll always re-reconcile *after* the expiry time has been
-	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
-	requeueTime := status.ExpiryTime.Time.Add(time.Second)
-	sleepDuration := requeueTime.Sub(time.Now())
-
-	res := k8rec.Result{}
-	res.RequeueAfter = sleepDuration
-
-	logger.Log(
-		"event", EventRequeued,
-		"reconcile_at", requeueTime,
-	)
-
-	return res
-}
-
 func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloadsv1alpha1.ConsoleStatus {
 	newStatus := csl.DeepCopy().Status
 
@@ -331,19 +274,15 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job) workloads
 	return newStatus
 }
 
-func isJobExpired(csl *workloadsv1alpha1.Console) bool {
-	return csl.Status.ExpiryTime != nil && csl.Status.ExpiryTime.Time.Before(time.Now())
-}
-
 // jobDiff is a reconcile.DiffFunc for Jobs
 func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Outcome {
 	expected := expectedObj.(*batchv1.Job)
 	existing := existingObj.(*batchv1.Job)
 
-	if !reflect.DeepEqual(expected.Spec.Template, existing.Spec.Template) {
-		// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
-		// it has set (for example, the controller-uid label). To avoid this we only update
-		// the pod template spec.
+	// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
+	// it has set (for example, the controller-uid label). To avoid this we only update
+	// the pod template spec.
+	if !reflect.DeepEqual(expected.Spec.Template.Spec, existing.Spec.Template.Spec) {
 		existing.Spec.Template.Spec = expected.Spec.Template.Spec
 
 		return reconcile.Update

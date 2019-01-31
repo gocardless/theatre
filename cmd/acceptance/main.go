@@ -34,7 +34,8 @@ var (
 	destroy     = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 	destroyName = destroy.Flag("name", "Name of Kubernetes context to destroy").Default("e2e").String()
 
-	run = app.Command("run", "Runs the acceptance test suite")
+	run     = app.Command("run", "Runs the acceptance test suite")
+	runName = run.Flag("name", "Name of Kubernetes context to against").Default("e2e").String()
 )
 
 // AcceptanceDockerfile defines the docker instructions used to create an acceptance
@@ -154,7 +155,16 @@ func main() {
 }
 
 var _ = Specify("Acceptance", func() {
-	consoleAcceptance.Run(kitlog.NewLogfmtLogger(GinkgoWriter))
+	ctx, cancel := signals.SetupSignalHandler()
+	defer cancel()
+
+	cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", *runName).Output()
+	cfgPath := string(bytes.TrimSpace(cfgPathBytes))
+	if err != nil {
+		app.Fatalf("failed to discover kind cluster config path: %v", err)
+	}
+
+	consoleAcceptance.Run(kitlog.NewLogfmtLogger(GinkgoWriter), cfgPath)
 })
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

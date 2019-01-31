@@ -12,18 +12,18 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const namespace = "default"
 const consoleName = "console-0"
 
-func Run(logger kitlog.Logger) {
+func Run(logger kitlog.Logger, kubeConfigPath string) {
 	Describe("Consoles", func() {
 		logger.Log("msg", "starting test")
 
-		config := config.GetConfigOrDie()
-		Expect(config).NotTo(BeNil(), "could not construct kubernetes config")
+		config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+		Expect(err).NotTo(HaveOccurred(), "could not construct kubernetes config")
 
 		// Construct a client for the workloads API Group
 		workloadsClientSet, err := versioned.NewForConfig(config)

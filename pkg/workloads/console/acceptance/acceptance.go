@@ -17,6 +17,7 @@ import (
 
 const namespace = "default"
 const consoleName = "console-0"
+const templateName = "console-template-0"
 
 func Run(logger kitlog.Logger, kubeConfigPath string) {
 	Describe("Consoles", func() {
@@ -98,14 +99,26 @@ func Run(logger kitlog.Logger, kubeConfigPath string) {
 
 		By("Expect that the job still exists")
 		_, err = core.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
-		Expect(err).To(BeNil(), "could not find job")
+		Expect(err).NotTo(HaveOccurred(), "could not find job")
+
+		By("Delete the console template")
+		policy := metav1.DeletePropagationForeground
+		err = workloads.ConsoleTemplates(namespace).
+			Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+		Expect(err).NotTo(HaveOccurred(), "could not delete console template")
+
+		By("Expect that the console no longer exists")
+		Eventually(func() error {
+			_, err = workloads.Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+			return err
+		}).Should(HaveOccurred(), "expected not to find console, but did")
 	})
 }
 
 func buildConsoleTemplate() *workloadsv1alpha1.ConsoleTemplate {
 	return &workloadsv1alpha1.ConsoleTemplate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "console-template-0",
+			Name:      templateName,
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
@@ -133,7 +146,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
-			ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
+			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
 			TimeoutSeconds:     5,
 		},
 	}

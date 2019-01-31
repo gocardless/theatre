@@ -42,6 +42,17 @@ spec:
               maximum: 604800
               minimum: 0
               type: integer
+            defaultTtlSecondsAfterFinished:
+              description:
+                Specifies the TTL for any Console created with this template.
+                If set, the Console will be eligible for garbage collection ConsoleTTLSecondsAfterFinished
+                seconds after it enters the Stopped phase. If not set, this value
+                defaults to 24 hours. This field is modeled closely on the TTL mechanism
+                in Kubernetes 1.12.
+              format: int32
+              maximum: 604800
+              minimum: 0
+              type: integer
             maxTimeoutSeconds:
               description:
                 Maximum time, in seconds, that a Console can be created

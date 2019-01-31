@@ -41,12 +41,16 @@ const (
 	EventExpired  = "Expired"
 	EventDeleted  = "Deleted"
 	EventError    = "Error"
+	EventSetOwner = "SetOwner"
+	EventSetTTL   = "SetTTL"
 
 	Job             = "Job"
 	Console         = "Console"
 	ConsoleTemplate = "ConsoleTemplate"
 	Role            = "Role"
 	RoleBinding     = "RoleBinding"
+
+	DefaultTTL = 24 * time.Hour
 )
 
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
@@ -139,7 +143,12 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	if err := r.SetConsoleOwner(consoleTemplate); err != nil {
+	if err := r.setConsoleOwner(consoleTemplate); err != nil {
+		return res, err
+	}
+
+	// Set the TTL of the console
+	if err := r.setConsoleTTL(consoleTemplate); err != nil {
 		return res, err
 	}
 
@@ -177,30 +186,67 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 	}
 
 	// Requeue reconciliation if the status may change
-	switch r.console.Status.Phase {
-	case workloadsv1alpha1.ConsolePending:
+	switch {
+	case r.console.Pending():
 		res = requeueAfterInterval(r.logger, time.Second)
-	case workloadsv1alpha1.ConsoleRunning:
+	case r.console.Running():
 		res = requeueForExpiration(r.logger, r.console.Status)
+	case r.console.Stopped():
+		// Requeue for when the console needs to be deleted
+		// In the future we could allow this to be configured in the template
+		res = requeueAfterInterval(r.logger, r.console.TTLDuration())
 	}
 
-	// TODO:
-	//   GC the terminated console if necessary
+	if r.console.EligibleForGC() {
+		r.logger.Log("event", EventDeleted, "resource", Console)
+		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			return res, err
+		}
+		res = k8rec.Result{Requeue: false}
+	}
 
 	r.logger.Log("event", EventComplete)
 	return res, err
 }
 
-func (r *reconciler) SetConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
+func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
 	updatedCsl := r.console.DeepCopy()
 	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
 		return err
+	}
+
+	if reflect.DeepEqual(r.console.ObjectMeta, updatedCsl.ObjectMeta) {
+		return nil
 	}
 	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
 		return err
 	}
 
 	r.console = updatedCsl
+	r.logger.Log("resource", Console, "event", EventSetOwner, "owner", consoleTemplate.ObjectMeta.Name)
+	return nil
+}
+
+func (r *reconciler) setConsoleTTL(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
+	if r.console.Spec.TTLSecondsAfterFinished != nil {
+		return nil
+	}
+
+	updatedCsl := r.console.DeepCopy()
+	defaultTTL := int32(DefaultTTL.Seconds())
+
+	if consoleTemplate.Spec.DefaultTTLSecondsAfterFinished != nil {
+		updatedCsl.Spec.TTLSecondsAfterFinished = consoleTemplate.Spec.DefaultTTLSecondsAfterFinished
+	} else {
+		updatedCsl.Spec.TTLSecondsAfterFinished = &defaultTTL
+	}
+
+	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
+		return err
+	}
+
+	r.console = updatedCsl
+	r.logger.Log("resource", Console, "event", EventSetTTL, "ttl", updatedCsl.Spec.TTLSecondsAfterFinished)
 	return nil
 }
 

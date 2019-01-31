@@ -9,6 +9,7 @@ spec:
       name: bar@example.com
   defaultTimeoutSeconds: 300
   maxTimeoutSeconds: 300
+  defaultTtlSecondsAfterFinished: 30
   template:
     spec:
       containers:

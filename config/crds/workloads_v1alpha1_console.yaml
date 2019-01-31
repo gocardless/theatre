@@ -46,6 +46,16 @@ spec:
               maximum: 604800
               minimum: 0
               type: integer
+            ttlSecondsAfterFinished:
+              description:
+                Specifies the TTL for this Console. The Console will be
+                eligible for garbage collection ConsoleTTLSecondsAfterFinished seconds
+                after it enters the Stopped phase. This field is modeled on the TTL
+                mechanism in Kubernetes 1.12.
+              format: int32
+              maximum: 604800
+              minimum: 0
+              type: integer
             user:
               type: string
           required:

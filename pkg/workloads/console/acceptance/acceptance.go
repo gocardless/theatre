@@ -46,99 +46,136 @@ func newClient(kubeConfigPath string) clientset {
 
 func Run(logger kitlog.Logger, kubeConfigPath string) {
 	Describe("Consoles", func() {
-		logger.Log("msg", "starting test")
+		var client clientset
 
-		client := newClient(kubeConfigPath)
+		BeforeEach(func() {
+			logger.Log("msg", "starting test")
 
-		// Wait for MutatingWebhookConfig to be created
-		Eventually(func() bool {
-			_, err := client.Admissionregistration().MutatingWebhookConfigurations().Get("theatre-workloads", metav1.GetOptions{})
-			if err != nil {
-				logger.Log("error", err)
-				return false
-			}
-			return true
-		}).Should(Equal(true))
+			client = newClient(kubeConfigPath)
 
-		// Create a console template
-		template := buildConsoleTemplate()
-		template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
-		Expect(err).NotTo(HaveOccurred(), "could not create console template")
+			// Wait for MutatingWebhookConfig to be created
+			Eventually(func() bool {
+				_, err := client.Admissionregistration().MutatingWebhookConfigurations().Get("theatre-workloads", metav1.GetOptions{})
+				if err != nil {
+					logger.Log("error", err)
+					return false
+				}
+				return true
+			}).Should(Equal(true))
+		})
 
-		// Create a console
-		console := buildConsole()
-		console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
-		Expect(err).NotTo(HaveOccurred(), "could not create console")
+		Specify("Happy path", func() {
+			By("Create a console template")
+			var ttl int32 = 10
+			template := buildConsoleTemplate(&ttl)
+			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
-		By("Expect a console has been created")
-		_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
-		Expect(err).NotTo(HaveOccurred(), "could not find console")
+			By("Create a console")
+			console := buildConsole()
+			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
-		By("Expect a job has been created")
-		Eventually(func() error {
+			defer func() {
+				By("(cleanup) Delete the console template")
+				policy := metav1.DeletePropagationForeground
+				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
+					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
+
+				Eventually(func() error {
+					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+					return err
+				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
+			}()
+
+			By("Expect a job has been created")
+			Eventually(func() error {
+				_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).ShouldNot(HaveOccurred(), "could not find job")
+
+			By("Expect a pod has been created")
+			Eventually(func() ([]corev1.Pod, error) {
+				opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
+				podList, err := client.CoreV1().Pods(namespace).List(opts)
+				return podList.Items, err
+			}).Should(HaveLen(1), "expected to find a single pod")
+
+			By("Expect the console phase is Running")
+			Eventually(func() workloadsv1alpha1.ConsolePhase {
+				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred(), "could not find console")
+				return console.Status.Phase
+			}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
+
+			By("Expect the console phase eventually changes to Stopped")
+			Eventually(func() workloadsv1alpha1.ConsolePhase {
+				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred(), "could not find console")
+				return console.Status.Phase
+			}, 8*time.Second).Should(Equal(workloadsv1alpha1.ConsoleStopped))
+
+			// TODO: attach to pod
+
+			By("Expect that the job still exists")
 			_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
-			return err
-		}).ShouldNot(HaveOccurred(), "could not find job")
+			Expect(err).NotTo(HaveOccurred(), "could not find job")
 
-		By("Expect a pod has been created")
-		Eventually(func() ([]corev1.Pod, error) {
-			opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
-			podList, err := client.CoreV1().Pods(namespace).List(opts)
-			return podList.Items, err
-		}).Should(HaveLen(1), "expected to find a single pod")
+			By("Expect that the console is deleted shortly after stopping, due to its TTL")
+			Eventually(func() error {
+				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
 
-		By("Expect the console phase is Running")
-		Eventually(func() workloadsv1alpha1.ConsolePhase {
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred(), "could not find console")
-			return console.Status.Phase
-		}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
+			By("Expect that the pod eventually terminates")
+			Eventually(func() int {
+				opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
+				podList, _ := client.CoreV1().Pods(namespace).List(opts)
+				return len(podList.Items)
+			}).Should(Equal(0), "pod did not get deleted")
+		})
 
-		By("Expect the console phase eventually changes to Stopped")
-		timeout := 7 * time.Second
-		pollInterval := time.Second
-		Eventually(func() workloadsv1alpha1.ConsolePhase {
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred(), "could not find console")
-			return console.Status.Phase
-		}, timeout, pollInterval).Should(Equal(workloadsv1alpha1.ConsoleStopped))
+		Specify("Deleting a console template", func() {
+			By("Create a console template")
+			template := buildConsoleTemplate(nil)
+			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
-		// TODO: attach to pod
+			By("Create a console")
+			console := buildConsole()
+			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
-		By("Expect that the pod eventually gets terminated")
-		Eventually(func() int {
-			opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
-			podList, _ := client.CoreV1().Pods(namespace).List(opts)
-			return len(podList.Items)
-		}).Should(Equal(0), "pod did not get deleted")
-
-		By("Expect that the job still exists")
-		_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
-		Expect(err).NotTo(HaveOccurred(), "could not find job")
-
-		By("Delete the console template")
-		policy := metav1.DeletePropagationForeground
-		err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-			Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-		Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-		By("Expect that the console no longer exists")
-		Eventually(func() error {
+			By("Expect a console has been created")
 			_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
-			return err
-		}).Should(HaveOccurred(), "expected not to find console, but did")
+			Expect(err).NotTo(HaveOccurred(), "could not find console")
+
+			By("Delete the console template")
+			policy := metav1.DeletePropagationForeground
+			err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
+				Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+			Expect(err).NotTo(HaveOccurred(), "could not delete console template")
+
+			By("Expect that the console no longer exists")
+			Eventually(func() error {
+				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).Should(HaveOccurred(), "expected not to find console, but did")
+		})
 	})
 }
 
-func buildConsoleTemplate() *workloadsv1alpha1.ConsoleTemplate {
+func buildConsoleTemplate(ttl *int32) *workloadsv1alpha1.ConsoleTemplate {
 	return &workloadsv1alpha1.ConsoleTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      templateName,
 			Namespace: namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			MaxTimeoutSeconds:        60,
-			AdditionalAttachSubjects: []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
+			MaxTimeoutSeconds:              60,
+			DefaultTTLSecondsAfterFinished: ttl,
+			AdditionalAttachSubjects:       []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -163,7 +200,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
-			TimeoutSeconds:     5,
+			TimeoutSeconds:     6,
 		},
 	}
 }

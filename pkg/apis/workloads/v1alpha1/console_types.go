@@ -35,6 +35,14 @@ type ConsoleSpec struct {
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
 
 	ConsoleTemplateRef corev1.LocalObjectReference `json:"consoleTemplateRef"`
+
+	// Specifies the TTL for this Console. The Console will be eligible for garbage
+	// collection ConsoleTTLSecondsAfterFinished seconds after it enters the Stopped phase.
+	// This field is modeled on the TTL mechanism in Kubernetes 1.12.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=604800
+	// +optional
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
 }
 
 // ConsoleStatus defines the status of a created console, populated at runtime
@@ -93,6 +101,15 @@ type ConsoleTemplateSpec struct {
 	// +kubebuilder:validation:Maximum=604800
 	MaxTimeoutSeconds        int              `json:"maxTimeoutSeconds"`
 	AdditionalAttachSubjects []rbacv1.Subject `json:"additionalAttachSubjects,omitempty"`
+
+	// Specifies the TTL for any Console created with this template. If set, the Console
+	// will be eligible for garbage collection ConsoleTTLSecondsAfterFinished seconds after
+	// it enters the Stopped phase. If not set, this value defaults to 24 hours.
+	// This field is modeled closely on the TTL mechanism in Kubernetes 1.12.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=604800
+	DefaultTTLSecondsAfterFinished *int32 `json:"defaultTtlSecondsAfterFinished,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -30,7 +30,7 @@ func (in *Console) DeepCopyInto(out *Console) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
-	out.Spec = in.Spec
+	in.Spec.DeepCopyInto(&out.Spec)
 	in.Status.DeepCopyInto(&out.Status)
 	return
 }
@@ -90,6 +90,11 @@ func (in *ConsoleList) DeepCopyObject() runtime.Object {
 func (in *ConsoleSpec) DeepCopyInto(out *ConsoleSpec) {
 	*out = *in
 	out.ConsoleTemplateRef = in.ConsoleTemplateRef
+	if in.TTLSecondsAfterFinished != nil {
+		in, out := &in.TTLSecondsAfterFinished, &out.TTLSecondsAfterFinished
+		*out = new(int32)
+		**out = **in
+	}
 	return
 }
 
@@ -191,6 +196,11 @@ func (in *ConsoleTemplateSpec) DeepCopyInto(out *ConsoleTemplateSpec) {
 		in, out := &in.AdditionalAttachSubjects, &out.AdditionalAttachSubjects
 		*out = make([]v1.Subject, len(*in))
 		copy(*out, *in)
+	}
+	if in.DefaultTTLSecondsAfterFinished != nil {
+		in, out := &in.DefaultTTLSecondsAfterFinished, &out.DefaultTTLSecondsAfterFinished
+		*out = new(int32)
+		**out = **in
 	}
 	return
 }

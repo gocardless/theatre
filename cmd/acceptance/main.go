@@ -16,6 +16,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gocardless/theatre/pkg/signals"
+	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -33,7 +34,8 @@ var (
 	destroy     = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 	destroyName = destroy.Flag("name", "Name of Kubernetes context to destroy").Default("e2e").String()
 
-	run = app.Command("run", "Runs the acceptance test suite")
+	run     = app.Command("run", "Runs the acceptance test suite")
+	runName = run.Flag("name", "Name of Kubernetes context to against").Default("e2e").String()
 )
 
 // AcceptanceDockerfile defines the docker instructions used to create an acceptance
@@ -144,12 +146,25 @@ func main() {
 		SetDefaultEventuallyTimeout(time.Minute)
 		SetDefaultEventuallyPollingInterval(100 * time.Millisecond)
 
-		RunSpecs(new(testing.T), "theatre/cmd/acceptance")
+		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
+			os.Exit(0)
+		} else {
+			os.Exit(1)
+		}
 	}
 }
 
 var _ = Specify("Acceptance", func() {
-	// TODO: Accept some stuff here
+	ctx, cancel := signals.SetupSignalHandler()
+	defer cancel()
+
+	cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", *runName).Output()
+	cfgPath := string(bytes.TrimSpace(cfgPathBytes))
+	if err != nil {
+		app.Fatalf("failed to discover kind cluster config path: %v", err)
+	}
+
+	consoleAcceptance.Run(kitlog.NewLogfmtLogger(GinkgoWriter), cfgPath)
 })
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

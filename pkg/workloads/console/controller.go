@@ -137,6 +137,12 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 		return res, err
 	}
 
+	// Set the template as owner of the console
+	// This means the console will be deleted if the template is deleted
+	if err := r.SetConsoleOwner(consoleTemplate); err != nil {
+		return res, err
+	}
+
 	// Create or update the job
 	job := buildJob(r.name, r.console, consoleTemplate.Spec.Template)
 	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
@@ -178,6 +184,19 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 
 	r.logger.Log("event", EventComplete)
 	return res, err
+}
+
+func (r *reconciler) SetConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
+	updatedCsl := r.console.DeepCopy()
+	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
+		return err
+	}
+	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
+		return err
+	}
+
+	r.console = updatedCsl
+	return nil
 }
 
 func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {

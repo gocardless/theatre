@@ -40,6 +40,7 @@ var _ = Describe("Console", func() {
 		whcalls                    chan integration.HandleCall
 		csl                        *workloadsv1alpha1.Console
 		waitForSuccessfulReconcile func(int)
+		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
 	)
 
 	BeforeEach(func() {
@@ -66,8 +67,8 @@ var _ = Describe("Console", func() {
 		))
 
 		By("Creating console template")
-		consoleTemplate := buildConsoleTemplate(namespace)
-		Expect(mgr.GetClient().Create(context.TODO(), &consoleTemplate)).NotTo(
+		consoleTemplate = buildConsoleTemplate(namespace)
+		Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
 			HaveOccurred(), "failed to create Console Template",
 		)
 
@@ -179,7 +180,7 @@ var _ = Describe("Console", func() {
 				"role rule did not match expectation",
 			)
 
-			By("Expect role is owned by console controller")
+			By("Expect role is owned by console")
 			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 
@@ -201,7 +202,7 @@ var _ = Describe("Console", func() {
 				}),
 			)
 
-			By("Expect rolebinding is owned by console controller")
+			By("Expect rolebinding is owned by console")
 			Expect(rb.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(rb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 		})
@@ -219,11 +220,22 @@ var _ = Describe("Console", func() {
 				"the console expiry time should be after now()",
 			)
 		})
+
+		It("Sets the owner of the console to be the template", func() {
+			By("Retrieving latest console object")
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+
+			By("Expect console is owned by console template")
+			Expect(csl.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(csl.ObjectMeta.OwnerReferences[0].Name).To(Equal(consoleTemplate.ObjectMeta.Name))
+		})
 	})
 })
 
-func buildConsoleTemplate(namespace string) workloadsv1alpha1.ConsoleTemplate {
-	return workloadsv1alpha1.ConsoleTemplate{
+func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
+	return &workloadsv1alpha1.ConsoleTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "console-template-0",
 			Namespace: namespace,

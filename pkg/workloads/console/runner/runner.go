@@ -10,11 +10,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Runner is responsible for managing the lifecycle of a console
 type Runner struct {
-	clientset versioned.Interface
+	kubeClient    kubernetes.Interface
+	theatreClient versioned.Interface
 }
 
 // Options defines the parameters that can be set upon a new console
@@ -32,10 +34,11 @@ type Options struct {
 	// Interactive bool
 }
 
-// New builds a runner, with a given clientset
-func New(clientset versioned.Interface) *Runner {
+// New builds a runner
+func New(coreClient kubernetes.Interface, theatreClient versioned.Interface) *Runner {
 	return &Runner{
-		clientset: clientset,
+		kubeClient:    coreClient,
+		theatreClient: theatreClient,
 	}
 }
 
@@ -61,14 +64,14 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 		},
 	}
 
-	return c.clientset.WorkloadsV1alpha1().Consoles(namespace).Create(csl)
+	return c.theatreClient.WorkloadsV1alpha1().Consoles(namespace).Create(csl)
 }
 
 // FindTemplateBySelector will search for a template matching the given label
 // selector and return errors if none or multiple are found (when the selector
 // is too broad)
 func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) (*workloadsv1alpha1.ConsoleTemplate, error) {
-	client := c.clientset.WorkloadsV1alpha1().ConsoleTemplates(namespace)
+	client := c.theatreClient.WorkloadsV1alpha1().ConsoleTemplates(namespace)
 
 	templates, err := client.List(
 		metav1.ListOptions{
@@ -107,7 +110,7 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 	}
 
 	listOptions := metav1.SingleObject(createdCsl.ObjectMeta)
-	client := c.clientset.WorkloadsV1alpha1().Consoles(createdCsl.Namespace)
+	client := c.theatreClient.WorkloadsV1alpha1().Consoles(createdCsl.Namespace)
 
 	w, err := client.Watch(listOptions)
 	if err != nil {
@@ -158,4 +161,32 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 			)
 		}
 	}
+}
+
+// GetAttachablePod returns an attachable pod for the given console
+func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+	namespace := csl.ObjectMeta.Namespace
+
+	job, err := c.kubeClient.BatchV1().Jobs(namespace).Get(csl.ObjectMeta.Name, metav1.GetOptions{})
+	if err != nil {
+		return pod, errors.Wrap(err, "unable to find job")
+	}
+
+	pods := &corev1.PodList{}
+	opts := metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", job.ObjectMeta.Name)}
+	pods, err = c.kubeClient.CoreV1().Pods(job.ObjectMeta.Namespace).List(opts)
+	if err != nil {
+		return pod, err
+	}
+
+	for _, pod := range pods.Items {
+		for _, c := range pod.Spec.Containers {
+			if c.TTY {
+				return &pod, nil
+			}
+		}
+	}
+
+	return nil, errors.New("no attachable pod found")
 }

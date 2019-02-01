@@ -30,6 +30,13 @@ spec:
           type: object
         spec:
           properties:
+            command:
+              description:
+                The command and arguments to execute. If not specified
+                the command from the template specification will be used.
+              items:
+                type: string
+              type: array
             consoleTemplateRef:
               type: object
             reason:

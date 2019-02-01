@@ -395,6 +395,31 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
 	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
+	jobTemplate := template.Spec.Template.DeepCopy()
+
+	numContainers := len(jobTemplate.Spec.Containers)
+
+	// If there's no containers in the spec then the controller will be emitting
+	// warnings anyway, as the job will be rejected
+	if numContainers > 0 {
+		container := &jobTemplate.Spec.Containers[0]
+
+		// Only replace the template command if one is specified
+		if len(csl.Spec.Command) > 0 {
+			container.Command = csl.Spec.Command
+		}
+
+		// Set these properties to ensure that it's possible to send input to the
+		// container when attaching
+		container.Stdin = true
+		container.TTY = true
+	}
+
+	if numContainers > 1 {
+		// TODO: Emit a warning event that only the first container will have its
+		// command replaced
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -402,7 +427,7 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 			Labels:    map[string]string{"user": sanitiseLabel(username)},
 		},
 		Spec: batchv1.JobSpec{
-			Template:              template.Spec.Template,
+			Template:              *jobTemplate,
 			ActiveDeadlineSeconds: &timeout,
 		},
 	}

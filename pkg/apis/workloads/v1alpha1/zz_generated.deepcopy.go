@@ -95,6 +95,11 @@ func (in *ConsoleSpec) DeepCopyInto(out *ConsoleSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.Command != nil {
+		in, out := &in.Command, &out.Command
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

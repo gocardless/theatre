@@ -5,25 +5,31 @@ import (
 	"time"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned/fake"
+	theatreFake "github.com/gocardless/theatre/pkg/client/clientset/versioned/fake"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 var _ = Describe("Runner", func() {
 	var (
-		clientset   *fake.Clientset
-		runner      *Runner
-		fakeObjects []runtime.Object
-		namespace   = "testns"
+		kubeClient      *fake.Clientset
+		theatreClient   *theatreFake.Clientset
+		runner          *Runner
+		fakeConsoles    []runtime.Object
+		fakeKubeObjects []runtime.Object
+		namespace       = "testns"
 	)
 
 	JustBeforeEach(func() {
-		clientset = fake.NewSimpleClientset(fakeObjects...)
-		runner = New(clientset)
+		theatreClient = theatreFake.NewSimpleClientset(fakeConsoles...)
+		kubeClient = fake.NewSimpleClientset(fakeKubeObjects...)
+		runner = New(kubeClient, theatreClient)
 	})
 
 	Describe("Create", func() {
@@ -55,13 +61,13 @@ var _ = Describe("Runner", func() {
 			})
 
 			It("Creates the console via the clientset", func() {
-				list, err := clientset.WorkloadsV1alpha1().Consoles("").List(metav1.ListOptions{})
+				list, err := theatreClient.WorkloadsV1alpha1().Consoles("").List(metav1.ListOptions{})
 				Expect(err).NotTo(HaveOccurred(), "failed to list consoles")
 				Expect(list.Items).To(HaveLen(1), "only one console should be present")
 			})
 
 			It("Creates the console in the namespace specified", func() {
-				fetchedCsl, err := clientset.WorkloadsV1alpha1().Consoles("").Get("", metav1.GetOptions{})
+				fetchedCsl, err := theatreClient.WorkloadsV1alpha1().Consoles("").Get("", metav1.GetOptions{})
 				Expect(err).NotTo(HaveOccurred(), "failed to get console")
 				Expect(fetchedCsl.Namespace).To(Equal(namespace), "namespace should match the creation namespace")
 			})
@@ -95,7 +101,7 @@ var _ = Describe("Runner", func() {
 
 		Context("With an existing template", func() {
 			BeforeEach(func() {
-				fakeObjects = []runtime.Object{cslTmpl}
+				fakeConsoles = []runtime.Object{cslTmpl}
 			})
 
 			It("Finds a template across all namespaces", func() {
@@ -124,7 +130,7 @@ var _ = Describe("Runner", func() {
 				cslTmpl2 := cslTmpl.DeepCopy()
 				cslTmpl2.Name = "test-template-2"
 				cslTmpl2.Namespace = "other-ns"
-				fakeObjects = []runtime.Object{cslTmpl, cslTmpl2}
+				fakeConsoles = []runtime.Object{cslTmpl, cslTmpl2}
 			})
 
 			It("Succeeds when targeting a single namespace", func() {
@@ -157,7 +163,7 @@ var _ = Describe("Runner", func() {
 			// Ensure we recover, as this is being run in a goroutine
 			defer GinkgoRecover()
 
-			cslInterface := clientset.WorkloadsV1alpha1().Consoles(in.Namespace)
+			cslInterface := theatreClient.WorkloadsV1alpha1().Consoles(in.Namespace)
 			csl, err := cslInterface.Get(in.Name, metav1.GetOptions{})
 			Expect(err).ToNot(HaveOccurred(), "error while retrieving console")
 
@@ -170,7 +176,7 @@ var _ = Describe("Runner", func() {
 
 			BeforeEach(func() {
 				csl.Status.Phase = workloadsv1alpha1.ConsolePending
-				fakeObjects = []runtime.Object{&csl}
+				fakeConsoles = []runtime.Object{&csl}
 			})
 
 			It("Fails with a timeout", func() {
@@ -217,7 +223,7 @@ var _ = Describe("Runner", func() {
 		Context("When console is already running", func() {
 			BeforeEach(func() {
 				csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-				fakeObjects = []runtime.Object{&csl}
+				fakeConsoles = []runtime.Object{&csl}
 			})
 
 			It("Returns successfully", func() {
@@ -233,7 +239,7 @@ var _ = Describe("Runner", func() {
 		Context("When console is already stopped", func() {
 			BeforeEach(func() {
 				csl.Status.Phase = workloadsv1alpha1.ConsoleStopped
-				fakeObjects = []runtime.Object{&csl}
+				fakeConsoles = []runtime.Object{&csl}
 			})
 
 			// TODO - return a proper error
@@ -250,7 +256,7 @@ var _ = Describe("Runner", func() {
 
 		Context("When console does not exist", func() {
 			BeforeEach(func() {
-				fakeObjects = []runtime.Object{}
+				fakeConsoles = []runtime.Object{}
 			})
 
 			It("Fails with a timeout", func() {
@@ -266,7 +272,7 @@ var _ = Describe("Runner", func() {
 				createCsl := func() {
 					defer GinkgoRecover()
 
-					cslInterface := clientset.WorkloadsV1alpha1().Consoles(csl.Namespace)
+					cslInterface := theatreClient.WorkloadsV1alpha1().Consoles(csl.Namespace)
 					createCsl := csl.DeepCopy()
 					createCsl.Status.Phase = workloadsv1alpha1.ConsoleRunning
 					_, err := cslInterface.Create(createCsl)
@@ -283,6 +289,85 @@ var _ = Describe("Runner", func() {
 
 					Expect(err).ToNot(HaveOccurred())
 				})
+			})
+		})
+	})
+
+	Describe("GetAttachablePod", func() {
+		csl := &workloadsv1alpha1.Console{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-console",
+				Namespace: "test-namespace",
+			},
+		}
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      csl.ObjectMeta.Name,
+				Namespace: csl.ObjectMeta.Namespace,
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: csl.ObjectMeta.Namespace,
+				Labels:    map[string]string{"job-name": job.ObjectMeta.Name},
+			},
+		}
+
+		BeforeEach(func() {
+			fakeConsoles = []runtime.Object{csl}
+		})
+
+		Context("When there is no job or pod", func() {
+			BeforeEach(func() {
+				fakeKubeObjects = []runtime.Object{}
+			})
+
+			It("Returns an error", func() {
+				_, err := runner.GetAttachablePod(csl)
+				Expect(err).To(MatchError("unable to find job: jobs.batch \"test-console\" not found"))
+			})
+		})
+
+		Context("When there is a job, but no pod", func() {
+			BeforeEach(func() {
+				fakeKubeObjects = []runtime.Object{job}
+			})
+
+			It("Returns an error", func() {
+				_, err := runner.GetAttachablePod(csl)
+				Expect(err).To(MatchError("no attachable pod found"))
+			})
+		})
+
+		Context("When the pod is not attachable", func() {
+			BeforeEach(func() {
+				fakeKubeObjects = []runtime.Object{job, pod}
+			})
+
+			It("Returns an error", func() {
+				_, err := runner.GetAttachablePod(csl)
+				Expect(err).To(MatchError("no attachable pod found"))
+			})
+		})
+
+		Context("When the pod is attachable", func() {
+			pod2 := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: csl.ObjectMeta.Namespace,
+					Labels:    map[string]string{"job-name": job.ObjectMeta.Name},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{corev1.Container{TTY: true}},
+				},
+			}
+			BeforeEach(func() {
+				fakeKubeObjects = []runtime.Object{job, pod2}
+			})
+
+			It("Returns the pod", func() {
+				returnedPod, err := runner.GetAttachablePod(csl)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(returnedPod).To(Equal(pod2))
 			})
 		})
 	})

@@ -421,6 +421,13 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 		// command replaced
 	}
 
+	// Do not retry console jobs if they fail. There is no guarantee that the
+	// command that the user submits will be idempotent.
+	// This also prevents multiple pods from being spawned by a job, which is
+	// important as other parts of the controller assume there will only ever be
+	// 1 pod per job.
+	backoffLimit := int32(0)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -430,6 +437,7 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 		Spec: batchv1.JobSpec{
 			Template:              *jobTemplate,
 			ActiveDeadlineSeconds: &timeout,
+			BackoffLimit:          &backoffLimit,
 		},
 	}
 }

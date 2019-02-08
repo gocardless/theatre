@@ -210,6 +210,10 @@ var _ = Describe("Console", func() {
 				"job's args does not match the other command elements in the spec",
 			)
 			Expect(
+				*job.Spec.BackoffLimit).To(BeNumerically("==", 0),
+				"job's BackoffLimit is not 0",
+			)
+			Expect(
 				job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
 				"job's first container should have stdin true",
 			)

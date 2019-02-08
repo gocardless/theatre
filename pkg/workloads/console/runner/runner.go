@@ -59,8 +59,7 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 			// If the flag is not provided then the value will default to 0. The controller
 			// should detect this and apply the default timeout that is defined in the template.
 			TimeoutSeconds: opts.Timeout,
-			// TODO: This field is currently missing from the console spec
-			// Command:            c.Cmd,
+			Command:        opts.Cmd,
 		},
 	}
 

@@ -182,7 +182,7 @@ func buildConsoleTemplate(ttl *int32) *workloadsv1alpha1.ConsoleTemplate {
 						corev1.Container{
 							Image:   "alpine:latest",
 							Name:    "console-container-0",
-							Command: []string{"false"},
+							Command: []string{"false", "false", "false"},
 						},
 					},
 					RestartPolicy: "Never",

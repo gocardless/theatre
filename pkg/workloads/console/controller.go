@@ -406,7 +406,8 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 
 		// Only replace the template command if one is specified
 		if len(csl.Spec.Command) > 0 {
-			container.Command = csl.Spec.Command
+			container.Command = csl.Spec.Command[:1]
+			container.Args = csl.Spec.Command[1:]
 		}
 
 		// Set these properties to ensure that it's possible to send input to the

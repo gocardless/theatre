@@ -47,8 +47,12 @@ var _ = Describe("Runner", func() {
 				},
 			}
 
+			cmd := []string{"/bin/rails", "console"}
+			createOptions := Options{}
+			createOptions.Cmd = cmd
+
 			JustBeforeEach(func() {
-				createdCsl, createCslErr = runner.Create(namespace, *cslTmplFixture, Options{})
+				createdCsl, createCslErr = runner.Create(namespace, *cslTmplFixture, createOptions)
 			})
 
 			It("Successfully creates a console", func() {
@@ -58,6 +62,10 @@ var _ = Describe("Runner", func() {
 
 			It("References the template in the returned console spec", func() {
 				Expect(createdCsl.Spec.ConsoleTemplateRef.Name).To(Equal("test"))
+			})
+
+			It("Sets the specified command in the spec", func() {
+				Expect(createdCsl.Spec.Command).To(Equal(cmd))
 			})
 
 			It("Creates the console via the clientset", func() {

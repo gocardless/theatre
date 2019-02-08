@@ -80,7 +80,7 @@ var _ = Describe("Console", func() {
 					Namespace: namespace,
 				},
 				Spec: workloadsv1alpha1.ConsoleSpec{
-					Command:            []string{"bin/rails", "console"},
+					Command:            []string{"bin/rails", "console", "--help"},
 					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
 					TimeoutSeconds:     timeout,
 					User:               "", // deliberately blank: this should be set by the webhook
@@ -202,8 +202,12 @@ var _ = Describe("Console", func() {
 				"job's ActiveDeadlineSeconds does not match console's timeout",
 			)
 			Expect(
-				job.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"bin/rails", "console"}),
-				"job's command does not match the command in the spec",
+				job.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"bin/rails"}),
+				"job's command does not match the first command element in the spec",
+			)
+			Expect(
+				job.Spec.Template.Spec.Containers[0].Args).To(Equal([]string{"console", "--help"}),
+				"job's args does not match the other command elements in the spec",
 			)
 			Expect(
 				job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
@@ -322,7 +326,7 @@ func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
 						corev1.Container{
 							Image:   "alpine:latest",
 							Name:    "console-container-0",
-							Command: []string{"sleep", "100"},
+							Command: []string{"/bin/sh", "-c", "sleep 100"},
 						},
 					},
 					RestartPolicy: "Never",

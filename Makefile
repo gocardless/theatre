@@ -35,7 +35,7 @@ deploy-production:
 	kustomize build config/overlays/production | kubectl apply -f -
 
 clean:
-	rm -rvf dist $(PROG) $(PROG:%=%.linux_amd64)
+	rm -rvf $(PROG) $(PROG:%=%.linux_amd64)
 
 docker-build:
 	docker build -t $(IMAGE):latest .

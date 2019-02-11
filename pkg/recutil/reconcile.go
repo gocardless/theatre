@@ -7,8 +7,9 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/gocardless/theatre/pkg/logging"
+	"github.com/pkg/errors"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,10 +19,12 @@ import (
 )
 
 const (
-	EventStart    = "Start"
-	EventNotFound = "NotFound"
-	EventError    = "Error"
-	EventComplete = "Complete"
+	EventRequestStart = "ReconcileRequestStart"
+	EventNotFound     = "ReconcileNotFound"
+	EventStart        = "ReconcileStart"
+	EventRequeued     = "ReconcileRequeued"
+	EventError        = "ReconcileError"
+	EventComplete     = "ReconcileComplete"
 )
 
 // ObjectReconcileFunc defines the expected interface for the reconciliation of a single
@@ -35,13 +38,25 @@ type ObjectReconcileFunc func(logger kitlog.Logger, request reconcile.Request, o
 func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
 	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
 		logger := kitlog.With(logger, "request", request)
-		logger.Log("event", EventStart, "msg", "starting reconciliation")
+		logger.Log("event", EventRequestStart, "msg", "Reconcile request start")
 
 		defer func() {
 			if err != nil {
-				logger.Log("event", EventError, "error", err)
+				// Conflict errors are typically temporary, caused by something
+				// external to the controller updating the object that is being
+				// reconciled, or the controller's object cache not being up-to-date
+				// (which can occur as a result of an update in a previous
+				// reconciliation).
+				// In these cases the reconciliation will be retried, and we do not
+				// want to pollute the object's events with transient errors which have
+				// no means of avoiding.
+				if apierrors.IsConflict(errors.Cause(err)) {
+					logging.WithNoRecord(logger).Log("event", EventError, "error", err)
+				} else {
+					logger.Log("event", EventError, "error", err)
+				}
 			} else {
-				logger.Log("event", EventComplete, "msg", "completed reconciliation")
+				logger.Log("event", EventComplete, "msg", "Completed reconciliation")
 			}
 
 		}()
@@ -50,7 +65,7 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 		obj := objType.DeepCopyObject()
 
 		if err := mgr.GetClient().Get(ctx, request.NamespacedName, obj); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return res, logger.Log("event", EventNotFound)
 			}
 
@@ -58,6 +73,7 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 		}
 
 		logger = logging.WithRecorder(logger, mgr.GetRecorder("theatre"), obj)
+		logger.Log("event", EventStart, "msg", "Starting reconciliation")
 
 		return inner(logger, request, obj)
 	})
@@ -93,7 +109,7 @@ type ObjWithMeta interface {
 // that the the object exists in the cluster with the correct state. It will use the diff
 // function to determine any differences between the cluster state and the local state and
 // use that to decide how to update it.
-func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, kind string, diffFunc DiffFunc) (Outcome, error) {
+func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, diffFunc DiffFunc) (Outcome, error) {
 	name := types.NamespacedName{
 		Namespace: existing.GetNamespace(),
 		Name:      existing.GetName(),
@@ -101,7 +117,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	expected := existing.(runtime.Object).DeepCopyObject()
 	err := c.Get(ctx, name, existing)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return Error, err
 		}
 		if err := c.Create(ctx, existing); err != nil {

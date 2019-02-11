@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -26,23 +28,29 @@ import (
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
+	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/recutil"
 )
 
 const (
-	EventStart          = "Start"
-	EventComplete       = "End"
-	EventCreateOrUpdate = "CreateOrUpdate"
-	EventRequeued       = "Requeued"
-	EventDeleted        = "Deleted"
-	EventSetOwner       = "SetOwner"
-	EventSetTTL         = "SetTTL"
+	// Resource-level events
 
-	Job             = "Job"
-	Console         = "Console"
-	ConsoleTemplate = "ConsoleTemplate"
-	Role            = "Role"
-	RoleBinding     = "RoleBinding"
+	EventDelete           = "Delete"
+	EventSuccessfulCreate = "SuccessfulCreate"
+	EventSuccessfulUpdate = "SuccessfulUpdate"
+	EventNoCreateOrUpdate = "NoCreateOrUpdate"
+
+	// Warning events
+
+	EventUnknownOutcome       = "UnknownOutcome"
+	EventInvalidSpecification = "InvalidSpecification"
+	EventTemplateUnsupported  = "TemplateUnsupported"
+
+	Job             = "job"
+	Console         = "console"
+	ConsoleTemplate = "consoletemplate"
+	Role            = "role"
+	RoleBinding     = "rolebinding"
 
 	DefaultTTL = 24 * time.Hour
 )
@@ -94,7 +102,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// Fetch console template
 	var tpl *workloadsv1alpha1.ConsoleTemplate
 	if tpl, err = r.getConsoleTemplate(); err != nil {
-		return res, err
+		return res, errors.Wrap(err, "failed to retrieve console template")
 	}
 
 	// Set the template as owner of the console
@@ -114,7 +122,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	// Create or update the job
-	job := buildJob(r.name, r.console, tpl)
+	job := r.buildJob(tpl)
 	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 		return res, err
 	}
@@ -150,7 +158,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	if r.console.EligibleForGC() {
-		r.logger.Log("event", EventDeleted, "resource", Console, "msg", "deleted console")
+		r.logger.Log("event", EventDelete, "kind", Console, "msg", "Deleting expired console")
 		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return res, err
 		}
@@ -173,18 +181,17 @@ func (r *reconciler) getConsoleTemplate() (*workloadsv1alpha1.ConsoleTemplate, e
 func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
 	updatedCsl := r.console.DeepCopy()
 	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
-		return err
+		return errors.Wrap(err, "failed to set controller reference")
 	}
 
 	if reflect.DeepEqual(r.console.ObjectMeta, updatedCsl.ObjectMeta) {
 		return nil
 	}
 	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return err
+		return errors.Wrap(err, "failed to update controller reference")
 	}
 
 	r.console = updatedCsl
-	r.logger.Log("resource", Console, "event", EventSetOwner, "owner", consoleTemplate.ObjectMeta.Name)
 	return nil
 }
 
@@ -203,11 +210,10 @@ func (r *reconciler) setConsoleTTL(consoleTemplate *workloadsv1alpha1.ConsoleTem
 	}
 
 	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return err
+		return errors.Wrap(err, "failed to set TTL")
 	}
 
 	r.console = updatedCsl
-	r.logger.Log("resource", Console, "event", EventSetTTL, "ttl", updatedCsl.Spec.TTLSecondsAfterFinished, "msg", "setting ttl")
 	return nil
 }
 
@@ -216,23 +222,50 @@ func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, d
 		return err
 	}
 
-	outcome, err := recutil.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
+	outcome, err := recutil.CreateOrUpdate(r.ctx, r.client, expected, diffFunc)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "CreateOrUpdate failed")
 	}
 
-	r.logger.Log("resource", kind, "event", EventCreateOrUpdate, "outcome", outcome)
+	// Use the same 'kind: obj-name' format as in the core controllers, when
+	// emitting events.
+	objDesc := fmt.Sprintf("%s: %s", kind, expected.GetName())
+
+	switch outcome {
+	case recutil.Create:
+		r.logger.Log("event", EventSuccessfulCreate, "msg", "Created "+objDesc)
+	case recutil.Update:
+		r.logger.Log("event", EventSuccessfulUpdate, "msg", "Updated "+objDesc)
+	case recutil.None:
+		logging.WithNoRecord(r.logger).Log(
+			"event", EventNoCreateOrUpdate, "msg", "Nothing to do for "+objDesc,
+		)
+	default:
+		// This is only possible in case we implement new outcomes and forget to
+		// add a case here; in which case we should log a warning.
+		r.logger.Log(
+			"event", EventUnknownOutcome,
+			"error", fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc),
+		)
+	}
+
 	return nil
 }
 
 // Ensure the console timeout is between [0, template.MaxTimeoutSeconds]
 func (r *reconciler) clampTimeout(template *workloadsv1alpha1.ConsoleTemplate) error {
 	var timeout int
+	max := template.Spec.MaxTimeoutSeconds
+
 	switch {
 	case r.console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
-	case r.console.Spec.TimeoutSeconds > template.Spec.MaxTimeoutSeconds:
-		timeout = template.Spec.MaxTimeoutSeconds
+	case r.console.Spec.TimeoutSeconds > max:
+		r.logger.Log(
+			"event", EventInvalidSpecification,
+			"error", fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max),
+		)
+		timeout = max
 	default:
 		timeout = r.console.Spec.TimeoutSeconds
 	}
@@ -280,7 +313,7 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
 	// the CustomResourceSubresources feature will be available.
 	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return err
+		return errors.Wrap(err, "failed to update status")
 	}
 
 	r.console = updatedCsl
@@ -337,22 +370,21 @@ func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.Console
 	// ensuring that we'll always re-reconcile *after* the expiry time has been
 	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
 	requeueTime := status.ExpiryTime.Time.Add(time.Second)
-	sleepDuration := requeueTime.Sub(time.Now())
+	sleepDuration := time.Until(requeueTime)
 
-	res := reconcile.Result{}
-	res.RequeueAfter = sleepDuration
-
-	logger.Log("event", EventRequeued, "reconcile_at", requeueTime)
-
-	return res
+	return requeueAfterInterval(logger, sleepDuration)
 }
 
 func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcile.Result {
-	logger.Log("event", EventRequeued, "reconcile_at", interval)
-	return reconcile.Result{Requeue: true, RequeueAfter: interval}
+	logging.WithNoRecord(logger).Log(
+		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
+	)
+	return reconcile.Result{RequeueAfter: interval}
 }
 
-func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
+func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
+	csl := r.console
+
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
 	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
@@ -378,8 +410,10 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 	}
 
 	if numContainers > 1 {
-		// TODO: Emit a warning event that only the first container will have its
-		// command replaced
+		r.logger.Log(
+			"event", EventTemplateUnsupported,
+			"error", "Only the first container in the template will be usable as a console",
+		)
 	}
 
 	// Do not retry console jobs if they fail. There is no guarantee that the
@@ -391,8 +425,8 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name.Name,
-			Namespace: name.Namespace,
+			Name:      r.name.Name,
+			Namespace: r.name.Namespace,
 			Labels:    map[string]string{"user": sanitiseLabel(username)},
 		},
 		Spec: batchv1.JobSpec{
@@ -410,7 +444,7 @@ func buildRole(name types.NamespacedName) *rbacv1.Role {
 			Namespace: name.Namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
-			rbacv1.PolicyRule{
+			{
 				Verbs:         []string{"*"},
 				APIGroups:     []string{"core"},
 				Resources:     []string{"pods/exec"},
@@ -468,5 +502,5 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 // This is mostly so that, in tests, we correctly handle the system:unsecured user.
 
 func sanitiseLabel(l string) string {
-	return regexp.MustCompile("[^A-z0-9\\-_.]").ReplaceAllString(l, "-")
+	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
 }

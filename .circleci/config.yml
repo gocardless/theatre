@@ -28,6 +28,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Install ginkgo test runner
+          command: go get github.com/onsi/ginkgo/ginkgo
+      - run:
           name: Install Kubebuilder test helpers
           command: |
             mkdir /usr/local/kubebuilder
@@ -35,7 +38,7 @@ jobs:
               | tar -xvz --strip=1 -C /usr/local/kubebuilder
       - run:
           name: Run tests
-          command: go test -race -count=1 -v ./...
+          command: ginkgo -race -r -v
 
   build:
     <<: *docker_golang

@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	EventSync     = "Sync"
+	EventStart    = "Start"
 	EventNotFound = "NotFound"
 	EventError    = "Error"
+	EventComplete = "Complete"
 )
 
 // ObjectReconcileFunc defines the expected interface for the reconciliation of a single
@@ -34,12 +35,15 @@ type ObjectReconcileFunc func(logger kitlog.Logger, request reconcile.Request, o
 func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
 	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
 		logger := kitlog.With(logger, "request", request)
-		logger.Log("event", EventSync)
+		logger.Log("event", EventStart, "msg", "starting reconciliation")
 
 		defer func() {
 			if err != nil {
 				logger.Log("event", EventError, "error", err)
+			} else {
+				logger.Log("event", EventComplete, "msg", "completed reconciliation")
 			}
+
 		}()
 
 		// Prepare a new object for this request

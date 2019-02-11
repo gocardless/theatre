@@ -19,13 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	k8rec "sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/gocardless/theatre/pkg/logging"
 	rbacutils "github.com/gocardless/theatre/pkg/rbac"
-	"github.com/gocardless/theatre/pkg/reconcile"
+	"github.com/gocardless/theatre/pkg/recutil"
 )
 
 const (
@@ -53,9 +53,9 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, directo
 	}
 
 	ctrlOptions := controller.Options{
-		Reconciler: reconcile.ResolveAndReconcile(
+		Reconciler: recutil.ResolveAndReconcile(
 			ctx, logger, mgr, &rbacv1alpha1.DirectoryRoleBinding{},
-			func(logger kitlog.Logger, request k8rec.Request, obj runtime.Object) (k8rec.Result, error) {
+			func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
 				return reconciler.ReconcileObject(logger, request, obj.(*rbacv1alpha1.DirectoryRoleBinding))
 			},
 		),
@@ -97,13 +97,13 @@ type Reconciler struct {
 	refreshInterval time.Duration
 }
 
-func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request k8rec.Request, drb *rbacv1alpha1.DirectoryRoleBinding) (res k8rec.Result, err error) {
+func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Request, drb *rbacv1alpha1.DirectoryRoleBinding) (res reconcile.Result, err error) {
 	rb := &rbacv1.RoleBinding{}
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
 	err = r.client.Get(r.ctx, identifier, rb)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return k8rec.Result{}, err
+			return reconcile.Result{}, err
 		}
 
 		rb := &rbacv1.RoleBinding{
@@ -116,11 +116,11 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request k8rec.Request
 		}
 
 		if err := controllerutil.SetControllerReference(drb, rb, scheme.Scheme); err != nil {
-			return k8rec.Result{}, err
+			return reconcile.Result{}, err
 		}
 
 		if err = r.client.Create(r.ctx, rb); err != nil {
-			return k8rec.Result{}, err
+			return reconcile.Result{}, err
 		}
 
 		logger.Log("event", EventRoleBindingCreated, "msg", fmt.Sprintf(
@@ -130,7 +130,7 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request k8rec.Request
 
 	subjects, err := r.resolve(drb.Spec.Subjects)
 	if err != nil {
-		return k8rec.Result{}, err
+		return reconcile.Result{}, err
 	}
 
 	add, remove := rbacutils.Diff(subjects, rb.Subjects), rbacutils.Diff(rb.Subjects, subjects)
@@ -149,11 +149,11 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request k8rec.Request
 
 		rb.Subjects = subjects
 		if err := r.client.Update(r.ctx, rb); err != nil {
-			return k8rec.Result{}, err
+			return reconcile.Result{}, err
 		}
 	}
 
-	return k8rec.Result{RequeueAfter: r.refreshInterval}, nil
+	return reconcile.Result{RequeueAfter: r.refreshInterval}, nil
 }
 
 func (r *Reconciler) membersOf(group string) ([]rbacv1.Subject, error) {

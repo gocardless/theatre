@@ -102,7 +102,8 @@ var _ = Describe("Runner", func() {
 				Name:      "test-template",
 				Namespace: namespace,
 				Labels: map[string]string{
-					"release": "hello-world",
+					"foo": "bar",
+					"baz": "barry",
 				},
 			},
 		}
@@ -113,13 +114,13 @@ var _ = Describe("Runner", func() {
 			})
 
 			It("Finds a template across all namespaces", func() {
-				foundTmpl, err := runner.FindTemplateBySelector(namespace, "release=hello-world")
+				foundTmpl, err := runner.FindTemplateBySelector("foo=bar,baz=barry")
 				Expect(err).NotTo(HaveOccurred(), "unable to find template")
 				Expect(foundTmpl.Name).To(Equal("test-template"), "template should exist")
 			})
 
 			It("Finds a template in a single namespace", func() {
-				foundTmpl, err := runner.FindTemplateBySelector(metav1.NamespaceAll, "release=hello-world")
+				foundTmpl, err := runner.FindTemplateBySelector("foo=bar,baz=barry")
 				Expect(err).NotTo(HaveOccurred(), "unable to find template")
 				Expect(foundTmpl.Name).To(Equal("test-template"), "template should exist")
 			})
@@ -127,7 +128,7 @@ var _ = Describe("Runner", func() {
 
 		Context("When searching for a non-existent template", func() {
 			It("Returns an error", func() {
-				foundTmpl, err := runner.FindTemplateBySelector(namespace, "release=not-here")
+				foundTmpl, err := runner.FindTemplateBySelector("foo=bar,baz=wrong")
 				Expect(err).To(HaveOccurred(), "should be unable to find template")
 				Expect(foundTmpl).To(BeNil(), "result template should be nil")
 			})
@@ -141,13 +142,8 @@ var _ = Describe("Runner", func() {
 				fakeConsoles = []runtime.Object{cslTmpl, cslTmpl2}
 			})
 
-			It("Succeeds when targeting a single namespace", func() {
-				_, err := runner.FindTemplateBySelector(namespace, "release=hello-world")
-				Expect(err).NotTo(HaveOccurred(), "unable to find template")
-			})
-
-			It("Fails when targeting all namespaces", func() {
-				_, err := runner.FindTemplateBySelector(metav1.NamespaceAll, "release=hello-world")
+			It("Fails even though the templates are in different namespaces", func() {
+				_, err := runner.FindTemplateBySelector("foo=bar,baz=barry")
 				Expect(err).To(HaveOccurred(), "expected template collision error")
 				Expect(err.Error()).To(
 					ContainSubstring("found: [testns/test-template other-ns/test-template-2]"),

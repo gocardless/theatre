@@ -69,8 +69,8 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 // FindTemplateBySelector will search for a template matching the given label
 // selector and return errors if none or multiple are found (when the selector
 // is too broad)
-func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) (*workloadsv1alpha1.ConsoleTemplate, error) {
-	client := c.theatreClient.WorkloadsV1alpha1().ConsoleTemplates(namespace)
+func (c *Runner) FindTemplateBySelector(labelSelector string) (*workloadsv1alpha1.ConsoleTemplate, error) {
+	client := c.theatreClient.WorkloadsV1alpha1().ConsoleTemplates(metav1.NamespaceAll)
 
 	templates, err := client.List(
 		metav1.ListOptions{

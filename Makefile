@@ -18,8 +18,9 @@ bin/%.linux_amd64:
 bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/main.go
 
+# go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -v ./...
+	ginkgo -v -r
 
 codegen:
 	vendor/k8s.io/code-generator/generate-groups.sh all \

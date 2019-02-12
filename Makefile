@@ -18,8 +18,9 @@ bin/%.linux_amd64:
 bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/main.go
 
+# go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -v ./...
+	ginkgo -v -r
 
 codegen:
 	vendor/k8s.io/code-generator/generate-groups.sh all \
@@ -34,7 +35,7 @@ deploy-production:
 	kustomize build config/overlays/production | kubectl apply -f -
 
 clean:
-	rm -rvf dist $(PROG) $(PROG:%=%.linux_amd64)
+	rm -rvf $(PROG) $(PROG:%=%.linux_amd64)
 
 docker-build:
 	docker build -t $(IMAGE):latest .

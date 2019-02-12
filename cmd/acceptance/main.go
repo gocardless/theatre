@@ -53,18 +53,14 @@ func init() {
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
+	app.HelpFlag.Short('h')
 }
 
 func main() {
-	parsed, err := app.Parse(os.Args[1:])
-	if err != nil {
-		kingpin.Fatalf("%s, try --help", err)
-	}
-
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	switch parsed {
+	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case prepare.FullCommand():
 		logger = kitlog.With(logger, "clusterName", *prepareName)
 

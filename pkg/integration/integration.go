@@ -44,7 +44,7 @@ func StartAPIServer(crdDirectoryPath string) (*rest.Config, *envtest.Environment
 
 	env := &envtest.Environment{
 		CRDDirectoryPaths:  []string{crdDirectoryPath},
-		KubeAPIServerFlags: kubeAPIServerFlags(),
+		KubeAPIServerFlags: append([]string{"--bind-address", "127.0.0.1"}, kubeAPIServerFlags()...),
 	}
 
 	cfg, err := env.Start()
@@ -112,7 +112,7 @@ func CreateNamespace(clientset *kubernetes.Clientset) (string, func()) {
 
 // StartTestManager generates a new Manager connected to the given cluster configuration.
 func StartTestManager(ctx context.Context, cfg *rest.Config) manager.Manager {
-	mgr, err := manager.New(cfg, manager.Options{})
+	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "127.0.0.1:0"})
 	Expect(err).NotTo(HaveOccurred(), "failed to create test manager")
 
 	go func() {

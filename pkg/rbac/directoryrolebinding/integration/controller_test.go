@@ -56,7 +56,7 @@ func newUser(name string) rbacv1.Subject {
 	}
 }
 
-var _ = Describe("DirectoryRoleBindingReconciler", func() {
+var _ = Describe("Reconciler", func() {
 	var (
 		ctx       context.Context
 		cancel    func()

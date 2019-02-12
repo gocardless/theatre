@@ -10,11 +10,9 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 
 	kitlog "github.com/go-kit/kit/log"
 
@@ -23,26 +21,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	k8rec "sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
-	"github.com/gocardless/theatre/pkg/reconcile"
+	"github.com/gocardless/theatre/pkg/recutil"
 )
 
 const (
-	EventStart    = "Start"
-	EventComplete = "End"
-	EventRequeued = "Requeued"
-	EventFound    = "Found"
-	EventNotFound = "NotFound"
-	EventCreated  = "Created"
-	EventExpired  = "Expired"
-	EventDeleted  = "Deleted"
-	EventError    = "Error"
-	EventSetOwner = "SetOwner"
-	EventSetTTL   = "SetTTL"
+	EventStart          = "Start"
+	EventComplete       = "End"
+	EventCreateOrUpdate = "CreateOrUpdate"
+	EventRequeued       = "Requeued"
+	EventDeleted        = "Deleted"
+	EventSetOwner       = "SetOwner"
+	EventSetTTL         = "SetTTL"
 
 	Job             = "Job"
 	Console         = "Console"
@@ -56,12 +50,20 @@ const (
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "Console")
 	ctrlOptions := controller.Options{
-		Reconciler: &Controller{
-			ctx:      ctx,
-			logger:   logger,
-			recorder: mgr.GetRecorder("Console"),
-			client:   mgr.GetClient(),
-		},
+		Reconciler: recutil.ResolveAndReconcile(
+			ctx, logger, mgr, &workloadsv1alpha1.Console{},
+			func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
+				reconciler := &reconciler{
+					ctx:     ctx,
+					logger:  logger,
+					client:  mgr.GetClient(),
+					console: obj.(*workloadsv1alpha1.Console),
+					name:    request.NamespacedName,
+				}
+
+				return reconciler.Reconcile()
+			},
+		),
 	}
 
 	for _, opt := range opts {
@@ -80,45 +82,6 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 	return ctrl, err
 }
 
-type Controller struct {
-	ctx      context.Context
-	logger   kitlog.Logger
-	recorder record.EventRecorder
-	client   client.Client
-}
-
-func (c *Controller) Reconcile(request k8rec.Request) (k8rec.Result, error) {
-	logger := kitlog.With(c.logger, "request", request)
-	logger.Log("event", EventStart)
-
-	csl := &workloadsv1alpha1.Console{}
-	if err := c.client.Get(c.ctx, request.NamespacedName, csl); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Log("event", EventNotFound, "resource", Console)
-		}
-		// If we can't find the console, there's no meaningful reconciliation we can do. For
-		// example, the console may have been deleted. We don't want to retry in this case, as
-		// we'll be retrying forever. So just return a successful reconcile result.
-		return k8rec.Result{}, nil
-	}
-
-	// This is temporarily disabled as our logs don't pass k8s event validation
-	// logger = logging.WithRecorder(logger, c.recorder, csl)
-
-	reconciler := &reconciler{
-		ctx:     c.ctx,
-		logger:  logger,
-		client:  c.client,
-		name:    request.NamespacedName,
-		console: csl,
-	}
-	result, err := reconciler.Reconcile()
-	if err != nil {
-		logger.Log("event", EventError, "error", err)
-	}
-	return result, err
-}
-
 type reconciler struct {
 	ctx     context.Context
 	logger  kitlog.Logger
@@ -127,55 +90,44 @@ type reconciler struct {
 	console *workloadsv1alpha1.Console
 }
 
-func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
-	// Fetch the console template
-	consoleTemplateName := types.NamespacedName{
-		Name:      r.console.Spec.ConsoleTemplateRef.Name,
-		Namespace: r.name.Namespace,
-	}
-	consoleTemplate := &workloadsv1alpha1.ConsoleTemplate{}
-	if err := r.client.Get(r.ctx, consoleTemplateName, consoleTemplate); err != nil {
-		if errors.IsNotFound(err) {
-			r.logger.Log("event", EventNotFound, "resource", ConsoleTemplate)
-		}
+func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
+	// Fetch console template
+	var tpl *workloadsv1alpha1.ConsoleTemplate
+	if tpl, err = r.getConsoleTemplate(); err != nil {
 		return res, err
 	}
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	if err := r.setConsoleOwner(consoleTemplate); err != nil {
+	if err := r.setConsoleOwner(tpl); err != nil {
 		return res, err
 	}
 
 	// Set the TTL of the console
-	if err := r.setConsoleTTL(consoleTemplate); err != nil {
+	if err := r.setConsoleTTL(tpl); err != nil {
 		return res, err
 	}
 
 	// Clamp the console timeout
-	if err := r.clampTimeout(consoleTemplate); err != nil {
+	if err := r.clampTimeout(tpl); err != nil {
 		return res, err
 	}
 
 	// Create or update the job
-	job := buildJob(r.name, r.console, consoleTemplate)
+	job := buildJob(r.name, r.console, tpl)
 	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 		return res, err
 	}
 
 	// Create or update the role
 	role := buildRole(r.name)
-	if err := r.createOrUpdate(role, Role, reconcile.RoleDiff); err != nil {
+	if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
 		return res, err
 	}
 
 	// Create or update the role binding
-	subjects := append(
-		consoleTemplate.Spec.AdditionalAttachSubjects,
-		rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
-	)
-	rb := buildRoleBinding(r.name, role, subjects)
-	if err := r.createOrUpdate(rb, RoleBinding, reconcile.RoleBindingDiff); err != nil {
+	rb := buildRoleBinding(r.name, role, r.console, tpl)
+	if err := r.createOrUpdate(rb, RoleBinding, recutil.RoleBindingDiff); err != nil {
 		return res, err
 	}
 
@@ -198,15 +150,24 @@ func (r *reconciler) Reconcile() (res k8rec.Result, err error) {
 	}
 
 	if r.console.EligibleForGC() {
-		r.logger.Log("event", EventDeleted, "resource", Console)
+		r.logger.Log("event", EventDeleted, "resource", Console, "msg", "deleted console")
 		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return res, err
 		}
-		res = k8rec.Result{Requeue: false}
+		res = reconcile.Result{Requeue: false}
 	}
 
-	r.logger.Log("event", EventComplete)
 	return res, err
+}
+
+func (r *reconciler) getConsoleTemplate() (*workloadsv1alpha1.ConsoleTemplate, error) {
+	name := types.NamespacedName{
+		Name:      r.console.Spec.ConsoleTemplateRef.Name,
+		Namespace: r.name.Namespace,
+	}
+
+	tpl := &workloadsv1alpha1.ConsoleTemplate{}
+	return tpl, r.client.Get(r.ctx, name, tpl)
 }
 
 func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
@@ -246,21 +207,21 @@ func (r *reconciler) setConsoleTTL(consoleTemplate *workloadsv1alpha1.ConsoleTem
 	}
 
 	r.console = updatedCsl
-	r.logger.Log("resource", Console, "event", EventSetTTL, "ttl", updatedCsl.Spec.TTLSecondsAfterFinished)
+	r.logger.Log("resource", Console, "event", EventSetTTL, "ttl", updatedCsl.Spec.TTLSecondsAfterFinished, "msg", "setting ttl")
 	return nil
 }
 
-func (r *reconciler) createOrUpdate(expected reconcile.ObjWithMeta, kind string, diffFunc reconcile.DiffFunc) error {
+func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, diffFunc recutil.DiffFunc) error {
 	if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
 		return err
 	}
 
-	outcome, err := reconcile.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
+	outcome, err := recutil.CreateOrUpdate(r.ctx, r.client, expected, kind, diffFunc)
 	if err != nil {
 		return err
 	}
 
-	r.logger.Log("resource", kind, "event", "CreateOrUpdate", "outcome", outcome)
+	r.logger.Log("resource", kind, "event", EventCreateOrUpdate, "outcome", outcome)
 	return nil
 }
 
@@ -371,14 +332,14 @@ func calculatePhase(job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.Console
 	return workloadsv1alpha1.ConsolePending
 }
 
-func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) k8rec.Result {
+func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) reconcile.Result {
 	// Requeue after the expiry is hit. Add a second to be on the safe side,
 	// ensuring that we'll always re-reconcile *after* the expiry time has been
 	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
 	requeueTime := status.ExpiryTime.Time.Add(time.Second)
 	sleepDuration := requeueTime.Sub(time.Now())
 
-	res := k8rec.Result{}
+	res := reconcile.Result{}
 	res.RequeueAfter = sleepDuration
 
 	logger.Log("event", EventRequeued, "reconcile_at", requeueTime)
@@ -386,9 +347,9 @@ func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.Console
 	return res
 }
 
-func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) k8rec.Result {
+func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcile.Result {
 	logger.Log("event", EventRequeued, "reconcile_at", interval)
-	return k8rec.Result{Requeue: true, RequeueAfter: interval}
+	return reconcile.Result{Requeue: true, RequeueAfter: interval}
 }
 
 func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
@@ -459,7 +420,12 @@ func buildRole(name types.NamespacedName) *rbacv1.Role {
 	}
 }
 
-func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1.RoleBinding {
+func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl *workloadsv1alpha1.Console, tpl *workloadsv1alpha1.ConsoleTemplate) *rbacv1.RoleBinding {
+	subjects := append(
+		tpl.Spec.AdditionalAttachSubjects,
+		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
+	)
+
 	return &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -475,22 +441,22 @@ func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []r
 }
 
 // jobDiff is a reconcile.DiffFunc for Jobs
-func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) reconcile.Outcome {
+func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Outcome {
 	expected := expectedObj.(*batchv1.Job)
 	existing := existingObj.(*batchv1.Job)
-	operation := reconcile.None
+	operation := recutil.None
 
 	// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
 	// it has set (for example, the controller-uid label). To avoid this we only update
 	// the pod template spec.
 	if !reflect.DeepEqual(expected.Spec.Template.Spec, existing.Spec.Template.Spec) {
 		existing.Spec.Template.Spec = expected.Spec.Template.Spec
-		operation = reconcile.Update
+		operation = recutil.Update
 	}
 
 	if !reflect.DeepEqual(expected.Spec.ActiveDeadlineSeconds, existing.Spec.ActiveDeadlineSeconds) {
 		existing.Spec.ActiveDeadlineSeconds = expected.Spec.ActiveDeadlineSeconds
-		operation = reconcile.Update
+		operation = recutil.Update
 	}
 
 	return operation

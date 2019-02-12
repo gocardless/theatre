@@ -1,17 +1,67 @@
-package reconcile
+package recutil
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 
+	kitlog "github.com/go-kit/kit/log"
+	"github.com/gocardless/theatre/pkg/logging"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apierror "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+const (
+	EventStart    = "Start"
+	EventNotFound = "NotFound"
+	EventError    = "Error"
+	EventComplete = "Complete"
+)
+
+// ObjectReconcileFunc defines the expected interface for the reconciliation of a single
+// object type- it can be used to avoid boilerplate for finding and initializing objects
+// at the start of traditional reconciliation loops.
+type ObjectReconcileFunc func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error)
+
+// ResolveAndReconcile helps avoid boilerplate where you would normally attempt to fetch
+// your modified object at the start of a reconciliation loop, and instead calls an inner
+// reconciliation function with the already resolved object.
+func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
+	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
+		logger := kitlog.With(logger, "request", request)
+		logger.Log("event", EventStart, "msg", "starting reconciliation")
+
+		defer func() {
+			if err != nil {
+				logger.Log("event", EventError, "error", err)
+			} else {
+				logger.Log("event", EventComplete, "msg", "completed reconciliation")
+			}
+
+		}()
+
+		// Prepare a new object for this request
+		obj := objType.DeepCopyObject()
+
+		if err := mgr.GetClient().Get(ctx, request.NamespacedName, obj); err != nil {
+			if errors.IsNotFound(err) {
+				return res, logger.Log("event", EventNotFound)
+			}
+
+			return res, err
+		}
+
+		logger = logging.WithRecorder(logger, mgr.GetRecorder("theatre"), obj)
+
+		return inner(logger, request, obj)
+	})
+}
 
 // DiffFunc takes two Kubernetes resources: expected and existing. Both are assumed to be
 // the same Kind. It compares the two, and returns an Outcome indicating how to
@@ -51,7 +101,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	expected := existing.(runtime.Object).DeepCopyObject()
 	err := c.Get(ctx, name, existing)
 	if err != nil {
-		if !apierror.IsNotFound(err) {
+		if !errors.IsNotFound(err) {
 			return Error, err
 		}
 		if err := c.Create(ctx, existing); err != nil {

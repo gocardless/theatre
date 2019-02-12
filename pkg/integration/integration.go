@@ -103,10 +103,17 @@ func CreateNamespace(clientset *kubernetes.Clientset) (string, func()) {
 	namespace, err := clientset.CoreV1().Namespaces().Create(namespace)
 	Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
+	// We would normally delete the namespace once our tests complete however this upsets
+	// the Kubernetes event recorder who is very async. If it fails to record an event- like
+	// when the target resource namespace has disappeared- it will scream into stderr which
+	// dominates our test output.
+	//
+	// It probably makes sense for us to implement our own event recorder that can be made
+	// synchronous, but this takes effort that is best applied elsewhere until we know for
+	// sure it's worth it.
 	return name, func() {
-		By("Deleting test namespace: " + name)
-		err := clientset.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{})
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
+		/* err := clientset.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{}) */
+		/* Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace") */
 	}
 }
 
@@ -158,7 +165,7 @@ func NewServer(mgr manager.Manager, awhs ...*admission.Webhook) *webhook.Server 
 		BootstrapOptions: &webhook.BootstrapOptions{
 			MutatingWebhookConfigName:   "theatre-integration-webhook",
 			ValidatingWebhookConfigName: "theatre-integration-webhook",
-			Host:                        &localhost,
+			Host: &localhost,
 		},
 	}
 

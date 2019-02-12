@@ -23,5 +23,5 @@ spec:
 metadata:
   name: console-template-0
   labels:
-    app: myapp
-    release: myapp-sandbox
+    repo: myapp-owner-myapp-repo
+    environment: myapp-env

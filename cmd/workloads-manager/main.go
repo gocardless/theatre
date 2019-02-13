@@ -19,6 +19,7 @@ import (
 
 	"github.com/gocardless/theatre/pkg/apis"
 	"github.com/gocardless/theatre/pkg/apis/workloads"
+	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/signals"
 	"github.com/gocardless/theatre/pkg/workloads/console"
 )
@@ -37,7 +38,7 @@ var (
 
 func init() {
 	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
+	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
 }

@@ -67,9 +67,10 @@ jobs:
 
             chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
             EOF
+      # Sleep to wait for everything to install properly before beginning tests
       - run:
           name: Prepare the cluster
-          command: workspace/bin/acceptance prepare --bin workspace/bin
+          command: workspace/bin/acceptance prepare --bin workspace/bin && sleep 10
       - run:
           name: Run acceptance tests
           command: workspace/bin/acceptance run

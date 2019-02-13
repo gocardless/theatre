@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 var (
@@ -42,6 +43,7 @@ var _ = Describe("Console", func() {
 		waitForSuccessfulReconcile func(int)
 		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
 		createConsole              func(int)
+		createTemplate             func(*workloadsv1alpha1.ConsoleTemplate)
 	)
 
 	BeforeEach(func() {
@@ -67,11 +69,12 @@ var _ = Describe("Console", func() {
 			),
 		))
 
-		By("Creating console template")
-		consoleTemplate = buildConsoleTemplate(namespace)
-		Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-			HaveOccurred(), "failed to create Console Template",
-		)
+		createTemplate = func(tpl *workloadsv1alpha1.ConsoleTemplate) {
+			By("Creating console template")
+			Expect(mgr.GetClient().Create(context.TODO(), tpl)).NotTo(
+				HaveOccurred(), "failed to create Console Template",
+			)
+		}
 
 		createConsole = func(timeout int) {
 			csl = &workloadsv1alpha1.Console{
@@ -116,6 +119,7 @@ var _ = Describe("Console", func() {
 	Describe("enforcing valid timeout values", func() {
 		It("Enforces the console template's MaxTimeoutSeconds", func() {
 			By("Creating a console with a timeout > MaxTimeoutSeconds")
+			createTemplate(buildConsoleTemplate(namespace))
 			createConsole(7201)
 
 			waitForSuccessfulReconcile(2)
@@ -128,10 +132,19 @@ var _ = Describe("Console", func() {
 				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7200),
 				"console's timeout does not match template's MaxTimeoutSeconds",
 			)
+
+			Expect(integration.GetEvents(mgr, namespace)).To(
+				ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Reason":  Equal(console.EventInvalidSpecification),
+					"Message": ContainSubstring("exceeded the template max"),
+				})),
+				"an event should be produced warning of the timeout clamping",
+			)
 		})
 
 		It("Uses the template's DefaultTimeoutSeconds if the template's timeout is zero", func() {
 			By("Creating a console with a timeout of 0")
+			createTemplate(buildConsoleTemplate(namespace))
 			createConsole(0)
 
 			waitForSuccessfulReconcile(2)
@@ -148,6 +161,7 @@ var _ = Describe("Console", func() {
 
 		It("Keeps the console's timeout if it is valid", func() {
 			By("Creating a console with a timeout > MaxTimeoutSeconds")
+			createTemplate(buildConsoleTemplate(namespace))
 			createConsole(7199)
 
 			waitForSuccessfulReconcile(2)
@@ -166,8 +180,38 @@ var _ = Describe("Console", func() {
 		// test that here.
 	})
 
+	Describe("Invalid template specifications", func() {
+		It("Emits a warning if there are multiple containers present", func() {
+			By("Creating a console with a template with more than 1 container")
+
+			tpl := buildConsoleTemplate(namespace)
+			// Duplicate the container
+			tpl.Spec.Template.Spec.Containers = append(
+				tpl.Spec.Template.Spec.Containers,
+				tpl.Spec.Template.Spec.Containers[0],
+			)
+			tpl.Spec.Template.Spec.Containers[1].Name = "sidecar"
+
+			createTemplate(tpl)
+			createConsole(1)
+
+			waitForSuccessfulReconcile(2)
+
+			By("Expect a warning event")
+			Expect(integration.GetEvents(mgr, namespace)).To(
+				ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Reason":  Equal(console.EventTemplateUnsupported),
+					"Message": ContainSubstring("first container"),
+				})),
+				"an event should be produced that warns about multiple containers",
+			)
+		})
+	})
+
 	Describe("Creating resources", func() {
 		BeforeEach(func() {
+			consoleTemplate = buildConsoleTemplate(namespace)
+			createTemplate(consoleTemplate)
 			createConsole(3600)
 			waitForSuccessfulReconcile(2)
 		})
@@ -221,6 +265,15 @@ var _ = Describe("Console", func() {
 				job.Spec.Template.Spec.Containers[0].TTY).To(BeTrue(),
 				"job's first container should have tty true",
 			)
+
+			Expect(integration.GetEvents(mgr, namespace)).To(
+				ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Reason":  Equal(console.EventSuccessfulCreate),
+					"Message": Equal("Created job: console-0"),
+					"Count":   BeNumerically("==", 1),
+				})),
+				"only one SuccessfulCreate event should be present",
+			)
 		})
 
 		It("Only creates one job when reconciling twice", func() {
@@ -236,7 +289,15 @@ var _ = Describe("Console", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update console")
 
 			waitForSuccessfulReconcile(1)
-			// TODO: check that the 'already exists' event was logged
+
+			Expect(integration.GetEvents(mgr, namespace)).To(
+				ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Reason":  Equal(console.EventSuccessfulCreate),
+					"Message": Equal("Created job: console-0"),
+					"Count":   BeNumerically("==", 1),
+				})),
+				"only one SuccessfulCreate event should be present",
+			)
 		})
 
 		It("Creates a pods/exec rolebinding for the user", func() {

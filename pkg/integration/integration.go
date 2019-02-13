@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -165,7 +166,7 @@ func NewServer(mgr manager.Manager, awhs ...*admission.Webhook) *webhook.Server 
 		BootstrapOptions: &webhook.BootstrapOptions{
 			MutatingWebhookConfigName:   "theatre-integration-webhook",
 			ValidatingWebhookConfigName: "theatre-integration-webhook",
-			Host: &localhost,
+			Host:                        &localhost,
 		},
 	}
 
@@ -316,4 +317,15 @@ func Drain(calls chan ReconcileCall) {
 			return
 		}
 	}
+}
+
+func GetEvents(mgr manager.Manager, namespace string) []corev1.Event {
+	eventList := corev1.EventList{}
+	listOpts := client.ListOptions{}
+	listOpts.InNamespace(namespace)
+
+	err := mgr.GetClient().List(context.TODO(), &listOpts, &eventList)
+	Expect(err).NotTo(HaveOccurred(), "failed to retrieve events")
+
+	return eventList.Items
 }

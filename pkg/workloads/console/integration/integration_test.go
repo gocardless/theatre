@@ -78,6 +78,10 @@ var _ = Describe("Console", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "console-0",
 					Namespace: namespace,
+					Labels: map[string]string{
+						"repo":        "a-repo",
+						"environment": "an-environment",
+					},
 				},
 				Spec: workloadsv1alpha1.ConsoleSpec{
 					Command:            []string{"bin/rails", "console", "--help"},
@@ -196,11 +200,23 @@ var _ = Describe("Console", func() {
 				"the job's pod runs the same container as specified in the console template",
 			)
 			Expect(
-				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"))
+				job.Labels).To(HaveLen(3))
+			Expect(
+				job.Labels["user"]).To(Equal("system-unsecured"))
+			Expect(
+				job.Labels["repo"]).To(Equal("a-repo"))
+			Expect(
+				job.Labels["environment"]).To(Equal("an-environment"))
 			Expect(
 				*job.Spec.ActiveDeadlineSeconds).To(BeNumerically("==", csl.Spec.TimeoutSeconds),
 				"job's ActiveDeadlineSeconds does not match console's timeout",
 			)
+			Expect(
+				job.Spec.Template.Labels["user"]).To(Equal("system-unsecured"))
+			Expect(
+				job.Spec.Template.Labels["repo"]).To(Equal("a-repo"))
+			Expect(
+				job.Spec.Template.Labels["environment"]).To(Equal("an-environment"))
 			Expect(
 				job.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"bin/rails"}),
 				"job's command does not match the first command element in the spec",

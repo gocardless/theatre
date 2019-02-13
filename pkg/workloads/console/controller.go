@@ -355,8 +355,15 @@ func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcil
 func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
-	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
+	username := sanitiseLabel(strings.SplitN(csl.Spec.User, "@", 2)[0])
 	jobTemplate := template.Spec.Template.DeepCopy()
+
+	if jobTemplate.Labels == nil {
+		jobTemplate.Labels = map[string]string{}
+	}
+	jobTemplate.Labels["user"] = username
+	jobTemplate.Labels["repo"] = csl.Labels["repo"]
+	jobTemplate.Labels["environment"] = csl.Labels["environment"]
 
 	numContainers := len(jobTemplate.Spec.Containers)
 
@@ -393,7 +400,11 @@ func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, templat
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
-			Labels:    map[string]string{"user": sanitiseLabel(username)},
+			Labels: map[string]string{
+				"user":        username,
+				"repo":        csl.Labels["repo"],
+				"environment": csl.Labels["environment"],
+			},
 		},
 		Spec: batchv1.JobSpec{
 			Template:              *jobTemplate,

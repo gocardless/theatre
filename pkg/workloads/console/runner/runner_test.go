@@ -44,6 +44,11 @@ var _ = Describe("Runner", func() {
 			cslTmplFixture := &workloadsv1alpha1.ConsoleTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
+					Labels: map[string]string{
+						"repo":                "some-repo",
+						"environment":         "an-env",
+						"not-inherited-label": "foo",
+					},
 				},
 			}
 
@@ -66,6 +71,12 @@ var _ = Describe("Runner", func() {
 
 			It("Sets the specified command in the spec", func() {
 				Expect(createdCsl.Spec.Command).To(Equal(cmd))
+			})
+
+			It("copies the repo and environment labels from the template", func() {
+				Expect(createdCsl.Labels).To(HaveLen(2))
+				Expect(createdCsl.Labels).To(HaveKeyWithValue("repo", "some-repo"))
+				Expect(createdCsl.Labels).To(HaveKeyWithValue("environment", "an-env"))
 			})
 
 			It("Creates the console via the clientset", func() {

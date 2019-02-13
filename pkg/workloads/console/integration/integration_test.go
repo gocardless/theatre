@@ -39,9 +39,9 @@ var _ = Describe("Console", func() {
 		calls                      chan integration.ReconcileCall
 		whcalls                    chan integration.HandleCall
 		csl                        *workloadsv1alpha1.Console
-		waitForSuccessfulReconcile func(int)
+		waitForSuccessfulReconcile func(int, string)
 		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
-		createConsole              func(int)
+		createConsole              func(int, string)
 	)
 
 	BeforeEach(func() {
@@ -73,11 +73,15 @@ var _ = Describe("Console", func() {
 			HaveOccurred(), "failed to create Console Template",
 		)
 
-		createConsole = func(timeout int) {
+		createConsole = func(timeout int, name string) {
 			csl = &workloadsv1alpha1.Console{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "console-0",
+					Name:      name,
 					Namespace: namespace,
+					Labels: map[string]string{
+						"repo":        "no-app",
+						"other-label": "other-value",
+					},
 				},
 				Spec: workloadsv1alpha1.ConsoleSpec{
 					Command:            []string{"bin/rails", "console", "--help"},
@@ -93,14 +97,14 @@ var _ = Describe("Console", func() {
 			)
 		}
 
-		waitForSuccessfulReconcile = func(times int) {
+		waitForSuccessfulReconcile = func(times int, name string) {
 			// Wait twice for reconcile: the second reconciliation is triggered due to
 			// the update of the status field with an expiry time
 			for i := 1; i <= times; i++ {
 				By(fmt.Sprintf("Expect reconcile succeeded (%d of %d)", i, times))
 				Eventually(calls, timeout).Should(
 					Receive(
-						integration.ReconcileResourceSuccess(namespace, "console-0"),
+						integration.ReconcileResourceSuccess(namespace, name),
 					),
 				)
 			}
@@ -116,9 +120,9 @@ var _ = Describe("Console", func() {
 	Describe("enforcing valid timeout values", func() {
 		It("Enforces the console template's MaxTimeoutSeconds", func() {
 			By("Creating a console with a timeout > MaxTimeoutSeconds")
-			createConsole(7201)
+			createConsole(7201, "console-0")
 
-			waitForSuccessfulReconcile(2)
+			waitForSuccessfulReconcile(2, "console-0")
 
 			By("Expect console has timeout == MaxTimeoutSeconds")
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -132,9 +136,9 @@ var _ = Describe("Console", func() {
 
 		It("Uses the template's DefaultTimeoutSeconds if the template's timeout is zero", func() {
 			By("Creating a console with a timeout of 0")
-			createConsole(0)
+			createConsole(0, "console-0")
 
-			waitForSuccessfulReconcile(2)
+			waitForSuccessfulReconcile(2, "console-0")
 
 			By("Expect console has timeout == MaxTimeoutSeconds")
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -148,9 +152,9 @@ var _ = Describe("Console", func() {
 
 		It("Keeps the console's timeout if it is valid", func() {
 			By("Creating a console with a timeout > MaxTimeoutSeconds")
-			createConsole(7199)
+			createConsole(7199, "console-0")
 
-			waitForSuccessfulReconcile(2)
+			waitForSuccessfulReconcile(2, "console-0")
 
 			By("Expect console has timeout == MaxTimeoutSeconds")
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -168,8 +172,8 @@ var _ = Describe("Console", func() {
 
 	Describe("Creating resources", func() {
 		BeforeEach(func() {
-			createConsole(3600)
-			waitForSuccessfulReconcile(2)
+			createConsole(3600, "console-0")
+			waitForSuccessfulReconcile(2, "console-0")
 		})
 
 		It("Sets console.spec.user from rbac", func() {
@@ -188,15 +192,38 @@ var _ = Describe("Console", func() {
 			By("Expect job was created")
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier.Name += "-console"
 			err := mgr.GetClient().Get(context.TODO(), identifier, job)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
+			By("Expect job and pod labels are correctly populated from the console template and console")
+			Expect(
+				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"))
+			Expect(
+				job.ObjectMeta.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name))
+			Expect(
+				job.ObjectMeta.Labels["repo"]).To(Equal(consoleTemplate.ObjectMeta.Labels["repo"]),
+				"job's has same labels as the console template (preference over console labels)",
+			)
+			Expect(
+				job.ObjectMeta.Labels["other-label"]).To(Equal(csl.ObjectMeta.Labels["other-label"]),
+				"job's has same labels as the console",
+			)
+			Expect(
+				job.Spec.Template.Labels["job-name"]).To(Equal(job.ObjectMeta.Name),
+				"pod's has labels inherited from job",
+			)
+			Expect(
+				job.Spec.Template.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name),
+				"pod's has labels inherited from console and console template",
+			)
+
+			By("Expect job spec is correct")
 			Expect(
 				job.Spec.Template.Spec.Containers[0].Image).To(Equal("alpine:latest"),
 				"the job's pod runs the same container as specified in the console template",
 			)
-			Expect(
-				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"))
 			Expect(
 				*job.Spec.ActiveDeadlineSeconds).To(BeNumerically("==", csl.Spec.TimeoutSeconds),
 				"job's ActiveDeadlineSeconds does not match console's timeout",
@@ -235,7 +262,7 @@ var _ = Describe("Console", func() {
 			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
 			Expect(err).NotTo(HaveOccurred(), "failed to update console")
 
-			waitForSuccessfulReconcile(1)
+			waitForSuccessfulReconcile(1, "console-0")
 			// TODO: check that the 'already exists' event was logged
 		})
 
@@ -312,6 +339,26 @@ var _ = Describe("Console", func() {
 			Expect(csl.ObjectMeta.OwnerReferences[0].Name).To(Equal(consoleTemplate.ObjectMeta.Name))
 		})
 	})
+
+	Describe("Enforcing job name", func() {
+		It("Job names are less than 49 characters and contains postfix 'console'", func() {
+			consoleName := "very-very-very-very-long-long-long-long-name-very-very-very-very-long-long-long-long-name"
+			expectJobName := "very-very-very-very-long-long-long-long-name-very-console"
+
+			createConsole(100, consoleName)
+
+			waitForSuccessfulReconcile(2, consoleName)
+
+			job := &batchv1.Job{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier.Name = expectJobName
+			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve job")
+			Expect(job.ObjectMeta.Labels["console-name"]).To(Equal(consoleName[0:63]))
+		})
+
+	})
 })
 
 func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
@@ -319,6 +366,10 @@ func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "console-template-0",
 			Namespace: namespace,
+			Labels: map[string]string{
+				"repo":        "myapp-owner-myapp-repo",
+				"environment": "myapp-env",
+			},
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
 			DefaultTimeoutSeconds:    600,

@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -423,11 +424,30 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	// 1 pod per job.
 	backoffLimit := int32(0)
 
+	// jobName: Add console postfix and truncate name no longer than 49
+	// characters (63-14) (14 characters '-console-4mh4z')
+	jobName := fmt.Sprintf("%s-%s", stringTruncate(r.name.Name, 49), "console")
+
+	// Merged labels from the console template and console
+	// In case of conflits second label set wins
+	jobLabels := labels.Merge(csl.Labels, template.Labels)
+	jobLabels = labels.Merge(jobLabels,
+		map[string]string{
+			"console-name": stringTruncate(csl.Name, 63),
+			"user":         sanitiseLabel(username),
+		})
+
+	// Add Pod lables
+	jobTemplate.ObjectMeta.Labels = labels.Merge(
+		jobLabels,
+		jobTemplate.ObjectMeta.Labels,
+	)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.name.Name,
+			Name:      jobName,
 			Namespace: r.name.Namespace,
-			Labels:    map[string]string{"user": sanitiseLabel(username)},
+			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
 			Template:              *jobTemplate,
@@ -503,4 +523,11 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 
 func sanitiseLabel(l string) string {
 	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
+}
+
+func stringTruncate(str string, length int) string {
+	if len(str) > length {
+		return str[0:length]
+	}
+	return str
 }

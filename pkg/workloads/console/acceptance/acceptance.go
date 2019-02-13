@@ -6,18 +6,22 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	workloadsclient "github.com/gocardless/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-const namespace = "default"
-const consoleName = "console-0"
-const templateName = "console-template-0"
+const (
+	namespace    = "default"
+	consoleName  = "console-0"
+	templateName = "console-template-0"
+	jobName      = "console-0-console"
+)
 
 // This clientset is a union of the default kubernetes clientset and the workloads client.
 type clientset struct {
@@ -91,13 +95,13 @@ func Run(logger kitlog.Logger, kubeConfigPath string) {
 
 			By("Expect a job has been created")
 			Eventually(func() error {
-				_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+				_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
 				return err
 			}).ShouldNot(HaveOccurred(), "could not find job")
 
 			By("Expect a pod has been created")
 			Eventually(func() ([]corev1.Pod, error) {
-				opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
+				opts := metav1.ListOptions{LabelSelector: "job-name=" + jobName}
 				podList, err := client.CoreV1().Pods(namespace).List(opts)
 				return podList.Items, err
 			}).Should(HaveLen(1), "expected to find a single pod")
@@ -119,7 +123,7 @@ func Run(logger kitlog.Logger, kubeConfigPath string) {
 			// TODO: attach to pod
 
 			By("Expect that the job still exists")
-			_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+			_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred(), "could not find job")
 
 			By("Expect that the console is deleted shortly after stopping, due to its TTL")
@@ -130,7 +134,7 @@ func Run(logger kitlog.Logger, kubeConfigPath string) {
 
 			By("Expect that the pod eventually terminates")
 			Eventually(func() int {
-				opts := metav1.ListOptions{LabelSelector: "job-name=console-0"}
+				opts := metav1.ListOptions{LabelSelector: "job-name=" + jobName}
 				podList, _ := client.CoreV1().Pods(namespace).List(opts)
 				return len(podList.Items)
 			}).Should(Equal(0), "pod did not get deleted")

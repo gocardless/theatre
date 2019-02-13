@@ -424,20 +424,23 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	// 1 pod per job.
 	backoffLimit := int32(0)
 
-	// jobName: Add console postfix and truncate name no longer than 49
-	// characters (63-14) (14 characters '-console-4mh4z')
-	jobName := fmt.Sprintf("%s-%s", stringTruncate(r.name.Name, 49), "console")
+	// Ensure that the job name (after suffixing with `-console`) does not exceed 57
+	// characters, to allow an additional 6 characters to appended when the job
+	// creates a pod without truncation of the `-console` suffix.
+	jobName := fmt.Sprintf("%s-%s", truncateString(r.name.Name, 49), "console")
 
-	// Merged labels from the console template and console
-	// In case of conflits second label set wins
+	// Merged labels from the console template and console. In case of
+	// conflicts second label set wins.
+	// The labels on the console can be user-defined, so we do not want to allow a
+	// user to create a console with a label that implies that it's for an application
+	// different to the console.
 	jobLabels := labels.Merge(csl.Labels, template.Labels)
 	jobLabels = labels.Merge(jobLabels,
 		map[string]string{
-			"console-name": stringTruncate(csl.Name, 63),
+			"console-name": truncateString(csl.Name, 63),
 			"user":         sanitiseLabel(username),
 		})
 
-	// Add Pod lables
 	jobTemplate.ObjectMeta.Labels = labels.Merge(
 		jobLabels,
 		jobTemplate.ObjectMeta.Labels,
@@ -525,7 +528,7 @@ func sanitiseLabel(l string) string {
 	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
 }
 
-func stringTruncate(str string, length int) string {
+func truncateString(str string, length int) string {
 	if len(str) > length {
 		return str[0:length]
 	}

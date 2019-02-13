@@ -44,6 +44,9 @@ var _ = Describe("Runner", func() {
 			cslTmplFixture := &workloadsv1alpha1.ConsoleTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
+					Labels: map[string]string{
+						"test": "test-value",
+					},
 				},
 			}
 
@@ -72,6 +75,10 @@ var _ = Describe("Runner", func() {
 				list, err := theatreClient.WorkloadsV1alpha1().Consoles("").List(metav1.ListOptions{})
 				Expect(err).NotTo(HaveOccurred(), "failed to list consoles")
 				Expect(list.Items).To(HaveLen(1), "only one console should be present")
+			})
+
+			It("Inherits labels from console template", func() {
+				Expect(createdCsl.Labels).To(HaveKeyWithValue("test", "test-value"))
 			})
 
 			It("Creates the console in the namespace specified", func() {
@@ -368,6 +375,7 @@ var _ = Describe("Runner", func() {
 					Containers: []corev1.Container{corev1.Container{TTY: true}},
 				},
 			}
+
 			BeforeEach(func() {
 				fakeKubeObjects = []runtime.Object{job, pod2}
 			})

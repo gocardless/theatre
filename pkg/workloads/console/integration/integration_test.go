@@ -199,20 +199,20 @@ var _ = Describe("Console", func() {
 
 			By("Expect job and pod labels are correctly populated from the console template and console")
 			Expect(
-				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"))
+				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
+				"job should have a user label matching the console owner",
+			)
 			Expect(
-				job.ObjectMeta.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name))
+				job.ObjectMeta.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name),
+				"job should have a label console-name matching the console name",
+			)
 			Expect(
 				job.ObjectMeta.Labels["repo"]).To(Equal(consoleTemplate.ObjectMeta.Labels["repo"]),
-				"job's has same labels as the console template (preference over console labels)",
+				"job has the same labels as the console template (preference over console labels)",
 			)
 			Expect(
 				job.ObjectMeta.Labels["other-label"]).To(Equal(csl.ObjectMeta.Labels["other-label"]),
-				"job's has same labels as the console",
-			)
-			Expect(
-				job.Spec.Template.Labels["job-name"]).To(Equal(job.ObjectMeta.Name),
-				"pod's has labels inherited from job",
+				"job has the same labels as the console",
 			)
 			Expect(
 				job.Spec.Template.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name),
@@ -341,7 +341,7 @@ var _ = Describe("Console", func() {
 	})
 
 	Describe("Enforcing job name", func() {
-		It("Job names are less than 49 characters and contains postfix 'console'", func() {
+		It("Truncates long job names and adds a 'console' suffix", func() {
 			consoleName := "very-very-very-very-long-long-long-long-name-very-very-very-very-long-long-long-long-name"
 			expectJobName := "very-very-very-very-long-long-long-long-name-very-console"
 

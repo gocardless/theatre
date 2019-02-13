@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -48,11 +49,7 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 		ObjectMeta: metav1.ObjectMeta{
 			// Let Kubernetes generate a unique name
 			GenerateName: template.Name + "-",
-
-			// TODO: Consider which labels and annotations we might want to set on the console
-			// itself.
-			// Labels:
-			// Annotations:
+			Labels:       labels.Merge(labels.Set{}, template.Labels),
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: template.Name},

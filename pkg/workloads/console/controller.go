@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -423,11 +424,33 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	// 1 pod per job.
 	backoffLimit := int32(0)
 
+	// Ensure that the job name (after suffixing with `-console`) does not exceed 57
+	// characters, to allow an additional 6 characters to appended when the job
+	// creates a pod without truncation of the `-console` suffix.
+	jobName := fmt.Sprintf("%s-%s", truncateString(r.name.Name, 49), "console")
+
+	// Merged labels from the console template and console. In case of
+	// conflicts second label set wins.
+	// The labels on the console can be user-defined, so we do not want to allow a
+	// user to create a console with a label that implies that it's for an application
+	// different to the console.
+	jobLabels := labels.Merge(csl.Labels, template.Labels)
+	jobLabels = labels.Merge(jobLabels,
+		map[string]string{
+			"console-name": truncateString(csl.Name, 63),
+			"user":         sanitiseLabel(username),
+		})
+
+	jobTemplate.ObjectMeta.Labels = labels.Merge(
+		jobLabels,
+		jobTemplate.ObjectMeta.Labels,
+	)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.name.Name,
+			Name:      jobName,
 			Namespace: r.name.Namespace,
-			Labels:    map[string]string{"user": sanitiseLabel(username)},
+			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
 			Template:              *jobTemplate,
@@ -503,4 +526,11 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 
 func sanitiseLabel(l string) string {
 	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
+}
+
+func truncateString(str string, length int) string {
+	if len(str) > length {
+		return str[0:length]
+	}
+	return str
 }

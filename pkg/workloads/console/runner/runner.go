@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -48,11 +49,7 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 		ObjectMeta: metav1.ObjectMeta{
 			// Let Kubernetes generate a unique name
 			GenerateName: template.Name + "-",
-
-			// TODO: Consider which labels and annotations we might want to set on the console
-			// itself.
-			// Labels:
-			// Annotations:
+			Labels:       labels.Merge(labels.Set{}, template.Labels),
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: template.Name},
@@ -164,26 +161,14 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 
 // GetAttachablePod returns an attachable pod for the given console
 func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-	namespace := csl.ObjectMeta.Namespace
-
-	job, err := c.kubeClient.BatchV1().Jobs(namespace).Get(csl.ObjectMeta.Name, metav1.GetOptions{})
+	pod, err := c.kubeClient.CoreV1().Pods(csl.Namespace).Get(csl.Status.PodName, metav1.GetOptions{})
 	if err != nil {
-		return pod, errors.Wrap(err, "unable to find job")
+		return nil, err
 	}
 
-	pods := &corev1.PodList{}
-	opts := metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", job.ObjectMeta.Name)}
-	pods, err = c.kubeClient.CoreV1().Pods(job.ObjectMeta.Namespace).List(opts)
-	if err != nil {
-		return pod, err
-	}
-
-	for _, pod := range pods.Items {
-		for _, c := range pod.Spec.Containers {
-			if c.TTY {
-				return &pod, nil
-			}
+	for _, c := range pod.Spec.Containers {
+		if c.TTY {
+			return pod, nil
 		}
 	}
 

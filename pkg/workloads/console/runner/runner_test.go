@@ -8,7 +8,6 @@ import (
 	theatreFake "github.com/gocardless/theatre/pkg/client/clientset/versioned/fake"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +43,9 @@ var _ = Describe("Runner", func() {
 			cslTmplFixture := &workloadsv1alpha1.ConsoleTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
+					Labels: map[string]string{
+						"test": "test-value",
+					},
 				},
 			}
 
@@ -72,6 +74,10 @@ var _ = Describe("Runner", func() {
 				list, err := theatreClient.WorkloadsV1alpha1().Consoles("").List(metav1.ListOptions{})
 				Expect(err).NotTo(HaveOccurred(), "failed to list consoles")
 				Expect(list.Items).To(HaveLen(1), "only one console should be present")
+			})
+
+			It("Inherits labels from console template", func() {
+				Expect(createdCsl.Labels).To(HaveKeyWithValue("test", "test-value"))
 			})
 
 			It("Creates the console in the namespace specified", func() {
@@ -302,54 +308,50 @@ var _ = Describe("Runner", func() {
 	})
 
 	Describe("GetAttachablePod", func() {
-		csl := &workloadsv1alpha1.Console{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-console",
-				Namespace: "test-namespace",
-			},
-		}
-		job := &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      csl.ObjectMeta.Name,
-				Namespace: csl.ObjectMeta.Namespace,
-			},
-		}
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: csl.ObjectMeta.Namespace,
-				Labels:    map[string]string{"job-name": job.ObjectMeta.Name},
-			},
-		}
+		var (
+			csl          *workloadsv1alpha1.Console
+			consolePod   *corev1.Pod
+			unrelatedPod *corev1.Pod
+		)
 
 		BeforeEach(func() {
+			csl = &workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-console",
+					Namespace: "test-namespace",
+				},
+				Status: workloadsv1alpha1.ConsoleStatus{PodName: "some-pod"},
+			}
+			consolePod = &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-pod",
+					Namespace: csl.ObjectMeta.Namespace,
+				},
+			}
+			unrelatedPod = &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-other-pod",
+					Namespace: csl.ObjectMeta.Namespace,
+				},
+			}
+
 			fakeConsoles = []runtime.Object{csl}
 		})
 
-		Context("When there is no job or pod", func() {
+		Context("When there is no matching pod", func() {
 			BeforeEach(func() {
-				fakeKubeObjects = []runtime.Object{}
+				fakeKubeObjects = []runtime.Object{unrelatedPod}
 			})
 
 			It("Returns an error", func() {
 				_, err := runner.GetAttachablePod(csl)
-				Expect(err).To(MatchError("unable to find job: jobs.batch \"test-console\" not found"))
-			})
-		})
-
-		Context("When there is a job, but no pod", func() {
-			BeforeEach(func() {
-				fakeKubeObjects = []runtime.Object{job}
-			})
-
-			It("Returns an error", func() {
-				_, err := runner.GetAttachablePod(csl)
-				Expect(err).To(MatchError("no attachable pod found"))
+				Expect(err).To(HaveOccurred())
 			})
 		})
 
 		Context("When the pod is not attachable", func() {
 			BeforeEach(func() {
-				fakeKubeObjects = []runtime.Object{job, pod}
+				fakeKubeObjects = []runtime.Object{consolePod}
 			})
 
 			It("Returns an error", func() {
@@ -359,23 +361,18 @@ var _ = Describe("Runner", func() {
 		})
 
 		Context("When the pod is attachable", func() {
-			pod2 := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: csl.ObjectMeta.Namespace,
-					Labels:    map[string]string{"job-name": job.ObjectMeta.Name},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{corev1.Container{TTY: true}},
-				},
-			}
 			BeforeEach(func() {
-				fakeKubeObjects = []runtime.Object{job, pod2}
+				consolePod.Spec = corev1.PodSpec{
+					Containers: []corev1.Container{{TTY: true}},
+				}
+
+				fakeKubeObjects = []runtime.Object{consolePod}
 			})
 
 			It("Returns the pod", func() {
 				returnedPod, err := runner.GetAttachablePod(csl)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(returnedPod).To(Equal(pod2))
+				Expect(returnedPod).To(Equal(consolePod))
 			})
 		})
 	})

@@ -97,7 +97,7 @@ func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) 
 
 // WaitUntilReady will block until the console reaches a phase that indicates
 // that it's ready to be attached to, or has failed.
-func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha1.Console) error {
+func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
 	isRunning := func(csl *workloadsv1alpha1.Console) bool {
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleRunning
 	}
@@ -110,7 +110,7 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 
 	w, err := client.Watch(listOptions)
 	if err != nil {
-		return errors.Wrap(err, "error watching console")
+		return nil, errors.Wrap(err, "error watching console")
 	}
 
 	// Get the console, because watch will only give us an event when something
@@ -118,15 +118,15 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 	// is set up.
 	csl, err := client.Get(createdCsl.Name, metav1.GetOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
-		return errors.Wrap(err, "error retrieving console")
+		return nil, errors.Wrap(err, "error retrieving console")
 	}
 
 	// If the console is already running then there's nothing to do
 	if isRunning(csl) {
-		return nil
+		return csl, nil
 	}
 	if isStopped(csl) {
-		return fmt.Errorf("console is Stopped")
+		return nil, fmt.Errorf("console is Stopped")
 	}
 
 	status := w.ResultChan()
@@ -138,21 +138,21 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 			// If our channel is closed, exit with error, as we'll otherwise assume
 			// we were successful when we never reached this state.
 			if !ok {
-				return fmt.Errorf("watch channel closed")
+				return nil, fmt.Errorf("watch channel closed")
 			}
 
 			csl = event.Object.(*workloadsv1alpha1.Console)
 			if isRunning(csl) {
-				return nil
+				return csl, nil
 			}
 			if isStopped(csl) {
-				return fmt.Errorf("console is Stopped")
+				return nil, fmt.Errorf("console is Stopped")
 			}
 		case <-ctx.Done():
 			if csl == nil {
-				return errors.Wrap(ctx.Err(), "console not found")
+				return nil, errors.Wrap(ctx.Err(), "console not found")
 			}
-			return errors.Wrap(ctx.Err(), fmt.Sprintf(
+			return nil, errors.Wrap(ctx.Err(), fmt.Sprintf(
 				"console's last phase was: '%v'", csl.Status.Phase),
 			)
 		}

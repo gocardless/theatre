@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"regexp"
-	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -355,7 +354,7 @@ func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcil
 func buildJob(name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
-	username := sanitiseLabel(strings.SplitN(csl.Spec.User, "@", 2)[0])
+	username := sanitiseLabel(csl.Spec.User)
 	jobTemplate := template.Spec.Template.DeepCopy()
 
 	if jobTemplate.Labels == nil {

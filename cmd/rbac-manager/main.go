@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
 	"github.com/gocardless/theatre/pkg/signals"
 )
@@ -38,7 +39,7 @@ var (
 
 func init() {
 	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
+	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
 }

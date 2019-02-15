@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/integration"
 	"github.com/gocardless/theatre/pkg/workloads/console"
@@ -266,7 +267,7 @@ var _ = Describe("Console", func() {
 			// TODO: check that the 'already exists' event was logged
 		})
 
-		It("Creates a pods/exec rolebinding for the user", func() {
+		It("Creates a pods/exec role and directory role binding for the user", func() {
 			By("Expect role was created")
 			role := &rbacv1.Role{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -291,27 +292,28 @@ var _ = Describe("Console", func() {
 			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 
-			By("Expect rolebinding was created for user and AdditionalAttachSubjects")
-			rb := &rbacv1.RoleBinding{}
+			By("Expect directory role binding was created for user and AdditionalAttachSubjects")
+			drb := &rbacv1alpha1.DirectoryRoleBinding{}
 			identifier, _ = client.ObjectKeyFromObject(csl)
-			err = mgr.GetClient().Get(context.TODO(), identifier, rb)
+			err = mgr.GetClient().Get(context.TODO(), identifier, drb)
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding")
-			Expect(rb.RoleRef).To(
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated DirectoryRoleBinding")
+			Expect(drb.Spec.RoleRef).To(
 				Equal(
 					rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "console-0"},
 				),
 			)
-			Expect(rb.Subjects).To(
+			Expect(drb.Spec.Subjects).To(
 				ConsistOf([]rbacv1.Subject{
-					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: csl.Spec.User},
-					rbacv1.Subject{Kind: "User", APIGroup: "rbac.authorization.k8s.io", Name: "add-user@example.com"},
+					rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
+					rbacv1.Subject{Kind: "User", Name: "add-user@example.com"},
+					rbacv1.Subject{Kind: "GoogleGroup", Name: "group@example.com"},
 				}),
 			)
 
 			By("Expect rolebinding is owned by console")
-			Expect(rb.ObjectMeta.OwnerReferences).To(HaveLen(1))
-			Expect(rb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+			Expect(drb.ObjectMeta.OwnerReferences).To(HaveLen(1))
+			Expect(drb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 		})
 
 		It("Updates the status with expiry time", func() {
@@ -372,9 +374,12 @@ func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
 			},
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			DefaultTimeoutSeconds:    600,
-			MaxTimeoutSeconds:        7200,
-			AdditionalAttachSubjects: []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
+			DefaultTimeoutSeconds: 600,
+			MaxTimeoutSeconds:     7200,
+			AdditionalAttachSubjects: []rbacv1.Subject{
+				{Kind: "User", Name: "add-user@example.com"},
+				{Kind: "GoogleGroup", Name: "group@example.com"},
+			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{

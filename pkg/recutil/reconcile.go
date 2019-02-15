@@ -16,6 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 )
 
 const (
@@ -158,19 +160,20 @@ func RoleDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
 	return None
 }
 
-// RoleBindingDiff is a DiffFunc for RoleBindings
-func RoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
-	expected := expectedObj.(*rbacv1.RoleBinding)
-	existing := existingObj.(*rbacv1.RoleBinding)
+// DirectoryRoleBindingDiff is a DiffFunc for DirectoryRoleBindings
+func DirectoryRoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
+	expected := expectedObj.(*rbacv1alpha1.DirectoryRoleBinding)
+	existing := existingObj.(*rbacv1alpha1.DirectoryRoleBinding)
+
 	operation := None
 
-	if !reflect.DeepEqual(expected.Subjects, existing.Subjects) {
-		existing.Subjects = expected.Subjects
+	if !reflect.DeepEqual(expected.Spec.Subjects, existing.Spec.Subjects) {
+		existing.Spec.Subjects = expected.Spec.Subjects
 		operation = Update
 	}
 
-	if !reflect.DeepEqual(expected.RoleRef, existing.RoleRef) {
-		existing.RoleRef = expected.RoleRef
+	if !reflect.DeepEqual(expected.Spec.RoleRef, existing.Spec.RoleRef) {
+		existing.Spec.RoleRef = expected.Spec.RoleRef
 		operation = Update
 	}
 

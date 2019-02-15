@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
 	"github.com/gocardless/theatre/pkg/logging"
@@ -47,11 +48,11 @@ const (
 	EventInvalidSpecification = "InvalidSpecification"
 	EventTemplateUnsupported  = "TemplateUnsupported"
 
-	Job             = "job"
-	Console         = "console"
-	ConsoleTemplate = "consoletemplate"
-	Role            = "role"
-	RoleBinding     = "rolebinding"
+	Job                  = "job"
+	Console              = "console"
+	ConsoleTemplate      = "consoletemplate"
+	Role                 = "role"
+	DirectoryRoleBinding = "directoryrolebinding"
 
 	DefaultTTL = 24 * time.Hour
 )
@@ -134,9 +135,9 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		return res, err
 	}
 
-	// Create or update the role binding
-	rb := buildRoleBinding(r.name, role, r.console, tpl)
-	if err := r.createOrUpdate(rb, RoleBinding, recutil.RoleBindingDiff); err != nil {
+	// Create or update the directory role binding
+	drb := buildDirectoryRoleBinding(r.name, role, r.console, tpl)
+	if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 		return res, err
 	}
 
@@ -477,22 +478,24 @@ func buildRole(name types.NamespacedName) *rbacv1.Role {
 	}
 }
 
-func buildRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl *workloadsv1alpha1.Console, tpl *workloadsv1alpha1.ConsoleTemplate) *rbacv1.RoleBinding {
+func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl *workloadsv1alpha1.Console, tpl *workloadsv1alpha1.ConsoleTemplate) *rbacv1alpha1.DirectoryRoleBinding {
 	subjects := append(
 		tpl.Spec.AdditionalAttachSubjects,
 		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
 	)
 
-	return &rbacv1.RoleBinding{
+	return &rbacv1alpha1.DirectoryRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
 		},
-		Subjects: subjects,
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: rbacv1.GroupName,
-			Kind:     "Role",
-			Name:     name.Name,
+		Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
+			Subjects: subjects,
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     name.Name,
+			},
 		},
 	}
 }

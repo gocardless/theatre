@@ -28,7 +28,6 @@ rules:
       - rbac.authorization.k8s.io
     resources:
       - roles
-      - rolebindings
     verbs:
       - "*"
   - apiGroups:
@@ -39,6 +38,12 @@ rules:
       - events
       - mutatingwebhookconfigurations
       - validatingwebhookconfigurations
+    verbs:
+      - "*"
+  - apiGroups:
+      - rbac.crd.gocardless.com
+    resources:
+      - directoryrolebindings
     verbs:
       - "*"
 ---

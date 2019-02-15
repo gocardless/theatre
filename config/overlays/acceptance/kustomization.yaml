@@ -6,4 +6,5 @@ bases:
   - ../../base
 
 patchesStrategicMerge:
-  - statefulset-image.yaml
+  - rbac-manager.yaml
+  - workloads-manager.yaml

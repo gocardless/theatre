@@ -78,6 +78,8 @@ spec:
       containers:
         - command:
             - /rbac-manager
+          args:
+            - --google  # enable GoogleGroup resolution
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager

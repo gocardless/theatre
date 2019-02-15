@@ -40,15 +40,12 @@ const (
 // ensure we respond to changes in the directory source, we provide a refreshInterval
 // duration that tells the controller to re-enqueue a reconcile after each successful
 // process. Setting this to 0 will disable the re-enqueue.
-func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, directory Directory, refreshInterval time.Duration, opts ...func(*controller.Options)) (controller.Controller, error) {
+func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, provider DirectoryProvider, refreshInterval time.Duration, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "DirectoryRoleBinding")
 	reconciler := &Reconciler{
-		ctx:    ctx,
-		client: mgr.GetClient(),
-		// Cache our directory results for a single refresh period. This should mean we can
-		// scale the number of DRBs in the cluster with respect to the number of groups they
-		// make use of, which more efficiently makes use of our external directory source.
-		directory:       NewCachedDirectory(logger, directory, refreshInterval),
+		ctx:             ctx,
+		client:          mgr.GetClient(),
+		provider:        provider,
 		refreshInterval: refreshInterval,
 	}
 
@@ -93,7 +90,7 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, directo
 type Reconciler struct {
 	ctx             context.Context
 	client          client.Client
-	directory       Directory
+	provider        DirectoryProvider
 	refreshInterval time.Duration
 }
 
@@ -156,9 +153,37 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 	return reconcile.Result{RequeueAfter: r.refreshInterval}, nil
 }
 
-func (r *Reconciler) membersOf(group string) ([]rbacv1.Subject, error) {
+// resolve expands the given subject list by using the directory provider. If our provider
+// recognises the subject Kind then we attempt to resolve the members, otherwise we
+// proceed assuming the subject is a native RBAC kind.
+func (r *Reconciler) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
+	out := make([]rbacv1.Subject, 0)
+	for _, subject := range in {
+		directory := r.provider.Get(subject.Kind)
+		if directory == nil {
+			out = append(out, subject)
+			continue // move onto the next subject
+		}
+
+		members, err := r.membersOf(directory, subject.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		// For each of our group members, add them if they weren't already here
+		for _, member := range members {
+			if !rbacutils.IncludesSubject(out, member) {
+				out = append(out, member)
+			}
+		}
+	}
+
+	return out, nil
+}
+
+func (r *Reconciler) membersOf(directory Directory, group string) ([]rbacv1.Subject, error) {
 	subjects := make([]rbacv1.Subject, 0)
-	members, err := r.directory.MembersOf(r.ctx, group)
+	members, err := directory.MembersOf(r.ctx, group)
 
 	if err == nil {
 		for _, member := range members {
@@ -171,29 +196,4 @@ func (r *Reconciler) membersOf(group string) ([]rbacv1.Subject, error) {
 	}
 
 	return subjects, err
-}
-
-func (r *Reconciler) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
-	out := make([]rbacv1.Subject, 0)
-	for _, subject := range in {
-		switch subject.Kind {
-		case rbacv1alpha1.GoogleGroupKind:
-			members, err := r.membersOf(subject.Name)
-			if err != nil {
-				return nil, err
-			}
-
-			// For each of our group members, add them if they weren't already here
-			for _, member := range members {
-				if !rbacutils.IncludesSubject(out, member) {
-					out = append(out, member)
-				}
-			}
-
-		default:
-			out = append(out, subject)
-		}
-	}
-
-	return out, nil
 }

@@ -73,12 +73,16 @@ var _ = Describe("Reconciler", func() {
 		mgr = integration.StartTestManager(ctx, cfg)
 		groups = map[string][]string{}
 
+		// Create a fake provider that recognises GoogleGroup kinds for testing purposes
+		provider := directoryrolebinding.DirectoryProvider{}
+		provider.Register(rbacv1alpha1.GoogleGroupKind, directoryrolebinding.NewFakeDirectory(groups))
+
 		integration.MustController(
 			directoryrolebinding.Add(
 				ctx,
 				kitlog.NewLogfmtLogger(GinkgoWriter),
 				mgr,
-				directoryrolebinding.NewFakeDirectory(groups),
+				provider,
 				time.Duration(0), // don't test our caching/re-enqueue here
 				func(opt *controller.Options) {
 					opt.Reconciler, calls = integration.CaptureReconcile(

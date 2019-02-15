@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -118,7 +119,7 @@ var _ = Describe("Console", func() {
 		teardown()
 	})
 
-	Describe("enforcing valid timeout values", func() {
+	Describe("Enforcing valid timeout values", func() {
 		It("Enforces the console template's MaxTimeoutSeconds", func() {
 			By("Creating a console with a timeout > MaxTimeoutSeconds")
 			createConsole(7201, "console-0")
@@ -267,21 +268,66 @@ var _ = Describe("Console", func() {
 			// TODO: check that the 'already exists' event was logged
 		})
 
-		It("Creates a pods/exec role and directory role binding for the user", func() {
+		It("Creates a role and directory role binding for the user", func() {
+			podName := "console-0-console-abcde"
+			jobName := "console-0-console"
+
+			By("Create a fake pod (to simulate a real job controller)")
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: namespace,
+					Labels:    labels.Set{"job-name": jobName},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Image: "alpine:latest",
+							Name:  "console-container-0",
+						},
+					},
+				},
+			}
+			err := mgr.GetClient().Create(context.TODO(), pod)
+			Expect(err).NotTo(HaveOccurred(), "failed to create fake pod")
+
+			// integration tests don't run controller manager. It's required to
+			// fake the pod status as we wait for this Pod Phase in our
+			// controller
+			pod.Status.Phase = corev1.PodRunning
+
+			err = mgr.GetClient().Status().Update(context.TODO(), pod)
+			Expect(err).NotTo(HaveOccurred(), "failed to update fake pod status")
+
+			By("Reconciling again")
+			waitForSuccessfulReconcile(1, "console-0")
+
 			By("Expect role was created")
 			role := &rbacv1.Role{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, role)
+			err = mgr.GetClient().Get(context.TODO(), identifier, role)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find role")
 			Expect(role.Rules).To(
 				Equal(
 					[]rbacv1.PolicyRule{
 						rbacv1.PolicyRule{
-							Verbs:         []string{"*"},
-							APIGroups:     []string{"core"},
-							Resources:     []string{"pods/exec"},
-							ResourceNames: []string{"console-0"},
+							Verbs:         []string{"create"},
+							APIGroups:     []string{""},
+							Resources:     []string{"pods/exec", "pods/attach"},
+							ResourceNames: []string{podName},
+						},
+						rbacv1.PolicyRule{
+							Verbs:         []string{"get"},
+							APIGroups:     []string{""},
+							Resources:     []string{"pods/logs"},
+							ResourceNames: []string{podName},
+						},
+						rbacv1.PolicyRule{
+							Verbs:         []string{"get", "delete"},
+							APIGroups:     []string{""},
+							Resources:     []string{"pods"},
+							ResourceNames: []string{podName},
 						},
 					},
 				),

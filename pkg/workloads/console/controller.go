@@ -129,18 +129,6 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		return res, err
 	}
 
-	// Create or update the role
-	role := buildRole(r.name)
-	if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
-		return res, err
-	}
-
-	// Create or update the directory role binding
-	drb := buildDirectoryRoleBinding(r.name, role, r.console, tpl)
-	if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
-		return res, err
-	}
-
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
 	if err = r.updateStatus(job); err != nil {
@@ -152,6 +140,20 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	case r.console.Pending():
 		res = requeueAfterInterval(r.logger, time.Second)
 	case r.console.Running():
+		// Create or update the role
+		// Role grants permissions for a specific resource name, we need to
+		// wait until the Pod is running to know the resource name
+		role := buildRole(r.name, r.console.Status.PodName)
+		if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
+			return res, err
+		}
+
+		// Create or update the directory role binding
+		drb := buildDirectoryRoleBinding(r.name, role, r.console, tpl)
+		if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+			return res, err
+		}
+
 		res = requeueForExpiration(r.logger, r.console.Status)
 	case r.console.Stopped():
 		// Requeue for when the console needs to be deleted
@@ -461,7 +463,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	}
 }
 
-func buildRole(name types.NamespacedName) *rbacv1.Role {
+func buildRole(name types.NamespacedName, podName string) *rbacv1.Role {
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -469,10 +471,22 @@ func buildRole(name types.NamespacedName) *rbacv1.Role {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				Verbs:         []string{"*"},
-				APIGroups:     []string{"core"},
-				Resources:     []string{"pods/exec"},
-				ResourceNames: []string{name.Name},
+				Verbs:         []string{"create"},
+				APIGroups:     []string{""},
+				Resources:     []string{"pods/exec", "pods/attach"},
+				ResourceNames: []string{podName},
+			},
+			{
+				Verbs:         []string{"get"},
+				APIGroups:     []string{""},
+				Resources:     []string{"pods/logs"},
+				ResourceNames: []string{podName},
+			},
+			{
+				Verbs:         []string{"get", "delete"},
+				APIGroups:     []string{""},
+				Resources:     []string{"pods"},
+				ResourceNames: []string{podName},
 			},
 		},
 	}

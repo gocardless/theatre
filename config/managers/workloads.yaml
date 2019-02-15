@@ -46,6 +46,28 @@ rules:
       - directoryrolebindings
     verbs:
       - "*"
+  # The following permissions are provided to allow the manager to create roles
+  # with these permissions
+  - apiGroups:
+      - ""
+    resources:
+      - "pods"
+    verbs:
+      - get
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+      - pods/attach
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - pods/logs
+    verbs:
+      - get
 ---
 apiVersion: v1
 kind: ServiceAccount

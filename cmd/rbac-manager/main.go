@@ -21,15 +21,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/gocardless/theatre/pkg/apis"
+	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
 	"github.com/gocardless/theatre/pkg/signals"
 )
 
 var (
-	app              = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
-	subject          = app.Flag("subject", "Service Subject account").Default("robot-admin@gocardless.com").String()
-	directoryRefresh = app.Flag("directory-refresh", "Refresh interval for directory operations").Default("5m").Duration()
+	app     = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
+	refresh = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
+
+	// All GoogleGroup related settings
+	googleEnabled  = app.Flag("google", "Enable GoogleGroup subject Kind").Default("false").Bool()
+	googleSubject  = app.Flag("google-subject", "Service account subject").Default("robot-admin@gocardless.com").String()
+	googleCacheTTL = app.Flag("google-refresh", "Cache TTL for Google directory operations").Default("5m").Duration()
 
 	logger = kitlog.NewLogfmtLogger(os.Stderr)
 
@@ -53,9 +58,21 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	directoryService, err := createDirectoryService(context.TODO(), *subject)
-	if err != nil {
-		app.Fatalf("failed to create Google Admin client: %v", err)
+	provider := directoryrolebinding.DirectoryProvider{}
+
+	if *googleEnabled {
+		googleDirectoryService, err := createGoogleDirectory(context.TODO(), *googleSubject)
+		if err != nil {
+			app.Fatalf("failed to create Google Admin client: %v", err)
+		}
+
+		logger.Log("event", "provider.register", "kind", rbacv1alpha1.GoogleGroupKind)
+		provider.Register(
+			rbacv1alpha1.GoogleGroupKind,
+			directoryrolebinding.NewCachedDirectory(
+				logger, directoryrolebinding.NewGoogleDirectory(googleDirectoryService.Members), *googleCacheTTL,
+			),
+		)
 	}
 
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
@@ -64,8 +81,7 @@ func main() {
 	}
 
 	// DirectoryRoleBinding controller
-	directory := directoryrolebinding.NewGoogleDirectory(directoryService.Members)
-	if _, err = directoryrolebinding.Add(ctx, logger, mgr, directory, *directoryRefresh); err != nil {
+	if _, err = directoryrolebinding.Add(ctx, logger, mgr, provider, *refresh); err != nil {
 		app.Fatalf(err.Error())
 	}
 
@@ -74,7 +90,7 @@ func main() {
 	}
 }
 
-func createDirectoryService(ctx context.Context, subject string) (*directoryv1.Service, error) {
+func createGoogleDirectory(ctx context.Context, subject string) (*directoryv1.Service, error) {
 	scopes := []string{
 		directoryv1.AdminDirectoryGroupMemberReadonlyScope,
 		directoryv1.AdminDirectoryGroupReadonlyScope,

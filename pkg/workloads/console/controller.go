@@ -373,6 +373,15 @@ func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.Console
 	requeueTime := status.ExpiryTime.Time.Add(time.Second)
 	sleepDuration := time.Until(requeueTime)
 
+	// Avoid requeueing a negative duration, as this effectively results in no
+	// re-reconcile ocurring.
+	// This case will be hit when the Console still has a phase of Running, but
+	// the expiration time has passed, which occurs when the pod has not
+	// terminated within 1s (as per the above second that's added to the expiry)
+	// of the job deadline.
+	if sleepDuration < 0 {
+		sleepDuration = time.Second
+	}
 	return requeueAfterInterval(logger, sleepDuration)
 }
 
@@ -380,7 +389,7 @@ func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcil
 	logging.WithNoRecord(logger).Log(
 		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
 	)
-	return reconcile.Result{RequeueAfter: interval}
+	return reconcile.Result{Requeue: true, RequeueAfter: interval}
 }
 
 func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {

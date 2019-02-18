@@ -256,6 +256,35 @@ var _ = Describe("Console", func() {
 			)
 		})
 
+		It("Update a job trigger a reconcile", func() {
+			parallelism := int32(20)
+			defaultParallelism := int32(1)
+
+			By("Expect job was created")
+			job := &batchv1.Job{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier.Name += "-console"
+			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
+			By("Expect job was updated")
+			job.Spec.Parallelism = &parallelism
+			err = mgr.GetClient().Update(context.TODO(), job)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
+			Expect(*job.Spec.Parallelism).To(Equal(parallelism))
+
+			By("Expect job was restored")
+			waitForSuccessfulReconcile(1, "console-0")
+			err = mgr.GetClient().Get(context.TODO(), identifier, job)
+			Expect(
+				*job.Spec.Parallelism).To(Equal(defaultParallelism),
+				"job Spec Parallelism is restored to original value",
+			)
+
+		})
+
 		It("Only creates one job when reconciling twice", func() {
 			By("Retrieving latest console object")
 			updatedCsl := &workloadsv1alpha1.Console{}

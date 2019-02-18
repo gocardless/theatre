@@ -88,6 +88,19 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 	err = ctrl.Watch(
 		&source.Kind{Type: &workloadsv1alpha1.Console{}}, &handler.EnqueueRequestForObject{},
 	)
+	if err != nil {
+		return ctrl, err
+	}
+
+	// watch for Job events created by Consoles and trigger a reconcile for the
+	// owner
+	err = ctrl.Watch(
+		&source.Kind{Type: &batchv1.Job{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &workloadsv1alpha1.Console{},
+		},
+	)
 
 	return ctrl, err
 }
@@ -154,7 +167,6 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 			return res, err
 		}
 
-		res = requeueForExpiration(r.logger, r.console.Status)
 	case r.console.Stopped():
 		// Requeue for when the console needs to be deleted
 		// In the future we could allow this to be configured in the template
@@ -369,25 +381,6 @@ func calculatePhase(job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.Console
 	return workloadsv1alpha1.ConsolePending
 }
 
-func requeueForExpiration(logger kitlog.Logger, status workloadsv1alpha1.ConsoleStatus) reconcile.Result {
-	// Requeue after the expiry is hit. Add a second to be on the safe side,
-	// ensuring that we'll always re-reconcile *after* the expiry time has been
-	// hit (even if the clock drifts), as metav1.Time only has second-resolution.
-	requeueTime := status.ExpiryTime.Time.Add(time.Second)
-	sleepDuration := time.Until(requeueTime)
-
-	// Avoid requeueing a negative duration, as this effectively results in no
-	// re-reconcile ocurring.
-	// This case will be hit when the Console still has a phase of Running, but
-	// the expiration time has passed, which occurs when the pod has not
-	// terminated within 1s (as per the above second that's added to the expiry)
-	// of the job deadline.
-	if sleepDuration < 0 {
-		sleepDuration = time.Second
-	}
-	return requeueAfterInterval(logger, sleepDuration)
-}
-
 func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcile.Result {
 	logging.WithNoRecord(logger).Log(
 		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
@@ -429,6 +422,11 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 		)
 	}
 
+	// Job API SetDefaults_Job
+	// https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/batch/v1/defaults.go#L28
+	completions := int32(1)
+	parallelism := int32(1)
+
 	// Do not retry console jobs if they fail. There is no guarantee that the
 	// command that the user submits will be idempotent.
 	// This also prevents multiple pods from being spawned by a job, which is
@@ -467,6 +465,8 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 		},
 		Spec: batchv1.JobSpec{
 			Template:              *jobTemplate,
+			Completions:           &completions,
+			Parallelism:           &parallelism,
 			ActiveDeadlineSeconds: &timeout,
 			BackoffLimit:          &backoffLimit,
 		},
@@ -530,16 +530,34 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 	existing := existingObj.(*batchv1.Job)
 	operation := recutil.None
 
-	// k8s manages the job's metadata, and doesn't allow us to clobber some of the values
-	// it has set (for example, the controller-uid label). To avoid this we only update
-	// the pod template spec.
-	if !reflect.DeepEqual(expected.Spec.Template.Spec, existing.Spec.Template.Spec) {
-		existing.Spec.Template.Spec = expected.Spec.Template.Spec
+	// compare all mutable fields in jobSpec and labels
+	if !reflect.DeepEqual(expected.ObjectMeta.Labels, existing.ObjectMeta.Labels) {
+		existing.ObjectMeta.Labels = expected.ObjectMeta.Labels
 		operation = recutil.Update
 	}
 
 	if !reflect.DeepEqual(expected.Spec.ActiveDeadlineSeconds, existing.Spec.ActiveDeadlineSeconds) {
 		existing.Spec.ActiveDeadlineSeconds = expected.Spec.ActiveDeadlineSeconds
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Spec.BackoffLimit, existing.Spec.BackoffLimit) {
+		existing.Spec.BackoffLimit = expected.Spec.BackoffLimit
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Spec.Completions, existing.Spec.Completions) {
+		existing.Spec.Completions = expected.Spec.Completions
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Spec.Parallelism, existing.Spec.Parallelism) {
+		existing.Spec.Parallelism = expected.Spec.Parallelism
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Spec.TTLSecondsAfterFinished, existing.Spec.TTLSecondsAfterFinished) {
+		existing.Spec.TTLSecondsAfterFinished = expected.Spec.TTLSecondsAfterFinished
 		operation = recutil.Update
 	}
 

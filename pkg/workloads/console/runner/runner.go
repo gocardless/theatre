@@ -24,6 +24,7 @@ type Runner struct {
 type Options struct {
 	Cmd     []string
 	Timeout int
+	Reason  string
 
 	// TODO: For now we assume that all consoles are interactive, i.e. we setup a TTY on
 	// them when spawning them. This does not enforce a requirement to attach to the console
@@ -57,6 +58,7 @@ func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemp
 			// should detect this and apply the default timeout that is defined in the template.
 			TimeoutSeconds: opts.Timeout,
 			Command:        opts.Cmd,
+			Reason:         opts.Reason,
 		},
 	}
 

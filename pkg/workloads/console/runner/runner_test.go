@@ -50,8 +50,8 @@ var _ = Describe("Runner", func() {
 			}
 
 			cmd := []string{"/bin/rails", "console"}
-			createOptions := Options{}
-			createOptions.Cmd = cmd
+			reason := "reason for console"
+			createOptions := Options{Cmd: cmd, Reason: reason}
 
 			JustBeforeEach(func() {
 				createdCsl, createCslErr = runner.Create(namespace, *cslTmplFixture, createOptions)
@@ -68,6 +68,10 @@ var _ = Describe("Runner", func() {
 
 			It("Sets the specified command in the spec", func() {
 				Expect(createdCsl.Spec.Command).To(Equal(cmd))
+			})
+
+			It("Sets the specified reason in the spec", func() {
+				Expect(createdCsl.Spec.Reason).To(Equal(reason))
 			})
 
 			It("Creates the console via the clientset", func() {

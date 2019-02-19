@@ -19,7 +19,6 @@ spec:
             - sleep
           args:
             - "100"
-      restartPolicy: Never
 metadata:
   name: console-template-0
   labels:

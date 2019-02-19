@@ -48,6 +48,11 @@ const (
 	EventInvalidSpecification = "InvalidSpecification"
 	EventTemplateUnsupported  = "TemplateUnsupported"
 
+	// Console log keys
+
+	ConsoleStarted = "ConsoleStarted"
+	ConsoleEnded   = "ConsoleEnded"
+
 	Job                  = "job"
 	Console              = "console"
 	ConsoleTemplate      = "consoletemplate"
@@ -323,6 +328,25 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 		return nil
 	}
 
+	// Console phase from Pending to Running
+	if newStatus.Phase == workloadsv1alpha1.ConsoleRunning &&
+		r.console.Status.Phase == workloadsv1alpha1.ConsolePending {
+		auditLog(r.logger, r.console, nil, ConsoleStarted, "Console started")
+	}
+
+	// Console phase from Running to Stopped
+	if newStatus.CompletionTime != r.console.Status.CompletionTime && !job.Status.StartTime.IsZero() {
+		duration := job.Status.CompletionTime.Sub(job.Status.StartTime.Time).Seconds()
+		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended")
+	}
+
+	// Console phase from Running to Stopped without CompletionTime (expire)
+	if newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
+		r.console.Status.Phase == workloadsv1alpha1.ConsoleRunning {
+		duration := r.console.Status.ExpiryTime.Sub(job.Status.StartTime.Time).Seconds()
+		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reach expiration time")
+	}
+
 	updatedCsl := r.console.DeepCopy()
 	updatedCsl.Status = newStatus
 
@@ -563,6 +587,22 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 	}
 
 	return operation
+}
+
+// auditLog decorated a logger for for audit purposes
+func auditLog(logger kitlog.Logger, c *workloadsv1alpha1.Console, duration *float64, event string, msg string) {
+	loggerCtx := logging.WithNoRecord(logger)
+	loggerCtx = kitlog.With(loggerCtx, "event", event, "kind", Console,
+		"console_name", c.Name,
+		"console_user", c.Spec.User,
+		"reason", c.Spec.Reason)
+
+	if duration != nil {
+		loggerCtx = kitlog.With(loggerCtx, "duration", duration)
+	}
+
+	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
+	loggerCtx.Log("msg", msg)
 }
 
 // Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?

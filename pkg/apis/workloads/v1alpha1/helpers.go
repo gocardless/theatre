@@ -28,6 +28,11 @@ func (c *Console) EligibleForGC() bool {
 		return false
 	}
 
+	// When the console is completed
+	if c.Status.CompletionTime != nil {
+		return c.Status.CompletionTime.Time.Add(c.TTLDuration()).Before(time.Now())
+	}
+
 	return c.Status.ExpiryTime.Time.Add(c.TTLDuration()).Before(time.Now())
 }
 

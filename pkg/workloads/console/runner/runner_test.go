@@ -167,6 +167,98 @@ var _ = Describe("Runner", func() {
 		})
 	})
 
+	Describe("FindConsoleByName", func() {
+		createConsole := func(namespace, name string) runtime.Object {
+			return &workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+			}
+		}
+
+		consoles := []runtime.Object{
+			createConsole("n1", "c1"),
+			createConsole("n1", "c2"),
+			createConsole("n1", "c3"),
+			createConsole("n1", "nameclash"),
+			createConsole("n2", "nameclash"),
+		}
+
+		BeforeEach(func() {
+			fakeConsoles = consoles
+		})
+
+		It("returns console with unique name across namespaces", func() {
+			csl, err := runner.FindConsoleByName(metav1.NamespaceAll, "c2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(csl).To(Equal(consoles[1]))
+		})
+
+		It("when namespace is specified, returns console with name that is only unique in that namespace", func() {
+			csl, err := runner.FindConsoleByName("n2", "nameclash")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(csl).To(Equal(consoles[4]))
+		})
+
+		It("when namespace is not specified and name is not globally unique, returns error", func() {
+			_, err := runner.FindConsoleByName(metav1.NamespaceAll, "nameclash")
+			Expect(err).To(MatchError(ContainSubstring("too many consoles")))
+		})
+
+		It("when no console with specified name exists, returns error", func() {
+			_, err := runner.FindConsoleByName(metav1.NamespaceAll, "idontexist")
+			Expect(err).To(MatchError(ContainSubstring("no consoles")))
+		})
+
+		It("when no console with specified name exists in the specified namespace, returns error", func() {
+			_, err := runner.FindConsoleByName("anothernamespace", "c1")
+			Expect(err).To(MatchError(ContainSubstring("no consoles")))
+		})
+	})
+
+	Describe("ListConsolesByLabelsAndUser", func() {
+		createConsole := func(namespace, name, username string, labels map[string]string) runtime.Object {
+			return &workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+					Labels:    labels,
+				},
+				Spec: workloadsv1alpha1.ConsoleSpec{
+					User: username,
+				},
+			}
+		}
+
+		raw := func(cslPtr runtime.Object) workloadsv1alpha1.Console {
+			return *(cslPtr.(*workloadsv1alpha1.Console))
+		}
+
+		consoles := []runtime.Object{
+			createConsole("n1", "c1", "alice", map[string]string{"foo": "bar"}),
+			createConsole("n1", "c2", "alice", map[string]string{"foo": "bar"}),
+			createConsole("n1", "c3", "bob", map[string]string{"foo": "bar"}),
+			createConsole("n1", "c4", "bob", map[string]string{"baz": "barry"}),
+		}
+
+		BeforeEach(func() {
+			fakeConsoles = consoles
+		})
+
+		It("when username not specified, returns all consoles matching label selector", func() {
+			csls, err := runner.ListConsolesByLabelsAndUser(metav1.NamespaceAll, "", "foo=bar")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(csls).To(ConsistOf(raw(consoles[0]), raw(consoles[1]), raw(consoles[2])))
+		})
+
+		It("when username specified, returns all consoles matching label selector", func() {
+			csls, err := runner.ListConsolesByLabelsAndUser(metav1.NamespaceAll, "alice", "foo=bar")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(csls).To(ConsistOf(raw(consoles[0]), raw(consoles[1])))
+		})
+	})
+
 	Describe("WaitUntilReady", func() {
 
 		timeout := 200 * time.Millisecond

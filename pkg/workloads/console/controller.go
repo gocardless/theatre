@@ -435,6 +435,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	// important as other parts of the controller assume there will only ever be
 	// 1 pod per job.
 	backoffLimit := int32(0)
+	jobTemplate.Spec.RestartPolicy = corev1.RestartPolicyNever
 
 	// Ensure that the job name (after suffixing with `-console`) does not exceed 57
 	// characters, to allow an additional 6 characters to appended when the job

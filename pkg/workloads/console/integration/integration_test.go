@@ -243,6 +243,10 @@ var _ = Describe("Console", func() {
 				"job's BackoffLimit is not 0",
 			)
 			Expect(
+				job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever),
+				"job's pod restartPolicy should always be set to 'Never'",
+			)
+			Expect(
 				job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
 				"job's first container should have stdin true",
 			)
@@ -435,7 +439,7 @@ func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
 							Command: []string{"/bin/sh", "-c", "sleep 100"},
 						},
 					},
-					RestartPolicy: "Never",
+					RestartPolicy: "OnFailure",
 				},
 			},
 		},

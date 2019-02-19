@@ -120,6 +120,10 @@ func (in *ConsoleStatus) DeepCopyInto(out *ConsoleStatus) {
 		in, out := &in.ExpiryTime, &out.ExpiryTime
 		*out = (*in).DeepCopy()
 	}
+	if in.CompletionTime != nil {
+		in, out := &in.CompletionTime, &out.CompletionTime
+		*out = (*in).DeepCopy()
+	}
 	return
 }
 

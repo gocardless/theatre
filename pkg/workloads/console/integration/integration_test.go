@@ -265,17 +265,15 @@ var _ = Describe("Console", func() {
 			identifier, _ := client.ObjectKeyFromObject(csl)
 			identifier.Name += "-console"
 			err := mgr.GetClient().Get(context.TODO(), identifier, job)
-
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
 
-			By("Expect job was updated")
+			By("Modifying job")
 			job.Spec.Parallelism = &parallelism
 			err = mgr.GetClient().Update(context.TODO(), job)
-
 			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
 			Expect(*job.Spec.Parallelism).To(Equal(parallelism))
 
-			By("Expect job was restored")
+			By("Expect job has properties restored")
 			waitForSuccessfulReconcile(1, "console-0")
 			err = mgr.GetClient().Get(context.TODO(), identifier, job)
 			Expect(
@@ -406,6 +404,54 @@ var _ = Describe("Console", func() {
 			Expect(
 				updatedCsl.Status.ExpiryTime.Time.After(time.Now())).To(BeTrue(),
 				"the console expiry time should be after now()",
+			)
+		})
+
+		It("Updates the status with completion time", func() {
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ := client.ObjectKeyFromObject(csl)
+			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+
+			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
+			Expect(updatedCsl.Status.CompletionTime).To(BeNil(), "the console completion time shouldn't be set")
+
+			By("Expect job was created")
+			job := &batchv1.Job{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			identifier.Name += "-console"
+			err = mgr.GetClient().Get(context.TODO(), identifier, job)
+			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
+			By("Updating job status")
+			// integration tests don't run controller manager. It's required to
+			// fake the Job status as we wait for this job condition in our
+			// controller
+			now := metav1.Now()
+			job.Status = batchv1.JobStatus{
+				CompletionTime: &now,
+				Conditions: []batchv1.JobCondition{
+					{
+						Type: batchv1.JobComplete,
+					},
+				},
+			}
+
+			err = mgr.GetClient().Status().Update(context.TODO(), job)
+			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
+
+			waitForSuccessfulReconcile(1, "console-0")
+
+			By("Expect console status updated")
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			err = mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+
+			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
+			Expect(updatedCsl.Stopped()).To(BeTrue())
+			Expect(
+				updatedCsl.Status.CompletionTime.Time.Before(time.Now())).To(BeTrue(),
+				"the console completion time should be before now()",
 			)
 		})
 

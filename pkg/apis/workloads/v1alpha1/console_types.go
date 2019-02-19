@@ -53,7 +53,9 @@ type ConsoleSpec struct {
 type ConsoleStatus struct {
 	PodName    string       `json:"podName"`
 	ExpiryTime *metav1.Time `json:"expiryTime,omitempty"`
-	Phase      ConsolePhase `json:"phase"`
+	// Time at which the job completed successfully
+	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
+	Phase          ConsolePhase `json:"phase"`
 }
 
 type ConsolePhase string

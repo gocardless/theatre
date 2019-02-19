@@ -358,6 +358,7 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job, pod *core
 		}
 
 		newStatus.Phase = calculatePhase(job, pod)
+		newStatus.CompletionTime = job.Status.CompletionTime
 	}
 
 	return newStatus

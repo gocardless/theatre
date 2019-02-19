@@ -6,6 +6,19 @@ metadata:
     controller-tools.k8s.io: "1.0"
   name: consoles.workloads.crd.gocardless.com
 spec:
+  additionalPrinterColumns:
+    - JSONPath: .spec.user
+      name: User
+      type: string
+    - JSONPath: .status.phase
+      name: Phase
+      type: string
+    - JSONPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - JSONPath: .status.expiryTime
+      name: Expiry
+      type: string
   group: workloads.crd.gocardless.com
   names:
     kind: Console

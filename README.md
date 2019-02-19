@@ -40,7 +40,8 @@ brew cask install docker
 brew install go@1.11 kubernetes-cli
 curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/0.1.0/kind-darwin-amd64 \
   && chmod a+x /usr/local/bin/kind
-curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_darwin_amd64
+curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_darwin_amd64 \
+  && chmod a+x /usr/local/bin/kustomize
 mkdir /usr/local/kubebuilder
 curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.7/kubebuilder_1.0.7_linux_amd64.tar.gz \
   | tar -xvz --strip=1 -C /usr/local/kubebuilder

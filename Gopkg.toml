@@ -6,17 +6,17 @@ required = [
   "sigs.k8s.io/controller-tools/cmd/controller-gen",
 ]
 
-[[override]]
-  name="k8s.io/code-generator"
-  version="kubernetes-1.12.4"
-
 [[constraint]]
   name="sigs.k8s.io/controller-runtime"
-  version="v0.1.1"
+  version="v0.1.10"
 
 [[constraint]]
   name = "sigs.k8s.io/controller-tools"
-  version = "0.1.8"
+  version = "v0.1.9"
+
+[[constraint]]
+  name = "k8s.io/code-generator"
+  version = "kubernetes-1.13.1"
 
 [[constraint]]
   name = "github.com/onsi/gomega"

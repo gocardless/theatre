@@ -351,7 +351,7 @@ var _ = Describe("Console", func() {
 						rbacv1.PolicyRule{
 							Verbs:         []string{"get"},
 							APIGroups:     []string{""},
-							Resources:     []string{"pods/logs"},
+							Resources:     []string{"pods/log"},
 							ResourceNames: []string{podName},
 						},
 						rbacv1.PolicyRule{

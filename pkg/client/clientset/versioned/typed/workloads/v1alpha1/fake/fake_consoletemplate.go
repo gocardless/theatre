@@ -119,7 +119,7 @@ func (c *FakeConsoleTemplates) DeleteCollection(options *v1.DeleteOptions, listO
 // Patch applies the patch and returns the patched consoleTemplate.
 func (c *FakeConsoleTemplates) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.ConsoleTemplate, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(consoletemplatesResource, c.ns, name, data, subresources...), &v1alpha1.ConsoleTemplate{})
+		Invokes(testing.NewPatchSubresourceAction(consoletemplatesResource, c.ns, name, pt, data, subresources...), &v1alpha1.ConsoleTemplate{})
 
 	if obj == nil {
 		return nil, err

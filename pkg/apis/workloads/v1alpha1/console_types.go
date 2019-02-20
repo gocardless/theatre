@@ -10,6 +10,10 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Console declares an instance of a console environment to be created by a specific user
+// +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.user"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Expiry",type="string",JSONPath=".status.expiryTime"
 type Console struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

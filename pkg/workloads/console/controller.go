@@ -514,7 +514,7 @@ func buildRole(name types.NamespacedName, podName string) *rbacv1.Role {
 			{
 				Verbs:         []string{"get"},
 				APIGroups:     []string{""},
-				Resources:     []string{"pods/logs"},
+				Resources:     []string{"pods/log"},
 				ResourceNames: []string{podName},
 			},
 			{

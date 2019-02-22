@@ -74,6 +74,8 @@ jobs:
       - run:
           name: Run acceptance tests
           command: workspace/bin/acceptance run
+      # If the test failed due to a flake then we want to gather as much
+      # information as possible, because it could be hard to reproduce.
       - run:
           name: Show events
           command: KUBECONFIG="$(kind get kubeconfig-path --name="e2e")" kubectl get events

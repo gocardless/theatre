@@ -207,7 +207,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			Command:            []string{"sleep", "30"},
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
-			TimeoutSeconds:     6,
+			TimeoutSeconds:     66,
 		},
 	}
 }

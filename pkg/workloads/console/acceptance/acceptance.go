@@ -182,6 +182,8 @@ func buildConsoleTemplate(ttl *int32) *workloadsv1alpha1.ConsoleTemplate {
 			AdditionalAttachSubjects:       []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					// Set the grace period to 0, to ensure quick cleanup.
+					TerminationGracePeriodSeconds: new(int64),
 					Containers: []corev1.Container{
 						corev1.Container{
 							Image:   "alpine:latest",

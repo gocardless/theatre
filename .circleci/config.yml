@@ -5,6 +5,8 @@ references:
   docker_golang: &docker_golang
     docker:
       - image: golang:1.11
+        environment:
+          GOCACHE: /gocache
     working_directory: /go/src/github.com/gocardless/theatre
 
 jobs:
@@ -12,6 +14,9 @@ jobs:
     <<: *docker_golang
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - check-generated-resources-v1-{{ checksum "Gopkg.lock" }}
       - run:
           name: Install prettier
           command: |
@@ -22,11 +27,18 @@ jobs:
       - run:
           name: Ensure generated CRDs and RBAC are up to date
           command: make manifests && git diff --exit-code config/
+      - save_cache:
+          key: check-generated-resources-v1-{{ checksum "Gopkg.lock" }}
+          paths: [/gocache]
 
   unit-integration:
     <<: *docker_golang
     steps:
       - checkout
+      # TODO update comment
+      - restore_cache:
+          keys:
+            - unit-integration-v1-{{ checksum "Gopkg.lock" }}
       - run:
           name: Install ginkgo test runner
           command: go get github.com/onsi/ginkgo/ginkgo
@@ -39,17 +51,26 @@ jobs:
       - run:
           name: Run tests
           command: ginkgo -race -r -v
+      - save_cache:
+          key: unit-integration-v1-{{ checksum "Gopkg.lock" }}
+          paths: [/gocache]
 
   build:
     <<: *docker_golang
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - build-v1-{{ checksum "Gopkg.lock" }}
       - run:
           name: Build test binaries
           command: make all
       - persist_to_workspace:
           root: /go/src/github.com/gocardless/theatre
           paths: ['bin']
+      - save_cache:
+          key: build-v1-{{ checksum "Gopkg.lock" }}
+          paths: [/gocache]
 
   acceptance:
     machine: true

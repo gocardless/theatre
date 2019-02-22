@@ -8,6 +8,7 @@ import (
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -149,7 +150,23 @@ func (c *Runner) ListConsolesByLabelsAndUser(namespace, username, labelSelector 
 
 // WaitUntilReady will block until the console reaches a phase that indicates
 // that it's ready to be attached to, or has failed.
+// It will then block until an associated RoleBinding exists that contains the
+// console user in its subject list. This RoleBinding gives the console user
+// permission to attach to the pod.
 func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
+	csl, err := c.waitForConsole(ctx, createdCsl)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.waitForRoleBinding(ctx, csl); err != nil {
+		return nil, err
+	}
+
+	return csl, nil
+}
+
+func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
 	isRunning := func(csl *workloadsv1alpha1.Console) bool {
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleRunning
 	}
@@ -209,6 +226,56 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 			)
 		}
 	}
+}
+
+func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
+	rbClient := c.kubeClient.RbacV1().RoleBindings(csl.Namespace)
+	watcher, err := rbClient.Watch(metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
+	if err != nil {
+		return errors.Wrap(err, "error watching rolebindings")
+	}
+	defer watcher.Stop()
+
+	// The Console controller might have already created a DirectoryRoleBinding
+	// and the DirectoryRoleBinding controller might have created the RoleBinding
+	// and updated its subject list by this point. If so, we are already done, and
+	// might never receive another event from our RoleBinding Watcher, causing the
+	// subsequent loop would block forever.
+	// If the associated RoleBinding exists and has the console user in its
+	// subject list, return early.
+	rb, err := rbClient.Get(csl.Name, metav1.GetOptions{})
+	if err == nil && rbHasSubject(rb, csl.Spec.User) {
+		return nil
+	}
+
+	rbEvents := watcher.ResultChan()
+	for {
+		select {
+		case rbEvent, ok := <-rbEvents:
+			if !ok {
+				return errors.New("rolebinding event watcher channel closed")
+			}
+
+			rb := rbEvent.Object.(*rbacv1.RoleBinding)
+			if rbHasSubject(rb, csl.Spec.User) {
+				return nil
+			}
+
+			continue
+
+		case <-ctx.Done():
+			return errors.Wrap(ctx.Err(), "waiting for rolebinding interrupted")
+		}
+	}
+}
+
+func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {
+	for _, subject := range rb.Subjects {
+		if subject.Name == subjectName {
+			return true
+		}
+	}
+	return false
 }
 
 // GetAttachablePod returns an attachable pod for the given console

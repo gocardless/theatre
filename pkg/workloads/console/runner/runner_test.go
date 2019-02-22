@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +26,12 @@ var _ = Describe("Runner", func() {
 		namespace       = "testns"
 	)
 
+	BeforeEach(func() {
+		// Remove test order dependency by resetting state between tests
+		fakeConsoles = []runtime.Object{}
+		fakeKubeObjects = []runtime.Object{}
+	})
+
 	JustBeforeEach(func() {
 		theatreClient = theatreFake.NewSimpleClientset(fakeConsoles...)
 		kubeClient = fake.NewSimpleClientset(fakeKubeObjects...)
@@ -32,9 +39,7 @@ var _ = Describe("Runner", func() {
 	})
 
 	Describe("Create", func() {
-
 		Context("When creating a new console", func() {
-
 			var (
 				createdCsl   *workloadsv1alpha1.Console
 				createCslErr error
@@ -100,13 +105,10 @@ var _ = Describe("Runner", func() {
 					errors.NewAlreadyExists(workloadsv1alpha1.Resource("consoles"), ""),
 				))
 			})
-
 		})
-
 	})
 
 	Describe("FindTemplateBySelector", func() {
-
 		cslTmpl := &workloadsv1alpha1.ConsoleTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-template",
@@ -260,16 +262,13 @@ var _ = Describe("Runner", func() {
 	})
 
 	Describe("WaitUntilReady", func() {
-
-		timeout := 200 * time.Millisecond
-
-		csl := workloadsv1alpha1.Console{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-console",
-			},
+		addSubjectsToRoleBinding := func(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
+			rb.Subjects = subjects
+			_, err := kubeClient.RbacV1().RoleBindings(rb.Namespace).Update(&rb)
+			Expect(err).NotTo(HaveOccurred())
 		}
 
-		updateToPhase := func(in workloadsv1alpha1.Console, phase workloadsv1alpha1.ConsolePhase) {
+		updateConsolePhase := func(in workloadsv1alpha1.Console, phase workloadsv1alpha1.ConsolePhase) {
 			// Ensure we recover, as this is being run in a goroutine
 			defer GinkgoRecover()
 
@@ -282,30 +281,88 @@ var _ = Describe("Runner", func() {
 			Expect(err).ToNot(HaveOccurred(), "error while updating console status")
 		}
 
-		Context("When the console is pending", func() {
+		var (
+			timeout time.Duration
+			csl     workloadsv1alpha1.Console
+			readyRb rbacv1.RoleBinding
+		)
 
+		BeforeEach(func() {
+			timeout = 200 * time.Millisecond
+
+			csl = workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-console"},
+				Spec:       workloadsv1alpha1.ConsoleSpec{User: "test-user"},
+			}
+
+			readyRb = rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: csl.Name},
+				Subjects:   []rbacv1.Subject{{Name: csl.Spec.User}},
+			}
+		})
+
+		Describe("waiting for the console to be ready", func() {
 			BeforeEach(func() {
-				csl.Status.Phase = workloadsv1alpha1.ConsolePending
-				fakeConsoles = []runtime.Object{&csl}
+				// For all the tests exercising blocking on console readiness, ensure
+				// that the rolebinding is already ready.
+				fakeKubeObjects = []runtime.Object{&readyRb}
 			})
 
-			It("Fails with a timeout", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-				defer cancel()
-				_, err := runner.WaitUntilReady(ctx, csl)
+			Context("When the console is pending", func() {
+				BeforeEach(func() {
+					csl.Status.Phase = workloadsv1alpha1.ConsolePending
+					fakeConsoles = []runtime.Object{&csl}
+				})
 
-				Expect(err.Error()).To(ContainSubstring("last phase was: 'Pending'"))
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				It("Fails with a timeout", func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+					defer cancel()
+					_, err := runner.WaitUntilReady(ctx, csl)
+
+					Expect(err.Error()).To(ContainSubstring("last phase was: 'Pending'"))
+					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				})
+
+				Context("When phase is updated to Running", func() {
+					It("Returns successfully", func() {
+						// Give some time for the watch to be set up, by waiting until
+						// half-way through the timeout period before updating the object.
+						time.AfterFunc(timeout/2,
+							func() { updateConsolePhase(csl, workloadsv1alpha1.ConsoleRunning) },
+						)
+
+						ctx, cancel := context.WithTimeout(context.Background(), timeout)
+						defer cancel()
+						upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err).ToNot(HaveOccurred())
+						Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
+					})
+				})
+
+				Context("When phase is updated to non-Running", func() {
+					It("Returns with a failure before the timeout", func() {
+						time.AfterFunc(timeout/2,
+							func() { updateConsolePhase(csl, workloadsv1alpha1.ConsoleStopped) },
+						)
+
+						ctx, cancel := context.WithTimeout(context.Background(), timeout)
+						defer cancel()
+						_, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err.Error()).To(ContainSubstring("console is Stopped"))
+						Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
+					})
+				})
 			})
 
-			Context("When phase is updated to Running", func() {
+			Context("When console is already running", func() {
+				BeforeEach(func() {
+					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
+					fakeConsoles = []runtime.Object{&csl}
+				})
+
 				It("Returns successfully", func() {
-					// Give some time for the watch to be set up, by waiting until
-					// half-way through the timeout period before updating the object.
-					time.AfterFunc(timeout/2,
-						func() { updateToPhase(csl, workloadsv1alpha1.ConsoleRunning) },
-					)
-
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
 					upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
@@ -315,92 +372,179 @@ var _ = Describe("Runner", func() {
 				})
 			})
 
-			Context("When phase is updated to non-Running", func() {
-				It("Returns with a failure before the timeout", func() {
-					time.AfterFunc(timeout/2,
-						func() { updateToPhase(csl, workloadsv1alpha1.ConsoleStopped) },
-					)
+			Context("When console is already stopped", func() {
+				BeforeEach(func() {
+					csl.Status.Phase = workloadsv1alpha1.ConsoleStopped
+					fakeConsoles = []runtime.Object{&csl}
+				})
 
+				// TODO - return a proper error
+				It("Returns an error immediately", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
 					_, err := runner.WaitUntilReady(ctx, csl)
 
-					Expect(err.Error()).To(ContainSubstring("console is Stopped"))
 					Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
+					Expect(err.Error()).To(ContainSubstring("console is Stopped"))
+				})
+			})
+
+			Context("When console does not exist", func() {
+				BeforeEach(func() {
+					fakeConsoles = []runtime.Object{}
+				})
+
+				It("Fails with a timeout", func() {
+					ctx, cancel := context.WithTimeout(context.Background(), timeout)
+					defer cancel()
+					_, err := runner.WaitUntilReady(ctx, csl)
+
+					Expect(err.Error()).To(ContainSubstring("console not found"))
+					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				})
+
+				Context("But it is later created", func() {
+					createCsl := func() {
+						defer GinkgoRecover()
+
+						cslInterface := theatreClient.WorkloadsV1alpha1().Consoles(csl.Namespace)
+						createCsl := csl.DeepCopy()
+						createCsl.Status.Phase = workloadsv1alpha1.ConsoleRunning
+						_, err := cslInterface.Create(createCsl)
+
+						Expect(err).ToNot(HaveOccurred(), "error while updating console status")
+					}
+
+					It("Returns successfully", func() {
+						time.AfterFunc(timeout/2, createCsl)
+
+						ctx, cancel := context.WithTimeout(context.Background(), timeout)
+						defer cancel()
+						upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err).ToNot(HaveOccurred())
+						Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
+					})
 				})
 			})
 		})
 
-		Context("When console is already running", func() {
+		Describe("Waiting for the rolebinding to be ready", func() {
 			BeforeEach(func() {
+				// For all the tests exercising blocking on console readiness, ensure
+				// that the rolebinding is already ready.
 				csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
 				fakeConsoles = []runtime.Object{&csl}
 			})
 
-			It("Returns successfully", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), timeout)
-				defer cancel()
-				upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+			Context("When the rolebinding does not exist yet", func() {
+				BeforeEach(func() {
+					fakeKubeObjects = []runtime.Object{}
+				})
 
-				Expect(err).ToNot(HaveOccurred())
-				Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
-			})
-
-		})
-
-		Context("When console is already stopped", func() {
-			BeforeEach(func() {
-				csl.Status.Phase = workloadsv1alpha1.ConsoleStopped
-				fakeConsoles = []runtime.Object{&csl}
-			})
-
-			// TODO - return a proper error
-			It("Returns an error immediately", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), timeout)
-				defer cancel()
-				_, err := runner.WaitUntilReady(ctx, csl)
-
-				Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
-				Expect(err.Error()).To(ContainSubstring("console is Stopped"))
-			})
-
-		})
-
-		Context("When console does not exist", func() {
-			BeforeEach(func() {
-				fakeConsoles = []runtime.Object{}
-			})
-
-			It("Fails with a timeout", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), timeout)
-				defer cancel()
-				_, err := runner.WaitUntilReady(ctx, csl)
-
-				Expect(err.Error()).To(ContainSubstring("console not found"))
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
-			})
-
-			Context("But it is later created", func() {
-				createCsl := func() {
-					defer GinkgoRecover()
-
-					cslInterface := theatreClient.WorkloadsV1alpha1().Consoles(csl.Namespace)
-					createCsl := csl.DeepCopy()
-					createCsl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					_, err := cslInterface.Create(createCsl)
-
-					Expect(err).ToNot(HaveOccurred(), "error while updating console status")
-				}
-
-				It("Returns successfully", func() {
-					time.AfterFunc(timeout/2, createCsl)
-
+				It("Fails with a timeout", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
-					upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl)
 
-					Expect(err).ToNot(HaveOccurred())
-					Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
+					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
+					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				})
+
+				Context("When it is subsequently created then updated", func() {
+					createRoleBinding := func(timeout time.Duration) {
+						defer GinkgoRecover()
+
+						unreadyRb := readyRb // hear me out
+						subjects := readyRb.Subjects
+						unreadyRb.Subjects = nil
+
+						rbClient := kubeClient.RbacV1().RoleBindings(csl.Namespace)
+						rb, err := rbClient.Create(&unreadyRb)
+						Expect(err).NotTo(HaveOccurred())
+
+						// Try to exercise code that requires the RoleBinding to contain the
+						// expcted subjects, not just that it exists
+						time.Sleep(timeout / 4)
+
+						addSubjectsToRoleBinding(*rb, subjects)
+					}
+
+					It("Returns success", func() {
+						time.AfterFunc(timeout/4, func() {
+							defer GinkgoRecover()
+							createRoleBinding(timeout)
+						})
+
+						ctx, cancel := context.WithTimeout(context.Background(), timeout)
+						defer cancel()
+						_, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err).ToNot(HaveOccurred())
+					})
+				})
+			})
+
+			Context("When the rolebinding exists but has no subjects", func() {
+				var rb rbacv1.RoleBinding
+
+				BeforeEach(func() {
+					rb = rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: csl.Name}}
+					fakeKubeObjects = []runtime.Object{&rb}
+				})
+
+				It("Fails with a timeout", func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+					defer cancel()
+					_, err := runner.WaitUntilReady(ctx, csl)
+
+					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
+					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				})
+
+				Context("When it is subsequently updated with the desired subjects", func() {
+					It("Returns success", func() {
+						done := make(chan struct{})
+						time.AfterFunc(timeout/2,
+							func() {
+								defer GinkgoRecover()
+								addSubjectsToRoleBinding(rb, []rbacv1.Subject{{Name: csl.Spec.User}})
+								close(done)
+							},
+						)
+
+						ctx, cancel := context.WithTimeout(context.Background(), timeout)
+						defer cancel()
+						_, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err).ToNot(HaveOccurred())
+
+						// Allow modification of global test state to finish to avoid race
+						<-done
+					})
+				})
+
+				Context("When it is subsequently updated with undesired subjects", func() {
+					It("Fails with a timeout", func() {
+						done := make(chan struct{})
+						time.AfterFunc(timeout/2,
+							func() {
+								defer GinkgoRecover()
+								addSubjectsToRoleBinding(rb, []rbacv1.Subject{{Name: "rando"}})
+								close(done)
+							},
+						)
+
+						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+						defer cancel()
+						_, err := runner.WaitUntilReady(ctx, csl)
+
+						Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
+						Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+
+						// Allow modification of global test state to finish to avoid race
+						<-done
+					})
 				})
 			})
 		})

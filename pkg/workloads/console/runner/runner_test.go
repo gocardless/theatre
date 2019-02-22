@@ -39,9 +39,7 @@ var _ = Describe("Runner", func() {
 	})
 
 	Describe("Create", func() {
-
 		Context("When creating a new console", func() {
-
 			var (
 				createdCsl   *workloadsv1alpha1.Console
 				createCslErr error
@@ -107,13 +105,10 @@ var _ = Describe("Runner", func() {
 					errors.NewAlreadyExists(workloadsv1alpha1.Resource("consoles"), ""),
 				))
 			})
-
 		})
-
 	})
 
 	Describe("FindTemplateBySelector", func() {
-
 		cslTmpl := &workloadsv1alpha1.ConsoleTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-template",
@@ -267,7 +262,6 @@ var _ = Describe("Runner", func() {
 	})
 
 	Describe("WaitUntilReady", func() {
-
 		addSubjectsToRoleBinding := func(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
 			rb.Subjects = subjects
 			_, err := kubeClient.RbacV1().RoleBindings(rb.Namespace).Update(&rb)
@@ -308,7 +302,6 @@ var _ = Describe("Runner", func() {
 		})
 
 		Describe("waiting for the console to be ready", func() {
-
 			BeforeEach(func() {
 				// For all the tests exercising blocking on console readiness, ensure
 				// that the rolebinding is already ready.
@@ -316,7 +309,6 @@ var _ = Describe("Runner", func() {
 			})
 
 			Context("When the console is pending", func() {
-
 				BeforeEach(func() {
 					csl.Status.Phase = workloadsv1alpha1.ConsolePending
 					fakeConsoles = []runtime.Object{&csl}
@@ -378,7 +370,6 @@ var _ = Describe("Runner", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
 				})
-
 			})
 
 			Context("When console is already stopped", func() {
@@ -396,7 +387,6 @@ var _ = Describe("Runner", func() {
 					Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
 					Expect(err.Error()).To(ContainSubstring("console is Stopped"))
 				})
-
 			})
 
 			Context("When console does not exist", func() {
@@ -440,7 +430,6 @@ var _ = Describe("Runner", func() {
 		})
 
 		Describe("Waiting for the rolebinding to be ready", func() {
-
 			BeforeEach(func() {
 				// For all the tests exercising blocking on console readiness, ensure
 				// that the rolebinding is already ready.

@@ -70,6 +70,7 @@ func main() {
 				},
 			},
 		},
+		Port: 8443,
 	}
 
 	svr, err := webhook.NewServer("workloads", mgr, opts)

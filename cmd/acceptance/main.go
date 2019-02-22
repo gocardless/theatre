@@ -19,6 +19,7 @@ import (
 	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
 )
 
@@ -144,6 +145,7 @@ func main() {
 		SetDefaultEventuallyTimeout(time.Minute)
 		SetDefaultEventuallyPollingInterval(100 * time.Millisecond)
 
+		config.DefaultReporterConfig.Verbose = true
 		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
 			os.Exit(0)
 		} else {

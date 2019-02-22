@@ -52,7 +52,9 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
+		MetricsBindAddress: "0.0.0.0:9300",
+	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
 	}

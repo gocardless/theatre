@@ -19,6 +19,7 @@ import (
 	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
 )
 
@@ -36,6 +37,7 @@ var (
 
 	run         = app.Command("run", "Runs the acceptance test suite")
 	runName     = run.Flag("name", "Name of Kubernetes context to against").Default("e2e").String()
+	runVerbose  = run.Flag("verbose", "Use the verbose reporter").Short('v').Bool()
 	contextName = "e2e"
 )
 
@@ -143,6 +145,9 @@ func main() {
 
 		SetDefaultEventuallyTimeout(time.Minute)
 		SetDefaultEventuallyPollingInterval(100 * time.Millisecond)
+		if *runVerbose {
+			config.DefaultReporterConfig.Verbose = true
+		}
 
 		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
 			os.Exit(0)

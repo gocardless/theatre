@@ -1,5 +1,5 @@
 # Build Go binary without cgo dependencies
-FROM golang:1.11 as builder
+FROM golang:1.12 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 COPY . /go/src/github.com/gocardless/theatre
 RUN CGO_ENABLED=0 make VERSION=$(cat VERSION) all

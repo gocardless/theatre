@@ -132,7 +132,7 @@ spec:
     name: superuser
   subjects:
     - kind: GoogleGroup
-      name: platform@gocardless.com
+      name: core-infrastructure-team@gocardless.com
     - kind: User
       name: hmac@gocardless.com
 ```

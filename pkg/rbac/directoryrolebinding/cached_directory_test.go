@@ -128,7 +128,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 	})
 
 	JustBeforeEach(func() {
-		gock.New("https://www.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members").
+		gock.New("https://www.googleapis.com/admin/directory/v1/groups/core-infrastructure-team%40gocardless.com/members").
 			Reply(200).
 			JSON(membersResponse)
 	})
@@ -138,7 +138,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 	})
 
 	Describe("MembersOf", func() {
-		Context("With two members of platform@gocardless.com", func() {
+		Context("With two members of core-infrastructure-team@gocardless.com", func() {
 			BeforeEach(func() {
 				membersResponse = directoryv1.Members{
 					Members: []*directoryv1.Member{
@@ -149,7 +149,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 			})
 
 			It("Retrieves both members", func() {
-				members, err := directory.MembersOf(context.TODO(), "platform@gocardless.com")
+				members, err := directory.MembersOf(context.TODO(), "core-infrastructure-team@gocardless.com")
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(members).To(

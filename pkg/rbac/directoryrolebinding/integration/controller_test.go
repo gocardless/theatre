@@ -103,12 +103,12 @@ var _ = Describe("Reconciler", func() {
 		teardown()
 	})
 
-	Context("With all@ and platform@", func() {
+	Context("With all@ and core-infrastructure-team@", func() {
 		BeforeEach(func() {
 			groups["all@gocardless.com"] = []string{
 				"lawrence@gocardless.com",
 			}
-			groups["platform@gocardless.com"] = []string{
+			groups["core-infrastructure-team@gocardless.com"] = []string{
 				"lawrence@gocardless.com",
 				"chris@gocardless.com",
 			}
@@ -155,7 +155,7 @@ var _ = Describe("Reconciler", func() {
 
 			By("Update subject with groups and single user")
 			drb.Spec.Subjects = []rbacv1.Subject{
-				newGoogleGroup("platform@gocardless.com"),
+				newGoogleGroup("core-infrastructure-team@gocardless.com"),
 				newGoogleGroup("all@gocardless.com"),
 				newUser("manuel@gocardless.com"),
 			}

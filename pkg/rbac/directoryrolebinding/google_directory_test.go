@@ -33,7 +33,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 	})
 
 	JustBeforeEach(func() {
-		url := "https://www.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members"
+		url := "https://www.googleapis.com/admin/directory/v1/groups/core-infrastructure-team%40gocardless.com/members"
 
 		gock.New(url).Times(1).Reply(200).JSON(pageOne)
 		gock.New(url).Times(1).MatchParam("pageToken", pageOne.NextPageToken).Reply(200).JSON(pageTwo)
@@ -50,11 +50,11 @@ var _ = Describe("NewGoogleDirectory", func() {
 		)
 
 		JustBeforeEach(func() {
-			members, err = directory.MembersOf(context.TODO(), "platform@gocardless.com")
+			members, err = directory.MembersOf(context.TODO(), "core-infrastructure-team@gocardless.com")
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		Context("With (perPage + 1) members of platform@gocardless.com", func() {
+		Context("With (perPage + 1) members of core-infrastructure-team@gocardless.com", func() {
 			BeforeEach(func() {
 				pageOne = directoryv1.Members{
 					NextPageToken: "next-page-please",

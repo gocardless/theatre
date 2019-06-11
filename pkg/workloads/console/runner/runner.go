@@ -293,3 +293,9 @@ func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, 
 
 	return nil, errors.New("no attachable pod found")
 }
+
+// Delete a console by name
+func (c *Runner) Delete(namespace string, name string) error {
+	opts := metav1.DeleteOptions{}
+	return c.theatreClient.WorkloadsV1alpha1().Consoles(namespace).Delete(name, &opts)
+}

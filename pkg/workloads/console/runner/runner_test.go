@@ -219,6 +219,44 @@ var _ = Describe("Runner", func() {
 		})
 	})
 
+	Describe("Delete", func() {
+		createConsole := func(namespace, name string) runtime.Object {
+			return &workloadsv1alpha1.Console{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+			}
+		}
+
+		consoles := []runtime.Object{
+			createConsole("n1", "c1"),
+			createConsole("n1", "c2"),
+			createConsole("n1", "c3"),
+			createConsole("n1", "nameclash"),
+			createConsole("n2", "nameclash"),
+		}
+
+		BeforeEach(func() {
+			fakeConsoles = consoles
+		})
+
+		It("deletes the console if it exists", func() {
+			err := runner.Delete("n1", "c2")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns an error if the console does not exist", func() {
+			err := runner.Delete(metav1.NamespaceAll, "notaconsole")
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("returns an error if the console is in a different namespace", func() {
+			err := runner.Delete("n2", "c1")
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("ListConsolesByLabelsAndUser", func() {
 		createConsole := func(namespace, name, username string, labels map[string]string) runtime.Object {
 			return &workloadsv1alpha1.Console{

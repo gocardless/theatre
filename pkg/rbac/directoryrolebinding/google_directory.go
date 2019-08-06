@@ -9,7 +9,7 @@ import (
 const (
 	// GooglePerPage states how many members we retrive in each pagination call when talking
 	// to the Google directory service
-	GooglePerPage = 500
+	GooglePerPage = 200
 	// GoogleMaxPages limits the number of pages we iterate through when talking to the
 	// Google directory service. In combination with the GooglePerPage constant, this
 	// effectively limits the size of the group we can process.

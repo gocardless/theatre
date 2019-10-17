@@ -4,7 +4,7 @@ version: 2
 references:
   docker_golang: &docker_golang
     docker:
-      - image: golang:1.11
+      - image: golang:1.13
     working_directory: /go/src/github.com/gocardless/theatre
 
 jobs:
@@ -22,6 +22,21 @@ jobs:
       - run:
           name: Ensure generated CRDs and RBAC are up to date
           command: make manifests && git diff --exit-code config/
+
+  # Dependabot doesn't support vendoring module updates, so we use this CI step
+  # to check we haven't updated our go.sum/go.mod without also vendoring the
+  # dependencies.
+  check-updated-vendor:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run: go mod vendor
+      - run: go mod tidy
+      - run: |
+          if ! git diff --summary; then
+            echo "vendor is out of date, please go mod vendor/tidy!"
+            /bin/false
+          fi
 
   unit-integration:
     <<: *docker_golang
@@ -94,6 +109,7 @@ workflows:
   build-integration:
     jobs:
       - check-generated-resources
+      - check-updated-vendor
       - unit-integration
       - build
       - acceptance:

@@ -8,6 +8,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +30,20 @@ const (
 	EventComplete     = "ReconcileComplete"
 )
 
+var (
+	reconcileErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_reconcile_errors_total",
+			Help: "Counter of errors from reconcile loops, labelled by group_version_kind",
+		},
+		[]string{"kind"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(reconcileErrorsTotal)
+}
+
 // ObjectReconcileFunc defines the expected interface for the reconciliation of a single
 // object type- it can be used to avoid boilerplate for finding and initializing objects
 // at the start of traditional reconciliation loops.
@@ -41,6 +56,9 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
 		logger := kitlog.With(logger, "request", request)
 		logger.Log("event", EventRequestStart, "msg", "Reconcile request start")
+
+		// Prepare a new object for this request
+		obj := objType.DeepCopyObject()
 
 		defer func() {
 			if err != nil {
@@ -56,15 +74,13 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 					logging.WithNoRecord(logger).Log("event", EventError, "error", err)
 				} else {
 					logger.Log("event", EventError, "error", err)
+					reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
 				}
 			} else {
 				logger.Log("event", EventComplete, "msg", "Completed reconciliation")
 			}
 
 		}()
-
-		// Prepare a new object for this request
-		obj := objType.DeepCopyObject()
 
 		if err := mgr.GetClient().Get(ctx, request.NamespacedName, obj); err != nil {
 			if apierrors.IsNotFound(err) {

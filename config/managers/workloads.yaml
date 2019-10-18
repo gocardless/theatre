@@ -109,6 +109,8 @@ spec:
       containers:
         - command:
             - /workloads-manager
+          args:
+            - --metrics-address=0.0.0.0
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager
@@ -117,6 +119,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          ports:
+            - name: metrics
+              containerPort: 9525
           resources:
             limits:
               cpu: 500m

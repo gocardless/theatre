@@ -1,25 +1,21 @@
 package main
 
 import (
-	stdlog "log"
 	"os"
 
 	"github.com/alecthomas/kingpin"
-	kitlog "github.com/go-kit/kit/log"
-	level "github.com/go-kit/kit/log/level"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
-	"k8s.io/klog"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/apis"
 	"github.com/gocardless/theatre/pkg/apis/workloads"
-	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/signals"
 	"github.com/gocardless/theatre/pkg/workloads/console"
 )
@@ -30,24 +26,23 @@ var (
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()
 
-	logger = kitlog.NewLogfmtLogger(os.Stderr)
+	commonOpts = cmd.NewCommonOptions(app)
 
 	// Version is set at compile time
 	Version = "dev"
 )
 
-func init() {
-	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
-	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
-	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
-}
-
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
+	logger := commonOpts.Logger()
+
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		app.Fatalf("failed to add schemes: %v", err)
 	}
+
+	go func() {
+		commonOpts.ListenAndServeMetrics(logger)
+	}()
 
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()

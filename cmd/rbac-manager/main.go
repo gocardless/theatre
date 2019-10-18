@@ -2,27 +2,23 @@ package main
 
 import (
 	"context"
-	stdlog "log"
 	"os"
 	"strings"
 
 	"github.com/alecthomas/kingpin"
-	kitlog "github.com/go-kit/kit/log"
-	level "github.com/go-kit/kit/log/level"
 
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
-	"k8s.io/klog"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/apis"
 	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
 	"github.com/gocardless/theatre/pkg/signals"
 )
@@ -31,29 +27,28 @@ var (
 	app     = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
 	refresh = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
 
+	commonOpts = cmd.NewCommonOptions(app)
+
 	// All GoogleGroup related settings
 	googleEnabled  = app.Flag("google", "Enable GoogleGroup subject Kind").Default("false").Bool()
 	googleSubject  = app.Flag("google-subject", "Service account subject").Default("robot-admin@gocardless.com").String()
 	googleCacheTTL = app.Flag("google-refresh", "Cache TTL for Google directory operations").Default("5m").Duration()
 
-	logger = kitlog.NewLogfmtLogger(os.Stderr)
-
 	// Version is set at compile time
 	Version = "dev"
 )
 
-func init() {
-	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
-	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
-	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
-}
-
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
+	logger := commonOpts.Logger()
+
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		app.Fatalf("failed to add schemes: %v", err)
 	}
+
+	go func() {
+		commonOpts.ListenAndServeMetrics(logger)
+	}()
 
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()

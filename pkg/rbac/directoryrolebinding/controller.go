@@ -104,7 +104,7 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 			return reconcile.Result{}, errors.Wrap(err, "failed to get DirectoryRoleBinding")
 		}
 
-		rb := &rbacv1.RoleBinding{
+		rb = &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      drb.Name,
 				Namespace: drb.Namespace,

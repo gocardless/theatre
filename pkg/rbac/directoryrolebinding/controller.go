@@ -6,9 +6,10 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -99,11 +100,11 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
 	err = r.client.Get(r.ctx, identifier, rb)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, err
+		if !apierrors.IsNotFound(err) {
+			return reconcile.Result{}, errors.Wrap(err, "failed to get DirectoryRoleBinding")
 		}
 
-		rb := &rbacv1.RoleBinding{
+		rb = &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      drb.Name,
 				Namespace: drb.Namespace,
@@ -113,11 +114,11 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 		}
 
 		if err := controllerutil.SetControllerReference(drb, rb, scheme.Scheme); err != nil {
-			return reconcile.Result{}, err
+			return reconcile.Result{}, errors.Wrap(err, "failed to set controller reference")
 		}
 
 		if err = r.client.Create(r.ctx, rb); err != nil {
-			return reconcile.Result{}, err
+			return reconcile.Result{}, errors.Wrap(err, "failed to create RoleBinding")
 		}
 
 		logger.Log("event", EventRoleBindingCreated, "msg", fmt.Sprintf(
@@ -127,7 +128,7 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 
 	subjects, err := r.resolve(drb.Spec.Subjects)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, errors.Wrap(err, "failed to resolve subjects")
 	}
 
 	add, remove := rbacutils.Diff(subjects, rb.Subjects), rbacutils.Diff(rb.Subjects, subjects)
@@ -146,7 +147,7 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 
 		rb.Subjects = subjects
 		if err := r.client.Update(r.ctx, rb); err != nil {
-			return reconcile.Result{}, err
+			return reconcile.Result{}, errors.Wrap(err, "failed to update RoleBinding")
 		}
 	}
 

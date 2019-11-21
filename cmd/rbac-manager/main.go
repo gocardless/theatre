@@ -27,7 +27,7 @@ var (
 	app     = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
 	refresh = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
 
-	commonOpts = cmd.NewCommonOptions(app)
+	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 
 	// All GoogleGroup related settings
 	googleEnabled  = app.Flag("google", "Enable GoogleGroup subject Kind").Default("false").Bool()

@@ -26,9 +26,14 @@ type commonOptions struct {
 func NewCommonOptions(cmd *kingpin.Application) *commonOptions {
 	opt := &commonOptions{}
 
+	cmd.Flag("debug", "Enable debug logging").Default("false").BoolVar(&opt.Debug)
+
+	return opt
+}
+
+func (opt *commonOptions) WithMetrics(cmd *kingpin.Application) *commonOptions {
 	cmd.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").StringVar(&opt.MetricAddress)
 	cmd.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16Var(&opt.MetricPort)
-	cmd.Flag("debug", "Enable debug logging").Default("false").BoolVar(&opt.Debug)
 
 	return opt
 }

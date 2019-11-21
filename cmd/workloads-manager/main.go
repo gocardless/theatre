@@ -26,7 +26,7 @@ var (
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()
 
-	commonOpts = cmd.NewCommonOptions(app)
+	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 
 	// Version is set at compile time
 	Version = "dev"

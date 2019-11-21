@@ -79,7 +79,7 @@ func main() {
 		}
 
 		controlPlaneIDBytes, err := exec.CommandContext(
-			ctx, "docker", "ps", "--filter", fmt.Sprintf("name=kind-%s-control-plane", *prepareName), "--format", "{{.ID}}",
+			ctx, "docker", "ps", "--filter", fmt.Sprintf("name=%s-control-plane", *prepareName), "--format", "{{.ID}}",
 		).Output()
 		controlPlaneID := string(bytes.TrimSpace(controlPlaneIDBytes))
 		if controlPlaneID == "" || err != nil {
@@ -101,17 +101,9 @@ func main() {
 		}
 
 		logger.Log("msg", "loading docker image into control plane", "controlPlane", controlPlaneID)
-		saveCmd := exec.CommandContext(ctx, "docker", "save", *prepareImage)
-		saveOut, _ := saveCmd.StdoutPipe()
-		loadCmd := exec.CommandContext(ctx, "docker", "exec", "-i", controlPlaneID, "docker", "load")
-		loadCmd.Stdin = saveOut
-
-		if err := saveCmd.Start(); err != nil {
-			app.Fatalf("failed to save acceptance image: %v", err)
-		}
-
+		loadCmd := exec.CommandContext(ctx, "kind", "load", "docker-image", "--name", *prepareName, *prepareImage)
 		if err := pipeOutput(loadCmd).Run(); err != nil {
-			app.Fatalf("failed to load saved image into control plane: %v", err)
+			app.Fatalf("failed to load image into control plane: %v", err)
 		}
 
 		logger.Log("msg", "generating installation manifests")

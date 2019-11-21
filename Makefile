@@ -1,19 +1,23 @@
-PROG=bin/rbac-manager bin/workloads-manager bin/acceptance
+PROG=bin/rbac-manager bin/workloads-manager bin/acceptance bin/theatre-envconsul
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
 
-.PHONY: all darwin linux test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
+.PHONY: build build-darwin build-linux build-all test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
 
-all: darwin linux
-darwin: $(PROG)
-linux: $(PROG:=.linux_amd64)
+build: $(PROG)
+build-darwin: $(PROG:=.darwin_amd64)
+build-linux: $(PROG:=.linux_amd64)
+build-all: build-darwin build-linux
 
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX
 bin/%.linux_amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
+
+bin/%.darwin_amd64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
 
 bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/main.go
@@ -35,7 +39,7 @@ deploy-production:
 	kustomize build config/overlays/production | kubectl apply -f -
 
 clean:
-	rm -rvf $(PROG) $(PROG:%=%.linux_amd64)
+	rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
 
 docker-build:
 	docker build -t $(IMAGE):latest .

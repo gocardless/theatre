@@ -50,7 +50,6 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: rbac-manager
-    namespace: system
 ---
 apiVersion: apps/v1
 kind: StatefulSet

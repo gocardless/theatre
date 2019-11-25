@@ -62,7 +62,9 @@ jobs:
           command: |
             sudo bash <<EOF
             curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.6.0/kind-linux-amd64
-            curl -fsL -o /usr/local/bin/kustomize https://github.com/kubernetes-sigs/kustomize/releases/download/v1.0.11/kustomize_1.0.11_linux_amd64
+            curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz \
+              | tar xfz -
+            mv -v kustomize /usr/local/bin/kustomize
             curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.13.12/bin/linux/amd64/kubectl
 
             chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind

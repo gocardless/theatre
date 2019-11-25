@@ -51,5 +51,7 @@ docker-tag:
 
 # npm install -g prettier
 manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
-	prettier --parser yaml --write config/crds/*
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \
+		&& rm -rfv config/base/crds \
+		&& mv -v config/crds config/base/crds \
+		&& prettier --parser yaml --write config/base/crds/*

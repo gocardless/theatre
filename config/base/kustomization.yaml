@@ -1,5 +1,5 @@
 ---
-apiVersion: v1beta1
+apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 namespace: theatre-system
@@ -9,9 +9,9 @@ commonLabels:
   app: theatre
 
 resources:
-  - ../crds/rbac_v1alpha1_directoryrolebinding.yaml
-  - ../crds/workloads_v1alpha1_console.yaml
-  - ../crds/workloads_v1alpha1_consoletemplate.yaml
-  - ../managers/namespace.yaml
-  - ../managers/rbac.yaml
-  - ../managers/workloads.yaml
+  - crds/rbac_v1alpha1_directoryrolebinding.yaml
+  - crds/workloads_v1alpha1_console.yaml
+  - crds/workloads_v1alpha1_consoletemplate.yaml
+  - managers/namespace.yaml
+  - managers/rbac.yaml
+  - managers/workloads.yaml

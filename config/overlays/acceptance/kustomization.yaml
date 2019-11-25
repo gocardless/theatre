@@ -5,6 +5,10 @@ kind: Kustomization
 bases:
   - ../../base
 
+resources:
+  - vault.yaml
+  - staging-service.yaml
+
 patchesStrategicMerge:
   - rbac-manager.yaml
   - workloads-manager.yaml

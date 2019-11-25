@@ -6,6 +6,7 @@ import (
 	stdlog "log"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,8 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gocardless/theatre/pkg/signals"
+
+	theatreEnvconsulAcceptance "github.com/gocardless/theatre/cmd/theatre-envconsul/acceptance"
 	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
 
 	. "github.com/onsi/ginkgo"
@@ -27,10 +30,11 @@ var (
 	app    = kingpin.New("acceptance", "Acceptance test suite for theatre").Version("0.0.0")
 	logger = kitlog.NewLogfmtLogger(os.Stderr)
 
-	prepare      = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareName  = prepare.Flag("name", "Name of Kubernetes context to create").Default("e2e").String()
-	prepareImage = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
-	prepareBin   = prepare.Flag("bin", "Path to manager binaries").Default("./bin").ExistingDir()
+	prepare           = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
+	prepareName       = prepare.Flag("name", "Name of Kubernetes context to create").Default("e2e").String()
+	prepareImage      = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
+	prepareConfigFile = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
+	prepareDockerfile = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
 
 	destroy     = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 	destroyName = destroy.Flag("name", "Name of Kubernetes context to destroy").Default("e2e").String()
@@ -41,21 +45,11 @@ var (
 	contextName = "e2e"
 )
 
-// AcceptanceDockerfile defines the docker instructions used to create an acceptance
-// docker image which will be pushed into the acceptance test cluster.
-const AcceptanceDockerfile = `
-FROM alpine:3.8
-RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
-COPY rbac-manager.linux_amd64 /rbac-manager
-COPY workloads-manager.linux_amd64 /workloads-manager
-`
-
 func init() {
 	logger = level.NewFilter(logger, level.AllowInfo())
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
-	app.HelpFlag.Short('h')
 }
 
 func main() {
@@ -73,7 +67,7 @@ func main() {
 
 		if !strings.Contains(string(clusters), fmt.Sprintf("%s\n", *prepareName)) {
 			logger.Log("msg", "creating new cluster")
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *prepareName)).Run(); err != nil {
+			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *prepareName, "--config", *prepareConfigFile)).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}
@@ -93,8 +87,7 @@ func main() {
 		}
 
 		logger.Log("msg", "preparing acceptance docker image")
-		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", "-", *prepareBin)
-		buildCmd.Stdin = strings.NewReader(AcceptanceDockerfile)
+		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", *prepareDockerfile, path.Dir(*prepareDockerfile))
 
 		if err := pipeOutput(buildCmd).Run(); err != nil {
 			app.Fatalf("failed to build acceptance docker image: %v", err)
@@ -159,7 +152,10 @@ var _ = Describe("Acceptance", func() {
 		app.Fatalf("failed to discover kind cluster config path: %v", err)
 	}
 
-	consoleAcceptance.Run(kitlog.NewLogfmtLogger(GinkgoWriter), cfgPath)
+	logger := kitlog.NewLogfmtLogger(GinkgoWriter)
+
+	consoleAcceptance.Run(logger, cfgPath)
+	theatreEnvconsulAcceptance.Run(logger, cfgPath)
 })
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

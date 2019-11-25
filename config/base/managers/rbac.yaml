@@ -76,7 +76,7 @@ spec:
             secretName: theatre-google-application-credentials
       containers:
         - command:
-            - /rbac-manager
+            - /usr/local/bin/rbac-manager
           args:
             - --google  # enable GoogleGroup resolution
             - --metrics-address=0.0.0.0

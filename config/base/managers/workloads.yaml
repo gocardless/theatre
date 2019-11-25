@@ -107,7 +107,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - command:
-            - /workloads-manager
+            - /usr/local/bin/workloads-manager
           args:
             - --metrics-address=0.0.0.0
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest

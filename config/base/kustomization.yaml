@@ -14,4 +14,19 @@ resources:
   - crds/workloads_v1alpha1_consoletemplate.yaml
   - managers/namespace.yaml
   - managers/rbac.yaml
+  - managers/vault.yaml
   - managers/workloads.yaml
+
+vars:
+  # We want our mutating webhook to ensure it only ever configures pods to use
+  # the same image as it is running itself. If we ensure this, we don't need to
+  # worry about maintaining compatibility between versions of the webhook and
+  # theatre-envconsul, as both will use the same version and be deployed
+  # atomically.
+  - name: THEATRE_IMAGE
+    objref:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      name: vault-manager
+    fieldref:
+      fieldpath: spec.template.spec.containers[0].image

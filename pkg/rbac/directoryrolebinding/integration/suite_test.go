@@ -20,7 +20,7 @@ var (
 )
 
 var _ = BeforeSuite(func() {
-	cfg, env, clientset = integration.StartAPIServer("../../../../config/crds")
+	cfg, env, clientset = integration.StartAPIServer("../../../../config/base/crds")
 })
 
 var _ = AfterSuite(func() {

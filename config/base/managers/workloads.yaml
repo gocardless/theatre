@@ -85,7 +85,6 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: workloads-manager
-    namespace: system
 ---
 apiVersion: apps/v1
 kind: StatefulSet

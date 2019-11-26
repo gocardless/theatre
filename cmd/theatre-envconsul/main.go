@@ -455,6 +455,9 @@ func (o *vaultOptions) EnvconsulConfig(env environment, token, command string) *
 		Vault: envconsulVault{
 			Address: o.Address,
 			Token:   token,
+			Retry: envconsulRetry{
+				Enabled: false,
+			},
 			SSL: envconsulSSL{
 				Enabled: o.UseTLS,
 				Verify:  !o.InsecureSkipVerify,
@@ -482,9 +485,14 @@ type EnvconsulConfig struct {
 }
 
 type envconsulVault struct {
-	Address string       `json:"address"`
-	Token   string       `json:"token"`
-	SSL     envconsulSSL `json:"ssl"`
+	Address string         `json:"address"`
+	Token   string         `json:"token"`
+	Retry   envconsulRetry `json:"retry"`
+	SSL     envconsulSSL   `json:"ssl"`
+}
+
+type envconsulRetry struct {
+	Enabled bool `json:"enabled"`
 }
 
 type envconsulSSL struct {

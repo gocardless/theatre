@@ -2,7 +2,7 @@
 FROM golang:1.13.4 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 COPY . /go/src/github.com/gocardless/theatre
-RUN CGO_ENABLED=0 make VERSION=$(cat VERSION) build
+RUN make VERSION=$(cat VERSION) build
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:bionic-20190807
@@ -26,9 +26,9 @@ RUN set -x \
     && curl -o /tmp/envconsul.zip -fsL https://releases.hashicorp.com/envconsul/0.9.1/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip \
     && echo ${ENVCONSUL_SHA256} /tmp/envconsul.zip | sha256sum -c \
     && unzip /tmp/envconsul.zip -d /tmp \
-    && mv /tmp/envconsul / \
+    && mv /tmp/envconsul /usr/local/bin/ \
     && rm /tmp/envconsul.zip
 
 WORKDIR /
-COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /
+COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /usr/local/bin/
 ENTRYPOINT ["/bin/bash"]

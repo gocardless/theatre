@@ -2,7 +2,7 @@ PROG=bin/rbac-manager bin/workloads-manager bin/acceptance bin/theatre-envconsul
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
-BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
+BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 
 .PHONY: build build-darwin build-linux build-all test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
 
@@ -53,6 +53,10 @@ docker-push:
 docker-tag:
 	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
 
+# We place manifests in a non-standard location, config/base/crds, rather than
+# config/crds. This means we can provide a more idiomatic kustomize structure,
+# but requires us to move the files after generation.
+#
 # npm install -g prettier
 manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \

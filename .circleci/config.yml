@@ -72,7 +72,7 @@ jobs:
       # Sleep to wait for everything to install properly before beginning tests
       - run:
           name: Prepare the cluster
-          command: workspace/bin/acceptance.linux_amd64 prepare --bin workspace/bin && sleep 10
+          command: workspace/bin/acceptance.linux_amd64 prepare && sleep 10
       - run:
           name: Run acceptance tests
           command: workspace/bin/acceptance.linux_amd64 run --verbose
@@ -80,15 +80,15 @@ jobs:
       # information as possible, because it could be hard to reproduce.
       - run:
           name: Show events
-          command: KUBECONFIG="$(kind get kubeconfig-path --name="e2e")" kubectl get events
+          command: kubectl get events
           when: on_fail
       - run:
           name: Show workloads logs
-          command: KUBECONFIG="$(kind get kubeconfig-path --name="e2e")" kubectl -n theatre-system logs theatre-workloads-manager-0
+          command: kubectl -n theatre-system logs theatre-workloads-manager-0
           when: on_fail
       - run:
           name: Show rbac logs
-          command: KUBECONFIG="$(kind get kubeconfig-path --name="e2e")" kubectl -n theatre-system logs theatre-rbac-manager-0
+          command: kubectl -n theatre-system logs theatre-rbac-manager-0
           when: on_fail
 
 workflows:

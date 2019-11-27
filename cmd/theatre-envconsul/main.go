@@ -31,13 +31,14 @@ var logger kitlog.Logger
 var (
 	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(Version)
 
-	commonOpts         = cmd.NewCommonOptions(app)
-	defaultInstallPath = "/var/theatre-vault"
+	commonOpts                     = cmd.NewCommonOptions(app)
+	defaultInstallPath             = "/var/theatre-vault"
+	defaultTheatreEnvconsulPath, _ = os.Executable()
 
 	install                       = app.Command("install", "Install binaries into path")
 	installPath                   = install.Flag("path", "Path to install theatre binaries").Default(defaultInstallPath).String()
 	installEnvconsulBinary        = install.Flag("envconsul-binary", "Path to envconsul binary").Default("/usr/local/bin/envconsul").String()
-	installTheatreEnvconsulBinary = install.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(os.Args[0]).String()
+	installTheatreEnvconsulBinary = install.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
 
 	exec             = app.Command("exec", "Authenticate with vault and exec envconsul")
 	execVaultOptions = newVaultOptions(exec)

@@ -227,8 +227,10 @@ func (i PodInjector) configureContainer(reference corev1.Container, containerCon
 		args = append(args, "--config-file", containerConfigPath)
 	}
 
-	execString := strings.Join(append(reference.Command, reference.Args...), " ")
-	args = append(args, "--command", execString)
+	execCommand := []string{"--"}
+	execCommand = append(execCommand, reference.Command...)
+	execCommand = append(execCommand, reference.Args...)
+	args = append(args, execCommand...)
 
 	c.Command = []string{path.Join(i.InstallPath, "theatre-envconsul")}
 	c.Args = args

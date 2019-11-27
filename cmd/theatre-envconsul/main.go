@@ -43,8 +43,8 @@ var (
 	exec             = app.Command("exec", "Authenticate with vault and exec envconsul")
 	execVaultOptions = newVaultOptions(exec)
 	execConfigFile   = exec.Flag("config-file", "app config file").String()
-	execCommand      = exec.Flag("command", "Command to execute").Required().String()
 	execInstallPath  = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
+	execCommand      = exec.Arg("command", "Command to execute").Required().Strings()
 
 	configure             = app.Command("configure", "Configures Vault with a Kubernetes auth backend (for testing)")
 	configureVaultOptions = newVaultOptions(configure)
@@ -451,7 +451,7 @@ func loadConfigFromFile(configFile string) (Config, error) {
 // pass to envconsul uses no interpolation, so multiple keys in a vault secret would be
 // assigned the same environment variable. This is undefined behaviour, resulting in
 // subsequent executions setting different values for the same env var.
-func (o *vaultOptions) EnvconsulConfig(env environment, token, command string) *EnvconsulConfig {
+func (o *vaultOptions) EnvconsulConfig(env environment, token string, command []string) *EnvconsulConfig {
 	cfg := &EnvconsulConfig{
 		Vault: envconsulVault{
 			Address: o.Address,
@@ -465,7 +465,7 @@ func (o *vaultOptions) EnvconsulConfig(env environment, token, command string) *
 			},
 		},
 		Exec: envconsulExec{
-			Command: command,
+			Command: strings.Join(command, " "),
 		},
 		Secret: []envconsulSecret{},
 	}

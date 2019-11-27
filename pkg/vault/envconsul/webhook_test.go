@@ -96,8 +96,10 @@ var _ = Describe("PodInjector", func() {
 							"kubernetes.gc-prd-effc.cluster",
 							"--auth-backend-role",
 							"default",
-							"--command",
-							"echo inject only",
+							"--",
+							"echo",
+							"inject",
+							"only",
 						}),
 					},
 				),
@@ -167,14 +169,15 @@ var _ = Describe("PodInjector", func() {
 							"default",
 							"--config-file",
 							"config/app.yaml",
-							"--command",
-							"echo inject only",
+							"--",
+							"echo",
+							"inject",
+							"only",
 						}),
 					},
 				),
 			)
 		})
-
 	})
 })
 

@@ -12,3 +12,4 @@ resources:
 patchesStrategicMerge:
   - rbac-manager.yaml
   - workloads-manager.yaml
+  - vault-manager.yaml

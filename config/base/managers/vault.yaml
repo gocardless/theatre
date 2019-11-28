@@ -1,0 +1,110 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-manager
+  labels:
+    group: vault.crd.gocardless.com
+rules:
+  - apiGroups:
+      - ""
+      - admissionregistration.k8s.io
+    resources:
+      - services
+      - mutatingwebhookconfigurations
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-manager
+  labels:
+    group: vault.crd.gocardless.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-manager
+  labels:
+    group: vault.crd.gocardless.com
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-manager
+subjects:
+  - kind: ServiceAccount
+    name: vault-manager
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vault-manager-webhook
+  labels:
+    group: vault.crd.gocardless.com
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - theatre-vault-manager-webhook
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vault-manager-webhook
+  labels:
+    group: vault.crd.gocardless.com
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vault-manager-webhook
+subjects:
+  - kind: ServiceAccount
+    name: vault-manager
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault-manager
+  labels:
+    group: vault.crd.gocardless.com
+spec:
+  serviceName: vault-manager
+  volumeClaimTemplates: []
+  selector:
+    matchLabels:
+      group: vault.crd.gocardless.com
+  template:
+    metadata:
+      labels:
+        group: vault.crd.gocardless.com
+    spec:
+      serviceAccountName: vault-manager
+      terminationGracePeriodSeconds: 10
+      containers:
+        - command:
+            - /usr/local/bin/vault-manager
+            - --theatre-image
+            - $(THEATRE_IMAGE)
+          image: eu.gcr.io/gc-containers/gocardless/theatre:latest
+          name: manager
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi

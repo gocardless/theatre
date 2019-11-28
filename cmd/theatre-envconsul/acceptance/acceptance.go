@@ -56,7 +56,8 @@ spec:
         - --vault-address=http://vault.vault.svc.cluster.local:8200
         - --no-vault-use-tls
         - --install-path=/usr/local/bin
-        - --command=env
+        - --
+        - env
 `
 
 func Run(logger kitlog.Logger, kubeConfigPath string) {

@@ -53,6 +53,7 @@ jobs:
 
   acceptance:
     machine: true
+    resource_class: large
     steps:
       - checkout
       - attach_workspace:

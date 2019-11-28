@@ -6,8 +6,9 @@ bases:
   - ../../base
 
 resources:
-  - vault.yaml
+  - google-application-credentials.yaml
   - staging-service.yaml
+  - vault.yaml
 
 patchesStrategicMerge:
   - rbac-manager.yaml

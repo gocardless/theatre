@@ -81,6 +81,10 @@ metadata:
     group: vault.crd.gocardless.com
 spec:
   serviceName: vault-manager
+  # run 3 replicas to ensure high availability of the mutating webhook.
+  # if the manager ever needs to manage custom resources,
+  # we need to implement leader election in vault-manager to prevent races.
+  replicas: 3
   volumeClaimTemplates: []
   selector:
     matchLabels:

@@ -129,6 +129,10 @@ func mainError(ctx context.Context, command string) (err error) {
 			}
 		}
 
+		if len(secretEnv) == 0 {
+			return errors.New("no 'vault:' prefix found in config or environment")
+		}
+
 		envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execCommand)
 		configJSONContents, err := json.Marshal(envconsulConfig)
 		if err != nil {

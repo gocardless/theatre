@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/alecthomas/kingpin"
 
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
@@ -55,6 +57,10 @@ func main() {
 	opts := webhook.ServerOptions{
 		CertDir: "/tmp/theatre-vault",
 		BootstrapOptions: &webhook.BootstrapOptions{
+			Secret: &types.NamespacedName{
+				Namespace: *namespace,
+				Name:      fmt.Sprintf("%s-ca", *serviceName),
+			},
 			MutatingWebhookConfigName: *webhookName,
 			Service: &webhook.Service{
 				Namespace: *namespace,

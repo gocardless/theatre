@@ -51,13 +51,14 @@ func main() {
 		VaultConfigMapName:      *vaultConfigMapName,
 	}
 
-	wh, err := envconsul.NewWebhook(logger, injectorOpts)
+	injector, err := envconsul.NewInjector(logger, injectorOpts)
 	if err != nil {
-		app.Fatalf("failed to create webhook: %v", err)
+		app.Fatalf("failed to create envconsul injector: %v", err)
 	}
 
+	wh := envconsul.NewAdmissionWebhook(logger)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/mutate-pods", wh.Handle)
+	mux.Handle("/mutate-pods", wh.Handle(injector.Mutate))
 
 	server := &http.Server{
 		Addr:      fmt.Sprintf(":%v", 443),

@@ -2,65 +2,113 @@ package envconsul
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
+	typedCorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 )
 
 const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
 
-func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
-	var handler admission.Handler
-	handler = &Injector{
-		logger:  kitlog.With(logger, "component", "EnvconsulInjector"),
-		decoder: mgr.GetAdmissionDecoder(),
-		client:  mgr.GetClient(),
-		opts:    injectorOpts,
+func NewWebhook(logger kitlog.Logger, injectorOpts InjectorOptions) (*Injector, error) {
+	scheme := runtime.NewScheme()
+	codecs := serializer.NewCodecFactory(scheme)
+
+	admissionDecoder, _ := admission.NewDecoder(scheme)
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get cluster config")
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create kubernetes client")
 	}
 
-	for _, opt := range opts {
-		opt(&handler)
-	}
-
-	return builder.NewWebhookBuilder().
-		Name(EnvconsulInjectorFQDN).
-		Mutating().
-		Operations(admissionregistrationv1beta1.Create).
-		ForType(&corev1.Pod{}).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
+	return &Injector{
+		logger:           kitlog.With(logger, "component", "EnvconsulInjector"),
+		requestDecoder:   codecs.UniversalDeserializer(),
+		admissionDecoder: admissionDecoder,
+		client:           client.CoreV1(),
+		opts:             injectorOpts,
+	}, nil
 }
 
 type Injector struct {
-	logger  kitlog.Logger
-	decoder types.Decoder
-	client  client.Client
-	opts    InjectorOptions
+	logger           kitlog.Logger
+	requestDecoder   runtime.Decoder
+	admissionDecoder types.Decoder
+	client           typedCorev1.CoreV1Interface
+	opts             InjectorOptions
 }
 
 type InjectorOptions struct {
-	Image             string           // image of theatre to use when constructing pod
-	InstallPath       string           // location of vault installation directory
-	VaultConfigMapKey client.ObjectKey // reference to the vault config configMap
+	Image                   string // image of theatre to use when constructing pod
+	InstallPath             string // location of vault installation directory
+	VaultConfigMapNamespace string
+	VaultConfigMapName      string
 }
 
-func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response {
+func (i *Injector) Handle(w http.ResponseWriter, r *http.Request) {
+	var body []byte
+	if data, err := ioutil.ReadAll(r.Body); err == nil {
+		body = data
+	}
+
+	var admissionResponse *v1beta1.AdmissionResponse
+	ar := v1beta1.AdmissionReview{}
+	if _, _, err := i.requestDecoder.Decode(body, nil, &ar); err != nil {
+		level.Error(i.logger).Log("failed to decode webhook request body: %v", err)
+		admissionResponse = &v1beta1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: err.Error(),
+			},
+		}
+	} else {
+		admissionResponse = i.mutate(r.Context(), types.Request{AdmissionRequest: ar.Request}).Response
+	}
+
+	admissionReview := v1beta1.AdmissionReview{}
+	if admissionResponse != nil {
+		admissionReview.Response = admissionResponse
+		if ar.Request != nil {
+			admissionReview.Response.UID = ar.Request.UID
+		}
+	}
+
+	response, err := json.Marshal(admissionReview)
+	if err != nil {
+		level.Error(i.logger).Log("failed to encode webhook response: %v", err)
+		http.Error(w, fmt.Sprintf("failed to encode webhook response: %v", err), http.StatusInternalServerError)
+	}
+	if _, err := w.Write(response); err != nil {
+		level.Error(i.logger).Log("failed to write webhook response: %v", err)
+		http.Error(w, fmt.Sprintf("failed to write webhook response: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func (i *Injector) mutate(ctx context.Context, req types.Request) types.Response {
 	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {
@@ -68,7 +116,7 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response
 	}(time.Now())
 
 	pod := &corev1.Pod{}
-	if err := i.decoder.Decode(req, pod); err != nil {
+	if err := i.admissionDecoder.Decode(req, pod); err != nil {
 		return admission.ErrorResponse(http.StatusBadRequest, err)
 	}
 
@@ -83,8 +131,8 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response
 
 	logger = kitlog.With(logger, "pod_namespace", pod.Namespace, "pod_name", pod.Name)
 
-	vaultConfigMap := &corev1.ConfigMap{}
-	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {
+	vaultConfigMap, err := i.client.ConfigMaps(i.opts.VaultConfigMapNamespace).Get(i.opts.VaultConfigMapName, metav1.GetOptions{})
+	if err != nil {
 		return admission.ErrorResponse(http.StatusInternalServerError, err)
 	}
 	vaultConfig, err := newVaultConfig(vaultConfigMap)

@@ -6,7 +6,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -39,12 +38,10 @@ var _ = Describe("PodInjector", func() {
 				AuthRole:      "default",
 			},
 			InjectorOptions: InjectorOptions{
-				Image:       "theatre:latest",
-				InstallPath: "/var/run/theatre-envconsul",
-				VaultConfigMapKey: client.ObjectKey{
-					Namespace: "vault-system",
-					Name:      "vault-config",
-				},
+				Image:                   "theatre:latest",
+				InstallPath:             "/var/run/theatre-envconsul",
+				VaultConfigMapNamespace: "vault-system",
+				VaultConfigMapName:      "vault-config",
 			},
 		}
 	})

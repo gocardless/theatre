@@ -115,16 +115,13 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 		return err
 	}
 
-	var ca string
+	var ca []byte = config.CAData
 
-	if string(config.CAData) == "" {
-		caBytes, err := ioutil.ReadFile(config.CAFile)
-		ca = string(caBytes)
+	if len(ca) == 0 {
+		ca, err = ioutil.ReadFile(config.CAFile)
 		if err != nil {
 			return errors.Wrap(err, "could not parse certificate for kubernetes")
 		}
-	} else {
-		ca = string(config.CAData)
 	}
 
 	// We'll be running the acceptance tests from outside the kubernetes cluster, where the

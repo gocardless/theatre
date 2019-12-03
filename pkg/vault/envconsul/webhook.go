@@ -68,10 +68,13 @@ type Injector struct {
 }
 
 type InjectorOptions struct {
-	Image             string           // image of theatre to use when constructing pod
-	InstallPath       string           // location of vault installation directory
-	NamespaceLabel    string           // namespace label that enables webhook to operate on
-	VaultConfigMapKey client.ObjectKey // reference to the vault config configMap
+	Image                       string           // image of theatre to use when constructing pod
+	InstallPath                 string           // location of vault installation directory
+	NamespaceLabel              string           // namespace label that enables webhook to operate on
+	VaultConfigMapKey           client.ObjectKey // reference to the vault config configMap
+	ServiceAccountTokenFile     string           // mount path of our projected service account token
+	ServiceAccountTokenExpiry   time.Duration    // Kubelet expiry for the service account token
+	ServiceAccountTokenAudience string           // optional token audience
 }
 
 func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response {
@@ -149,14 +152,37 @@ func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
 	}
 
 	mutatedPod := pod.DeepCopy()
+	expirySeconds := int64(i.ServiceAccountTokenExpiry / time.Second)
 
 	mutatedPod.Spec.InitContainers = append(mutatedPod.Spec.InitContainers, i.buildInitContainer())
-	mutatedPod.Spec.Volumes = append(mutatedPod.Spec.Volumes, corev1.Volume{
-		Name: "theatre-envconsul-install",
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+	mutatedPod.Spec.Volumes = append(
+		mutatedPod.Spec.Volumes,
+		// Installation directory for theatre binaries, used as a scratch installation path
+		corev1.Volume{
+			Name: "theatre-envconsul-install",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
 		},
-	})
+		// Projected service account tokens that are automatically rotated, unlike the default
+		// service account tokens Kubernetes normally mounts.
+		corev1.Volume{
+			Name: "theatre-envconsul-serviceaccount",
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						corev1.VolumeProjection{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+								Path:              path.Base(i.ServiceAccountTokenFile),
+								ExpirationSeconds: &expirySeconds,
+								Audience:          i.ServiceAccountTokenAudience,
+							},
+						},
+					},
+				},
+			},
+		},
+	)
 
 	for idx, container := range mutatedPod.Spec.Containers {
 		containerConfigPath, ok := containerConfigs[container.Name]
@@ -203,9 +229,10 @@ func parseContainerConfigs(pod corev1.Pod) map[string]string {
 
 func (i PodInjector) buildInitContainer() corev1.Container {
 	return corev1.Container{
-		Name:    "theatre-envconsul-injector",
-		Image:   i.Image,
-		Command: []string{"theatre-envconsul", "install", "--path", i.InstallPath},
+		Name:            "theatre-envconsul-injector",
+		Image:           i.Image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"theatre-envconsul", "install", "--path", i.InstallPath},
 		VolumeMounts: []corev1.VolumeMount{
 			corev1.VolumeMount{
 				Name:      "theatre-envconsul-install",
@@ -236,6 +263,7 @@ func (i PodInjector) configureContainer(reference corev1.Container, containerCon
 	args = append(args, "--vault-address", i.Address)
 	args = append(args, "--auth-backend-mount-path", i.AuthMountPath)
 	args = append(args, "--auth-backend-role", i.AuthRole)
+	args = append(args, "--service-account-token-file", i.ServiceAccountTokenFile)
 
 	if containerConfigPath != "" {
 		args = append(args, "--config-file", containerConfigPath)
@@ -249,11 +277,22 @@ func (i PodInjector) configureContainer(reference corev1.Container, containerCon
 	c.Command = []string{path.Join(i.InstallPath, "theatre-envconsul")}
 	c.Args = args
 
-	c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-		Name:      "theatre-envconsul-install",
-		MountPath: i.InstallPath,
-		ReadOnly:  true,
-	})
+	c.VolumeMounts = append(
+		c.VolumeMounts,
+		// Mount the binaries from our installation, ensuring we can run the command in this
+		// container
+		corev1.VolumeMount{
+			Name:      "theatre-envconsul-install",
+			MountPath: i.InstallPath,
+			ReadOnly:  true,
+		},
+		// Explicitly mount service account tokens from the projected volume
+		corev1.VolumeMount{
+			Name:      "theatre-envconsul-serviceaccount",
+			MountPath: path.Dir(i.ServiceAccountTokenFile),
+			ReadOnly:  true,
+		},
+	)
 
 	return *c
 }

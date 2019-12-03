@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/hashicorp/vault/api"
@@ -21,37 +22,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-// This should be in testdata, but right now our test runner doesn't support relative file
-// access. We should aim to bring back the ability to run acceptance tests from the ginkgo
-// wrapper.
-const podFixtureYAML = `
----
-apiVersion: v1
-kind: Pod
-metadata:
-  generateName: read-a-secret-
-  namespace: staging # provisioned by the acceptance kustomize overlay
-spec:
-  serviceAccountName: secret-reader
-  restartPolicy: Never
-  containers:
-    - name: print-env
-      image: theatre:latest
-      imagePullPolicy: Never
-      env:
-        - name: VAULT_RESOLVED_KEY
-          value: vault:secret/data/kubernetes/staging/secret-reader/jimmy
-      command:
-        - /usr/local/bin/theatre-envconsul
-      args:
-        - exec
-        - --vault-address=http://vault.vault.svc.cluster.local:8200
-        - --no-vault-use-tls
-        - --install-path=/usr/local/bin
-        - --
-        - env
-`
 
 const (
 	AuthBackendMountPath = "kubernetes"
@@ -82,6 +52,7 @@ func (r *Runner) Name() string {
 func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	cfg := api.DefaultConfig()
 	cfg.Address = "http://localhost:8200"
+	cfg.Timeout = time.Second
 
 	transport := cfg.HttpClient.Transport.(*http.Transport)
 	transport.TLSClientConfig = nil
@@ -92,6 +63,17 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	}
 
 	client.SetToken("vault-token") // set in the acceptance overlay (config/overlays/acceptance)
+
+	// Wait for Vault to respond until we begin our preparation. Otherwise we might race
+	// Vault when booting.
+	for {
+		logger.Log("event", "vault.connect")
+		if resp, err := client.Sys().Health(); err == nil {
+			if resp.Initialized && !resp.Sealed {
+				break
+			}
+		}
+	}
 
 	mountPath := "secret"
 	mountOptions := &api.MountInput{
@@ -136,6 +118,7 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	backendConfig := map[string]interface{}{
 		"kubernetes_host":    "https://kubernetes.default.svc",
 		"kubernetes_ca_cert": string(ca),
+		"issuer":             "api",
 	}
 
 	logger.Log("msg", "writing auth backend config", "path", backendConfigPath, "config", backendConfig)
@@ -191,9 +174,75 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	return nil
 }
 
+// This should be in testdata, but right now our test runner doesn't support relative file
+// access. We should aim to bring back the ability to run acceptance tests from the ginkgo
+// wrapper.
+const rawPodYAML = `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: read-a-secret-
+  namespace: staging # provisioned by the acceptance kustomize overlay
+spec:
+  serviceAccountName: secret-reader
+  restartPolicy: Never
+  volumes:
+    - name: theatre-envconsul-serviceaccount
+      projected:
+        sources:
+        - serviceAccountToken:
+            path: token
+            expirationSeconds: 900
+  containers:
+    - name: app
+      image: theatre:latest
+      imagePullPolicy: Never
+      env:
+        - name: VAULT_RESOLVED_KEY
+          value: vault:secret/data/kubernetes/staging/secret-reader/jimmy
+      command:
+        - /usr/local/bin/theatre-envconsul
+      args:
+        - exec
+        - --vault-address=http://vault.vault.svc.cluster.local:8200
+        - --no-vault-use-tls
+        - --install-path=/usr/local/bin
+        - --service-account-token-file=/var/run/secrets/kubernetes.io/vault/token
+        - --
+        - env
+      volumeMounts:
+        - name: theatre-envconsul-serviceaccount
+          mountPath: /var/run/secrets/kubernetes.io/vault
+`
+
+const annotatedPodYAML = `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: read-a-secret-
+  namespace: staging # provisioned by the acceptance kustomize overlay
+  annotations:
+    envconsul-injector.vault.crd.gocardless.com/configs: app
+spec:
+  serviceAccountName: secret-reader
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: theatre:latest
+      imagePullPolicy: Never
+      env:
+        - name: VAULT_RESOLVED_KEY
+          value: vault:secret/data/kubernetes/staging/secret-reader/jimmy
+      command:
+        - env
+`
+
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	var (
-		clientset *kubernetes.Clientset
+		clientset      *kubernetes.Clientset
+		podFixtureYAML string
 	)
 
 	BeforeEach(func() {
@@ -202,39 +251,58 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes clientset")
 	})
 
-	Describe("theatre-envconsul", func() {
-		It("Resolves env variables into the pod command", func() {
-			decoder := scheme.Codecs.UniversalDeserializer()
-			obj, _, err := decoder.Decode([]byte(podFixtureYAML), nil, nil)
-			podFixture := obj.(*corev1.Pod)
+	// Create pod from fixture, verify that pod runs successfully and resolves the secret
+	// environment variable
+	expectResolvesEnvVariables := func() {
+		decoder := scheme.Codecs.UniversalDeserializer()
+		obj, _, err := decoder.Decode([]byte(podFixtureYAML), nil, nil)
+		Expect(err).NotTo(HaveOccurred(), "invalid pod spec")
+		podFixture := obj.(*corev1.Pod)
 
-			podsClient := clientset.CoreV1().Pods("staging")
-			pod, err := podsClient.Create(podFixture)
-			Expect(err).NotTo(HaveOccurred(), "failed to create pod")
+		podsClient := clientset.CoreV1().Pods("staging")
 
-			getPodPhase := func() corev1.PodPhase {
-				pod, err := podsClient.Get(pod.Name, metav1.GetOptions{})
-				if err != nil {
-					return ""
-				}
+		By("creating pod")
+		pod, err := podsClient.Create(podFixture)
+		Expect(err).NotTo(HaveOccurred(), "failed to create pod")
 
-				return pod.Status.Phase
+		getPodPhase := func() corev1.PodPhase {
+			pod, err := podsClient.Get(pod.Name, metav1.GetOptions{})
+			if err != nil {
+				return ""
 			}
 
-			Eventually(getPodPhase).Should(
-				Equal(corev1.PodSucceeded),
-			)
+			return pod.Status.Phase
+		}
 
-			req := podsClient.GetLogs(pod.Name, &corev1.PodLogOptions{})
-			logs, err := req.Stream()
-			Expect(err).NotTo(HaveOccurred())
-			defer logs.Close()
+		By("waiting on pod to succeed")
+		Eventually(getPodPhase, 10*time.Second).Should(
+			Equal(corev1.PodSucceeded),
+		)
 
-			var buffer bytes.Buffer
-			_, err = io.Copy(&buffer, logs)
+		By("checking pod logs for secret value")
+		req := podsClient.GetLogs(pod.Name, &corev1.PodLogOptions{})
+		logs, err := req.Stream()
+		Expect(err).NotTo(HaveOccurred())
+		defer logs.Close()
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(buffer.String()).To(ContainSubstring(fmt.Sprintf("VAULT_RESOLVED_KEY=%s", SentinelSecretValue)))
+		var buffer bytes.Buffer
+		_, err = io.Copy(&buffer, logs)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(buffer.String()).To(
+			ContainSubstring(fmt.Sprintf("VAULT_RESOLVED_KEY=%s", SentinelSecretValue)),
+		)
+	}
+
+	Describe("theatre-envconsul", func() {
+		BeforeEach(func() { podFixtureYAML = rawPodYAML })
+
+		It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+
+		Context("As configured by the vault envconsul-injector webhook", func() {
+			BeforeEach(func() { podFixtureYAML = annotatedPodYAML })
+
+			It("Resolves env variables into the pod command", expectResolvesEnvVariables)
 		})
 	})
 }

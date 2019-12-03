@@ -3,6 +3,7 @@ package envconsul
 import (
 	"fmt"
 	"io/ioutil"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -45,6 +46,9 @@ var _ = Describe("PodInjector", func() {
 					Namespace: "vault-system",
 					Name:      "vault-config",
 				},
+				ServiceAccountTokenFile:     "/var/run/secrets/kubernetes.io/vault/token",
+				ServiceAccountTokenExpiry:   15 * time.Minute,
+				ServiceAccountTokenAudience: "",
 			},
 		}
 	})
@@ -65,64 +69,127 @@ var _ = Describe("PodInjector", func() {
 		})
 
 		It("Injects init container", func() {
-			Expect(pod).NotTo(BeNil())
-			Expect(pod.Spec.InitContainers).To(HaveLen(1))
-			Expect(pod.Spec.InitContainers[0]).To(
-				MatchFields(
-					IgnoreExtras, Fields{
-						"Image": Equal("theatre:latest"),
-						"Command": Equal([]string{
-							"theatre-envconsul", "install", "--path", "/var/run/theatre-envconsul",
-						}),
-					},
+			Expect(pod.Spec.InitContainers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name":  Equal("theatre-envconsul-injector"),
+							"Image": Equal("theatre:latest"),
+							"Command": Equal([]string{
+								"theatre-envconsul", "install", "--path", "/var/run/theatre-envconsul",
+							}),
+						},
+					),
+				),
+			)
+		})
+
+		It("Adds service account volume", func() {
+			var projection *corev1.ServiceAccountTokenProjection
+
+			for _, volume := range pod.Spec.Volumes {
+				if volume.Name != "theatre-envconsul-serviceaccount" {
+					continue
+				}
+
+				projection = volume.VolumeSource.Projected.Sources[0].ServiceAccountToken
+			}
+
+			Expect(projection).To(
+				PointTo(
+					MatchFields(IgnoreExtras, Fields{
+						"Path":              Equal("token"),
+						"ExpirationSeconds": PointTo(BeEquivalentTo(900)),
+						"Audience":          Equal(""),
+					}),
 				),
 			)
 		})
 
 		It("Modifies command to prefix theatre-envconsul", func() {
-			Expect(pod.Spec.Containers[0]).To(
-				MatchFields(
-					IgnoreExtras, Fields{
-						"Command": Equal([]string{
-							"/var/run/theatre-envconsul/theatre-envconsul",
-						}),
-						"Args": Equal([]string{
-							"exec",
-							"--install-path",
-							"/var/run/theatre-envconsul",
-							"--vault-address",
-							"https://vault.example.com",
-							"--auth-backend-mount-path",
-							"kubernetes.gc-prd-effc.cluster",
-							"--auth-backend-role",
-							"default",
-							"--",
-							"echo",
-							"inject",
-							"only",
-						}),
-					},
+			Expect(pod.Spec.Containers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name": Equal("app"),
+							"Command": Equal([]string{
+								"/var/run/theatre-envconsul/theatre-envconsul",
+							}),
+							"Args": Equal([]string{
+								"exec",
+								"--install-path",
+								"/var/run/theatre-envconsul",
+								"--vault-address",
+								"https://vault.example.com",
+								"--auth-backend-mount-path",
+								"kubernetes.gc-prd-effc.cluster",
+								"--auth-backend-role",
+								"default",
+								"--service-account-token-file",
+								"/var/run/secrets/kubernetes.io/vault/token",
+								"--",
+								"echo",
+								"inject",
+								"only",
+							}),
+						},
+					),
+				),
+			)
+		})
+
+		It("Preserves original app volumeMount", func() {
+			Expect(pod.Spec.Containers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name": Equal("app"),
+							"VolumeMounts": ContainElement(
+								corev1.VolumeMount{
+									Name:      "app-volume",
+									MountPath: "/app/path",
+								},
+							),
+						},
+					),
 				),
 			)
 		})
 
 		It("Adds theatre-envconsul-install volumeMount", func() {
-			Expect(pod.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
-			Expect(pod.Spec.Containers[0]).To(
-				MatchFields(
-					IgnoreExtras, Fields{
-						"VolumeMounts": Equal([]corev1.VolumeMount{
-							corev1.VolumeMount{
-								Name:      "app-volume",
-								MountPath: "/app/path",
-							},
-							corev1.VolumeMount{
-								Name:      "theatre-envconsul-install",
-								MountPath: "/var/run/theatre-envconsul",
-								ReadOnly:  true,
-							},
-						}),
-					},
+			Expect(pod.Spec.Containers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name": Equal("app"),
+							"VolumeMounts": ContainElement(
+								corev1.VolumeMount{
+									Name:      "theatre-envconsul-install",
+									MountPath: "/var/run/theatre-envconsul",
+									ReadOnly:  true,
+								},
+							),
+						},
+					),
+				),
+			)
+		})
+
+		It("Adds service account volumeMount", func() {
+			Expect(pod.Spec.Containers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name": Equal("app"),
+							"VolumeMounts": ContainElement(
+								corev1.VolumeMount{
+									Name:      "theatre-envconsul-serviceaccount",
+									MountPath: "/var/run/secrets/kubernetes.io/vault",
+									ReadOnly:  true,
+								},
+							),
+						},
+					),
 				),
 			)
 		})
@@ -151,30 +218,35 @@ var _ = Describe("PodInjector", func() {
 		})
 
 		It("Modifies command to prefix theatre-envconsul with config path", func() {
-			Expect(pod.Spec.Containers[0]).To(
-				MatchFields(
-					IgnoreExtras, Fields{
-						"Command": Equal([]string{
-							"/var/run/theatre-envconsul/theatre-envconsul",
-						}),
-						"Args": Equal([]string{
-							"exec",
-							"--install-path",
-							"/var/run/theatre-envconsul",
-							"--vault-address",
-							"https://vault.example.com",
-							"--auth-backend-mount-path",
-							"kubernetes.gc-prd-effc.cluster",
-							"--auth-backend-role",
-							"default",
-							"--config-file",
-							"config/app.yaml",
-							"--",
-							"echo",
-							"inject",
-							"only",
-						}),
-					},
+			Expect(pod.Spec.Containers).To(
+				ContainElement(
+					MatchFields(
+						IgnoreExtras, Fields{
+							"Name": Equal("app"),
+							"Command": Equal([]string{
+								"/var/run/theatre-envconsul/theatre-envconsul",
+							}),
+							"Args": Equal([]string{
+								"exec",
+								"--install-path",
+								"/var/run/theatre-envconsul",
+								"--vault-address",
+								"https://vault.example.com",
+								"--auth-backend-mount-path",
+								"kubernetes.gc-prd-effc.cluster",
+								"--auth-backend-role",
+								"default",
+								"--service-account-token-file",
+								"/var/run/secrets/kubernetes.io/vault/token",
+								"--config-file",
+								"config/app.yaml",
+								"--",
+								"echo",
+								"inject",
+								"only",
+							}),
+						},
+					),
 				),
 			)
 		})

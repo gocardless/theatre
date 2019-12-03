@@ -62,3 +62,20 @@ spec:
             - containerPort: 8200
               name: http
               protocol: TCP
+# We place configuration inside the vault-system namespace, in the same fashion
+# as our terraform modules will.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault-system
+data:
+  address: http://vault.vault.svc.cluster.local:8200
+  auth_mount_path: kubernetes
+  auth_role: default

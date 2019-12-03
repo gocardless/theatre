@@ -10,7 +10,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/rest"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -33,10 +33,7 @@ func (c *clientset) WorkloadsV1Alpha1() *workloadsclient.WorkloadsV1alpha1Client
 	return c.workloadsV1alpha1
 }
 
-func newClient(kubeConfigPath string) clientset {
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-	Expect(err).NotTo(HaveOccurred(), "could not construct kubernetes config")
-
+func newClient(config *rest.Config) clientset {
 	// Construct a client for the workloads API Group
 	workloadsClient, err := workloadsclient.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
@@ -48,14 +45,20 @@ func newClient(kubeConfigPath string) clientset {
 	return clientset{Clientset: core, workloadsV1alpha1: workloadsClient}
 }
 
-func Run(logger kitlog.Logger, kubeConfigPath string) {
+type Runner struct{}
+
+func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
+	return nil
+}
+
+func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	Describe("Consoles", func() {
 		var client clientset
 
 		BeforeEach(func() {
 			logger.Log("msg", "starting test")
 
-			client = newClient(kubeConfigPath)
+			client = newClient(config)
 
 			// Wait for MutatingWebhookConfig to be created
 			Eventually(func() bool {

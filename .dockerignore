@@ -4,3 +4,8 @@ tmp/
 .kube/
 bin/
 config/
+
+# Acceptance test suites don't need recompiling into our docker image
+cmd/acceptance/
+cmd/theatre-envconsul/acceptance/
+pkg/workloads/console/acceptance/

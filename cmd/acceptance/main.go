@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
 	"github.com/alecthomas/kingpin"
@@ -27,60 +30,69 @@ import (
 )
 
 var (
-	app    = kingpin.New("acceptance", "Acceptance test suite for theatre").Version("0.0.0")
-	logger = kitlog.NewLogfmtLogger(os.Stderr)
+	app         = kingpin.New("acceptance", "Acceptance test suite for theatre").Version("0.0.0")
+	clusterName = app.Flag("cluster-name", "Name of Kubernetes context to against").Default("e2e").String()
+	logger      = kitlog.NewLogfmtLogger(os.Stderr)
 
 	prepare           = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareName       = prepare.Flag("name", "Name of Kubernetes context to create").Default("e2e").String()
 	prepareImage      = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
 	prepareConfigFile = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
 
-	destroy     = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
-	destroyName = destroy.Flag("name", "Name of Kubernetes context to destroy").Default("e2e").String()
+	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 
-	run         = app.Command("run", "Runs the acceptance test suite")
-	runName     = run.Flag("name", "Name of Kubernetes context to against").Default("e2e").String()
-	runVerbose  = run.Flag("verbose", "Use the verbose reporter").Short('v').Bool()
-	contextName = "e2e"
+	run        = app.Command("run", "Runs the acceptance test suite")
+	runVerbose = run.Flag("verbose", "Use the verbose reporter").Short('v').Bool()
 )
 
-func init() {
-	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
-	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
-	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
+// Runners contains all the acceptance test suites within theatre. Adding your runner here
+// will ensure the acceptance binary prepares and runs tests appropriately.
+//
+// In future, we'll make this more ginkgo native. For now, this will do.
+var Runners = []runner{
+	&theatreEnvconsulAcceptance.Runner{},
+	&consoleAcceptance.Runner{},
+}
+
+type runner interface {
+	Prepare(kitlog.Logger, *rest.Config) error
+	Run(kitlog.Logger, *rest.Config)
 }
 
 func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
+	logger = level.NewFilter(logger, level.AllowInfo())
+	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
+	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
+	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
+
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case prepare.FullCommand():
-		logger = kitlog.With(logger, "clusterName", *prepareName)
+		logger = kitlog.With(logger, "clusterName", *clusterName)
 
 		clusters, err := exec.CommandContext(ctx, "kind", "get", "clusters").CombinedOutput()
 		if err != nil {
 			app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 		}
 
-		if !strings.Contains(string(clusters), fmt.Sprintf("%s\n", *prepareName)) {
+		if !strings.Contains(string(clusters), fmt.Sprintf("%s\n", *clusterName)) {
 			logger.Log("msg", "creating new cluster")
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *prepareName, "--config", *prepareConfigFile)).Run(); err != nil {
+			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile)).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}
 
 		controlPlaneIDBytes, err := exec.CommandContext(
-			ctx, "docker", "ps", "--filter", fmt.Sprintf("name=%s-control-plane", *prepareName), "--format", "{{.ID}}",
+			ctx, "docker", "ps", "--filter", fmt.Sprintf("name=%s-control-plane", *clusterName), "--format", "{{.ID}}",
 		).Output()
 		controlPlaneID := string(bytes.TrimSpace(controlPlaneIDBytes))
 		if controlPlaneID == "" || err != nil {
 			app.Fatalf("failed to find control plane container: %v", err)
 		}
 
-		cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", *prepareName).Output()
+		cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", *clusterName).Output()
 		cfgPath := string(bytes.TrimSpace(cfgPathBytes))
 		if err != nil {
 			app.Fatalf("failed to discover kind cluster config path: %v", err)
@@ -94,7 +106,7 @@ func main() {
 		}
 
 		logger.Log("msg", "loading docker image into control plane", "controlPlane", controlPlaneID)
-		loadCmd := exec.CommandContext(ctx, "kind", "load", "docker-image", "--name", *prepareName, *prepareImage)
+		loadCmd := exec.CommandContext(ctx, "kind", "load", "docker-image", "--name", *clusterName, *prepareImage)
 		if err := pipeOutput(loadCmd).Run(); err != nil {
 			app.Fatalf("failed to load image into control plane: %v", err)
 		}
@@ -114,10 +126,17 @@ func main() {
 			app.Fatalf("failed to install manager: %v", err)
 		}
 
-	case destroy.FullCommand():
-		logger = kitlog.With(logger, "clusterName", *destroyName)
+		for _, runner := range Runners {
+			logger.Log("msg", "running prepare", "runner", reflect.TypeOf(runner).Elem().Name())
+			if err := runner.Prepare(logger, mustClusterConfig()); err != nil {
+				app.Fatalf("failed to execute runner prepare: %v", err)
+			}
+		}
 
-		_, err := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", *destroyName).CombinedOutput()
+	case destroy.FullCommand():
+		logger = kitlog.With(logger, "clusterName", *clusterName)
+
+		_, err := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", *clusterName).CombinedOutput()
 		if err != nil {
 			app.Fatalf("failed to destroy kubernetes cluster with kind: %v", err)
 		}
@@ -125,7 +144,6 @@ func main() {
 		logger.Log("msg", "successfully destroyed cluster")
 
 	case run.FullCommand():
-		contextName = *runName
 		RegisterFailHandler(Fail)
 
 		SetDefaultEventuallyTimeout(time.Minute)
@@ -133,6 +151,15 @@ func main() {
 		if *runVerbose {
 			config.DefaultReporterConfig.Verbose = true
 		}
+
+		logger := kitlog.NewLogfmtLogger(GinkgoWriter)
+		config := mustClusterConfig()
+
+		var _ = Describe("Acceptance", func() {
+			for _, runner := range Runners {
+				runner.Run(logger, config)
+			}
+		})
 
 		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
 			os.Exit(0)
@@ -142,21 +169,19 @@ func main() {
 	}
 }
 
-var _ = Describe("Acceptance", func() {
-	ctx, cancel := signals.SetupSignalHandler()
-	defer cancel()
-
-	cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", contextName).Output()
-	cfgPath := string(bytes.TrimSpace(cfgPathBytes))
+func mustClusterConfig() *rest.Config {
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{
+			CurrentContext: fmt.Sprintf("kind-%s", *clusterName),
+		},
+	).ClientConfig()
 	if err != nil {
-		app.Fatalf("failed to discover kind cluster config path: %v", err)
+		app.Fatalf("failed to authenticate against kind cluster", err)
 	}
 
-	logger := kitlog.NewLogfmtLogger(GinkgoWriter)
-
-	consoleAcceptance.Run(logger, cfgPath)
-	theatreEnvconsulAcceptance.Run(logger, cfgPath)
-})
+	return config
+}
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {
 	cmd.Stdout = os.Stdout

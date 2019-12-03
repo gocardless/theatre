@@ -24,9 +24,11 @@ metadata:
   name: vault
   namespace: vault
 spec:
+  type: NodePort
   ports:
     - name: http
       port: 8200
+      nodePort: 32000
   selector:
     app: vault
     role: backend

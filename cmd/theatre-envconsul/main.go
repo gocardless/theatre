@@ -46,9 +46,6 @@ var (
 	execInstallPath  = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
 	execCommand      = exec.Arg("command", "Command to execute").Required().Strings()
 
-	configure             = app.Command("configure", "Configures Vault with a Kubernetes auth backend (for testing)")
-	configureVaultOptions = newVaultOptions(configure)
-
 	// Version is set at compile time
 	Version = "dev"
 )
@@ -160,127 +157,6 @@ func mainError(ctx context.Context, command string) (err error) {
 		logger.Log("event", "envconsul.exec", "binary", envconsulBinaryPath, "path", tempConfigFile.Name())
 		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute envconsul")
-		}
-
-	// This command should only be used for preparing a test environment. It is
-	// used for configuring a Vault server in our acceptance tests to provide
-	// Kubernetes authentication via service account.
-	//
-	// It does several things:
-	//
-	// - Mounts a kv2 secrets engine at secret/
-	// - Creates a Kubernetes auth backend mounted at auth/kubernetes
-	// - Configures the Kubernetes backend to authenticate against the currently
-	// 	detected Kubernetes API server (the current cluster, if run from within)
-	// - For all successful Kubernetes logins, the user is assigned a token that
-	// 	maps to a cluster-reader policy, which permits reading of secrets from:
-	//
-	// 	secret/data/kubernetes/{namespace}/{service-account-name}/*
-	case configure.FullCommand():
-		client, err := configureVaultOptions.Client()
-		if err != nil {
-			return errors.Wrap(err, "failed to configure vault client")
-		}
-
-		mountPath := "secret"
-		mountOptions := &api.MountInput{
-			Type:        "kv",
-			Description: "Generic Vault kv mount",
-			Options: map[string]string{
-				"version": "2",
-			},
-		}
-
-		logger.Log("msg", "mounting secret engine", "path", mountPath, "options", mountOptions)
-		client.Sys().Unmount(mountPath)
-		if err := client.Sys().Mount(mountPath, mountOptions); err != nil {
-			return err
-		}
-
-		backendPath := configureVaultOptions.AuthBackendMountPoint
-		enableOptions := &api.EnableAuthOptions{
-			Type:        "kubernetes",
-			Description: "Permit authentication by Kubernetes service accounts",
-		}
-
-		logger.Log("msg", "enabling auth mount", "path", backendPath, "options", enableOptions)
-		client.Sys().DisableAuth(backendPath)
-		if err := client.Sys().EnableAuthWithOptions(backendPath, enableOptions); err != nil {
-			return err
-		}
-
-		logger.Log("msg", "authenticating against kubernetes")
-		clusterConfig, err := getClusterConfig()
-		if err != nil {
-			return errors.Wrap(err, "failed to authenticate against kubernetes")
-		}
-
-		var ca string
-
-		if string(clusterConfig.CAData) == "" {
-			caBytes, err := ioutil.ReadFile(clusterConfig.CAFile)
-			ca = string(caBytes)
-			if err != nil {
-				return errors.Wrap(err, "could not parse certificate for kubernetes")
-			}
-		} else {
-			ca = string(clusterConfig.CAData)
-		}
-
-		backendConfigPath := fmt.Sprintf("auth/%s/config", configureVaultOptions.AuthBackendMountPoint)
-		backendConfig := map[string]interface{}{
-			"kubernetes_host":    clusterConfig.Host,
-			"kubernetes_ca_cert": string(ca),
-		}
-
-		logger.Log("msg", "writing auth backend config", "path", backendConfigPath, "config", backendConfig)
-		if _, err := client.Logical().Write(backendConfigPath, backendConfig); err != nil {
-			return err
-		}
-
-		backendRolePath := fmt.Sprintf("auth/%s/role/default", configureVaultOptions.AuthBackendMountPoint)
-		backendRoleConfig := map[string]interface{}{
-			// https://github.com/hashicorp/vault-plugin-auth-kubernetes/pull/66
-			"bound_service_account_names": strings.Split(
-				"a*,b*,c*,d*,e*,f*,h*,i*,j*,k*,l*,m*,n*,o*,p*,q*,r*,s*,t*,u*,v*,w*,x*,y*,z*,1*,2*,3*,4*,5*,6*,7*,8*,9*,0*", ",",
-			),
-			"bound_service_account_namespaces": []string{"*"},
-			"token_policies":                   []string{"default", "cluster-reader"},
-			"token_ttl":                        600,
-		}
-
-		logger.Log("msg", "creating default backend role", "path", backendRolePath)
-		if _, err := client.Logical().Write(backendRolePath, backendRoleConfig); err != nil {
-			return err
-		}
-
-		auths, err := client.Sys().ListAuth()
-		if err != nil {
-			return errors.Wrap(err, "could not list auth backends which prevents linking roles against a backend")
-		}
-
-		backend := auths[fmt.Sprintf("%s/", configureVaultOptions.AuthBackendMountPoint)]
-		readerPathTemplate :=
-			"{{identity.entity.aliases.%s.metadata.service_account_namespace}}/" +
-				"{{identity.entity.aliases.%s.metadata.service_account_name}}/" +
-				"*"
-
-		policyRules := fmt.Sprintf(
-			`path "secret/data/kubernetes/%s" { capabilities = ["read"] }`,
-			fmt.Sprintf(readerPathTemplate, backend.Accessor, backend.Accessor),
-		)
-
-		logger.Log("msg", "creating cluster-reader policy to permit kubernetes service accounts to read secrets")
-		if err := client.Sys().PutPolicy("cluster-reader", policyRules); err != nil {
-			return err
-		}
-
-		secretPath := "secret/data/kubernetes/staging/secret-reader/jimmy"
-		secretData := map[string]interface{}{"data": map[string]interface{}{"data": "eats-the-world"}}
-
-		logger.Log("msg", "writing sentinel secret value", "path", secretPath, "data", secretData)
-		if _, err := client.Logical().Write(secretPath, secretData); err != nil {
-			return err
 		}
 
 	default:

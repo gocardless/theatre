@@ -8,27 +8,6 @@ provide a space to write Kubernetes extensions where:
 2. Each category of Kubernetes extension has a well defined implementation pattern
 3. Writing meaningful tests is easy, with minimal boilerplate
 
-## TODO
-
-Theatre is under active development and we're still working out what works best
-for this type of software development. Below is an on-going list of TODOs that
-would help us move toward our three primary goals:
-
-- [x] Verify all API groups are registered
-- [x] Integrate Kubernetes events with logging
-- [x] Investigate installing webhooks: can we test admission webhooks with the
-      integration test suite?
-- [ ] Use caching informers to power controllers
-- [x] Unit/integration testing
-- [ ] Acceptance testing with real kubernetes
-- [ ] Auto-install CRDs into the cluster
-- [x] Log changes to Kubernetes resources as events
-- [ ] Auto-generate:
-  - [ ] RBAC roles for the manager
-  - [ ] Stateful set for the deployment
-- [ ] Decide on deployment strategy
-- [ ] Document installation procedure
-
 ## Getting Started
 
 Theatre assumes developers have several tools installed to ensure their

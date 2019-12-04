@@ -101,7 +101,7 @@ spec:
             # fieldRef indexing (ie. spec.template.spec.containers[0].image) in vars. we need
             # to bump this manually to keep it in sync with latest deployed version of theatre
             # TODO: tidy this up using jsonnet
-            - eu.gcr.io/gc-containers/gocardless/theatre:5363f91a397364af056269a1d90ddaa2a495b581
+            - eu.gcr.io/gc-containers/gocardless/theatre:d2d3a1ef396703981dfdde08dd0632a8313784c1
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           name: manager
           env:

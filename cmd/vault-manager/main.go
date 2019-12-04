@@ -23,10 +23,11 @@ import (
 var (
 	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(Version)
 	namespace               = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
-	serviceName             = app.Flag("service-name", "Webhook service name").Default("theatre-vault-manager").String()
-	webhookName             = app.Flag("webhook-name", "Mutating webhook name").Default("theatre-vault").String()
+	serviceName             = app.Flag("service-name", "Name of service for webhook").Default("theatre-vault-manager").String()
+	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
 	theatreImage            = app.Flag("theatre-image", "Set to the same image as current binary").Required().String()
 	installPath             = app.Flag("install-path", "Location to install theatre binaries").Default("/var/run/theatre").String()
+	namespaceLabel          = app.Flag("namespace-label", "Namespace label that enables webhook to operate on").Default("theatre-envconsul-injector").String()
 	vaultConfigMapName      = app.Flag("vault-configmap-name", "Vault configMap name containing vault configuration").Default("vault-config").String()
 	vaultConfigMapNamespace = app.Flag("vault-configmap-namespace", "Namespace of vault configMap").Default("vault-system").String()
 
@@ -73,8 +74,9 @@ func main() {
 	}
 
 	injectorOpts := envconsul.InjectorOptions{
-		Image:       *theatreImage,
-		InstallPath: *installPath,
+		Image:          *theatreImage,
+		InstallPath:    *installPath,
+		NamespaceLabel: *namespaceLabel,
 		VaultConfigMapKey: client.ObjectKey{
 			Namespace: *vaultConfigMapNamespace,
 			Name:      *vaultConfigMapName,

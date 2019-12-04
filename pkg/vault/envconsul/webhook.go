@@ -42,6 +42,7 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		Mutating().
 		Operations(admissionregistrationv1beta1.Create).
 		ForType(&corev1.Pod{}).
+		FailurePolicy(admissionregistrationv1beta1.Fail).
 		Handlers(handler).
 		WithManager(mgr).
 		Build()

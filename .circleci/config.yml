@@ -46,7 +46,7 @@ jobs:
       - checkout
       - run:
           name: Build test binaries
-          command: make build-linux bin/acceptance.linux_amd64
+          command: make bin/acceptance.linux_amd64
       - persist_to_workspace:
           root: /go/src/github.com/gocardless/theatre
           paths: ['bin']

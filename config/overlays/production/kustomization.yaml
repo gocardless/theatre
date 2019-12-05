@@ -7,4 +7,4 @@ bases:
 
 imageTags:
   - name: eu.gcr.io/gc-containers/gocardless/theatre
-    newTag: 5363f91a397364af056269a1d90ddaa2a495b581
+    newTag: d2d3a1ef396703981dfdde08dd0632a8313784c1

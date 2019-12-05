@@ -11,6 +11,7 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/mitchellh/mapstructure"
@@ -37,12 +38,23 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		opt(&handler)
 	}
 
+	namespaceSelectors := &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			metav1.LabelSelectorRequirement{
+				Key:      injectorOpts.NamespaceLabel,
+				Operator: metav1.LabelSelectorOpIn,
+				Values:   []string{"enabled"},
+			},
+		},
+	}
+
 	return builder.NewWebhookBuilder().
 		Name(EnvconsulInjectorFQDN).
 		Mutating().
 		Operations(admissionregistrationv1beta1.Create).
 		ForType(&corev1.Pod{}).
 		FailurePolicy(admissionregistrationv1beta1.Fail).
+		NamespaceSelector(namespaceSelectors).
 		Handlers(handler).
 		WithManager(mgr).
 		Build()
@@ -58,6 +70,7 @@ type Injector struct {
 type InjectorOptions struct {
 	Image             string           // image of theatre to use when constructing pod
 	InstallPath       string           // location of vault installation directory
+	NamespaceLabel    string           // namespace label that enables webhook to operate on
 	VaultConfigMapKey client.ObjectKey // reference to the vault config configMap
 }
 

@@ -8,6 +8,37 @@ provide a space to write Kubernetes extensions where:
 2. Each category of Kubernetes extension has a well defined implementation pattern
 3. Writing meaningful tests is easy, with minimal boilerplate
 
+## API Groups
+
+Theatre provides various extensions to vanilla Kubernetes. These extensions are
+groups under API groups, all of which exist on the `*.crd.gocardless.com`
+domain.
+
+### RBAC
+
+Collection of utilities to extend the default Kubernetes RBAC resources. These
+CRDs are motivated by real-world use cases when using Kubernetes with an
+organisation that using GSuite, and which frequently onboards new developers.
+
+- `DirectoryRoleBinding` supports Google groups in `RoleBinding`s
+
+### Workloads
+
+Extends core workload resources with new CRDs. This functionality can be
+expected to create pods, deployments, etc.
+
+- `Console` a one-shot job created by a human operator from a `ConsoleTemplate`
+- `ConsoleTemplate` specifies how `Console` pods should be created, and who has
+  access to create them
+
+### Vault
+
+Utilities for interacting with Vault. Primarily used to inject secret material
+into pods by use of annotations.
+
+- `envconsul-injector.vault.crd.gocardless.com` webhook for injecting theatre
+  utilities that pull secrets from Vault
+
 ## Getting Started
 
 Theatre assumes developers have several tools installed to ensure their
@@ -51,30 +82,3 @@ theatre-system   theatre-vault-manager-0                     1/1     Running   0
 theatre-system   theatre-workloads-manager-0                 1/1     Running   0          25h
 vault            vault-0                                     1/1     Running   0          4h24m
 ```
-
-## API Groups
-
-### RBAC
-
-Collection of utilities to extend the default Kubernetes RBAC resources. These
-CRDs are motivated by real-world use cases when using Kubernetes with an
-organisation that using GSuite, and which frequently onboards new developers.
-
-- `DirectoryRoleBinding` supports Google groups in `RoleBinding`s
-
-### Workloads
-
-Extends core workload resources with new CRDs. This functionality can be
-expected to create pods, deployments, etc.
-
-- `Console` a one-shot job created by a human operator from a `ConsoleTemplate`
-- `ConsoleTemplate` specifies how `Console` pods should be created, and who has
-  access to create them
-
-### Vault
-
-Utilities for interacting with Vault. Primarily used to inject secret material
-into pods by use of annotations.
-
-- `envconsul-injector.vault.crd.gocardless.com` webhook for injecting theatre
-  utilities that pull secrets from Vault

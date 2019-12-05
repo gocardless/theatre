@@ -47,6 +47,10 @@ func newClient(config *rest.Config) clientset {
 
 type Runner struct{}
 
+func (r *Runner) Name() string {
+	return "pkg/workloads/console/acceptance"
+}
+
 func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	return nil
 }

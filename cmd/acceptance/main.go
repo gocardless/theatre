@@ -42,6 +42,7 @@ var (
 	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 
 	run        = app.Command("run", "Runs the acceptance test suite")
+	runTargets = run.Flag("target", "Run acceptance tests where the name contains these substrings").Strings()
 	runVerbose = run.Flag("verbose", "Use the verbose reporter").Short('v').Bool()
 )
 
@@ -55,6 +56,7 @@ var Runners = []runner{
 }
 
 type runner interface {
+	Name() string
 	Prepare(kitlog.Logger, *rest.Config) error
 	Run(kitlog.Logger, *rest.Config)
 }
@@ -157,7 +159,17 @@ func main() {
 
 		var _ = Describe("Acceptance", func() {
 			for _, runner := range Runners {
-				runner.Run(logger, config)
+				// Provide suite filtering while we don't use native ginkgo
+				var shouldRun = len(*runTargets) == 0
+				for _, target := range *runTargets {
+					if strings.Contains(runner.Name(), target) {
+						shouldRun = true
+					}
+				}
+
+				if shouldRun {
+					runner.Run(logger, config)
+				}
 			}
 		})
 

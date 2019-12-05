@@ -61,6 +61,10 @@ const (
 
 type Runner struct{}
 
+func (r *Runner) Name() string {
+	return "cmd/theatre-envconsul/acceptance"
+}
+
 // Prepare is used for configuring a Vault server in our acceptance tests to provide
 // Kubernetes authentication via service account.
 //

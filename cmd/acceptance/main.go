@@ -128,9 +128,10 @@ func main() {
 			app.Fatalf("failed to install manager: %v", err)
 		}
 
+		config := mustClusterConfig()
 		for _, runner := range Runners {
 			logger.Log("msg", "running prepare", "runner", reflect.TypeOf(runner).Elem().Name())
-			if err := runner.Prepare(logger, mustClusterConfig()); err != nil {
+			if err := runner.Prepare(logger, config); err != nil {
 				app.Fatalf("failed to execute runner prepare: %v", err)
 			}
 		}

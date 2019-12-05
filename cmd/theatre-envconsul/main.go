@@ -40,11 +40,12 @@ var (
 	installEnvconsulBinary        = install.Flag("envconsul-binary", "Path to envconsul binary").Default("/usr/local/bin/envconsul").String()
 	installTheatreEnvconsulBinary = install.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
 
-	exec             = app.Command("exec", "Authenticate with vault and exec envconsul")
-	execVaultOptions = newVaultOptions(exec)
-	execConfigFile   = exec.Flag("config-file", "app config file").String()
-	execInstallPath  = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
-	execCommand      = exec.Arg("command", "Command to execute").Required().Strings()
+	exec                        = app.Command("exec", "Authenticate with vault and exec envconsul")
+	execVaultOptions            = newVaultOptions(exec)
+	execConfigFile              = exec.Flag("config-file", "app config file").String()
+	execInstallPath             = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
+	execServiceAccountTokenFile = exec.Flag("service-account-token-file", "Path to Kubernetes service account token file").String()
+	execCommand                 = exec.Arg("command", "Command to execute").Required().Strings()
 
 	// Version is set at compile time
 	Version = "dev"
@@ -81,13 +82,13 @@ func mainError(ctx context.Context, command string) (err error) {
 	case exec.FullCommand():
 		var vaultToken string
 		if execVaultOptions.Token == "" {
-			clusterConfig, err := getClusterConfig()
+			serviceAccountToken, err := getKubernetesToken(*execServiceAccountTokenFile)
 			if err != nil {
 				return errors.Wrap(err, "failed to authenticate within kubernetes")
 			}
 
 			execVaultOptions.Decorate(logger).Log("event", "vault.login")
-			vaultToken, err = execVaultOptions.Login(clusterConfig.BearerToken)
+			vaultToken, err = execVaultOptions.Login(serviceAccountToken)
 			if err != nil {
 				return errors.Wrap(err, "failed to login to vault")
 			}
@@ -166,9 +167,14 @@ func mainError(ctx context.Context, command string) (err error) {
 	return nil
 }
 
-// getClusterConfig attempts to construct a Kubernetes client configuration, preferring in
-// cluster auth but falling back to other detection methods if that fails.
-func getClusterConfig() (*rest.Config, error) {
+// getKubernetesToken attempts to construct a Kubernetes client configuration, preferring
+// in cluster auth but falling back to other detection methods if that fails.
+func getKubernetesToken(tokenFileOverride string) (string, error) {
+	if tokenFileOverride != "" {
+		tokenBytes, err := ioutil.ReadFile(tokenFileOverride)
+		return string(tokenBytes), err
+	}
+
 	clusterConfig, err := rest.InClusterConfig()
 	if err != nil {
 		clusterConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -177,11 +183,11 @@ func getClusterConfig() (*rest.Config, error) {
 		).ClientConfig()
 
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 	}
 
-	return clusterConfig, err
+	return clusterConfig.BearerToken, err
 }
 
 // copyExecutable is designed to load an executable binary from our current environment

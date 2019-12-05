@@ -6,6 +6,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: staging
+  labels:
+    theatre-envconsul-injector: enabled
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -14,3 +16,6 @@ metadata:
   namespace: staging
   annotations:
     description: used in vault tests to read secrets
+# Don't automount the token, as we want to verify our acceptance tests are
+# correctly leveraging the projected volume mounts.
+automountServiceAccountToken: false

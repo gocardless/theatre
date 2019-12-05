@@ -31,6 +31,19 @@ var (
 	vaultConfigMapName      = app.Flag("vault-configmap-name", "Vault configMap name containing vault configuration").Default("vault-config").String()
 	vaultConfigMapNamespace = app.Flag("vault-configmap-namespace", "Namespace of vault configMap").Default("vault-system").String()
 
+	// These configuration parameters alter how the injector mounts service account tokens.
+	// We expect tokens to be sent to Vault, outside of the Kubernetes cluster, so we ensure
+	// the tokens used are short-lived in case they are exposed.
+	//
+	// If an audience is set, this will prevent Kubernetes assigning the default cluster
+	// audience, meaning the token won't be useable to authenticate against the API server.
+	// Only set this value if Vault is configured with its own token to perform reviews,
+	// otherwise the auth chain will be broken.
+	serviceAccountTokenFile = app.Flag("service-account-token-file", "Mount path for the Kubernetes service account token").
+				Default("/var/run/secrets/kubernetes.io/vault/token").String()
+	serviceAccountTokenExpiry   = app.Flag("service-account-token-expiry", "Expiry for service account tokens").Default("15m").Duration()
+	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
+
 	commonOpts = cmd.NewCommonOptions(app)
 
 	// Version is set at compile time
@@ -81,6 +94,9 @@ func main() {
 			Namespace: *vaultConfigMapNamespace,
 			Name:      *vaultConfigMapName,
 		},
+		ServiceAccountTokenFile:     *serviceAccountTokenFile,
+		ServiceAccountTokenExpiry:   *serviceAccountTokenExpiry,
+		ServiceAccountTokenAudience: *serviceAccountTokenAudience,
 	}
 
 	var wh *admission.Webhook

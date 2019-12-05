@@ -97,11 +97,7 @@ spec:
         - command:
             - /usr/local/bin/vault-manager
             - --theatre-image
-            # image tag is hardcoded as kustomize v1.0.11 that we run in anu does not support
-            # fieldRef indexing (ie. spec.template.spec.containers[0].image) in vars. we need
-            # to bump this manually to keep it in sync with latest deployed version of theatre
-            # TODO: tidy this up using jsonnet
-            - eu.gcr.io/gc-containers/gocardless/theatre:d2d3a1ef396703981dfdde08dd0632a8313784c1
+            - $(THEATRE_IMAGE)
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           name: manager
           env:

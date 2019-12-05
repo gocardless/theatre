@@ -18,3 +18,17 @@ nodes:
       - containerPort: 32000
         hostPort: 8200
         protocol: tcp
+kubeadmConfigPatches:
+  # Enable projected service account keys, as per:
+  # https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#service-account-token-volume-projection
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    apiServer:
+      extraArgs:
+        service-account-issuer: api
+        service-account-signing-key-file: /etc/kubernetes/pki/sa.key
+        service-account-key-file: /etc/kubernetes/pki/sa.pub
+        service-account-api-audiences: api

@@ -27,11 +27,12 @@ organisation that using GSuite, and which frequently onboards new developers.
 Extends core workload resources with new CRDs. This functionality can be
 expected to create pods, deployments, etc.
 
-- `Console` a one-shot job created by a human operator from a `ConsoleTemplate`
-- `ConsoleTemplate` specifies how `Console` pods should be created, and who has
-  access to create them
+- [`Console`](pkg/workloads/console) a one-shot job created by a human operator
+  from a `ConsoleTemplate`
+- [`ConsoleTemplate`](pkg/workloads/console) specifies how `Console` pods should
+  be created, and who has access to create them
 
-### Vault
+### [Vault](pkg/vault)
 
 Utilities for interacting with Vault. Primarily used to inject secret material
 into pods by use of annotations.

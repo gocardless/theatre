@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	execpkg "os/exec"
 	"path"
 	"strings"
 	"syscall"
@@ -44,8 +46,12 @@ var (
 	execVaultOptions            = newVaultOptions(exec)
 	execConfigFile              = exec.Flag("config-file", "app config file").String()
 	execInstallPath             = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
+	execTheatreEnvconsulBinary  = exec.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
 	execServiceAccountTokenFile = exec.Flag("service-account-token-file", "Path to Kubernetes service account token file").String()
 	execCommand                 = exec.Arg("command", "Command to execute").Required().Strings()
+
+	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
+	base64ExecCommand = base64Exec.Arg("base64-command", "Command to execute").Required().Strings()
 
 	// Version is set at compile time
 	Version = "dev"
@@ -66,6 +72,9 @@ func main() {
 
 func mainError(ctx context.Context, command string) (err error) {
 	switch command {
+	// Install theatre binaries into the target installation directory. This is used to
+	// prime any target containers with the tools they will need to authenticate with Vault
+	// and pull secrets.
 	case install.FullCommand():
 		files := map[string]string{
 			*installEnvconsulBinary:        "envconsul",
@@ -79,6 +88,10 @@ func mainError(ctx context.Context, command string) (err error) {
 			}
 		}
 
+	// Run the authentication dance against Vault, exchanging our Kubernetes service account
+	// token for a Vault token that can read secrets. Then prepare a Hashicorp envconsul
+	// configuration file and exec into envconsul with the Vault token, leaving envconsul to
+	// do all the secret fetching and lease management.
 	case exec.FullCommand():
 		var vaultToken string
 		if execVaultOptions.Token == "" {
@@ -131,7 +144,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			return errors.New("no 'vault:' prefix found in config or environment")
 		}
 
-		envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execCommand)
+		envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execTheatreEnvconsulBinary, *execCommand)
 		configJSONContents, err := json.Marshal(envconsulConfig)
 		if err != nil {
 			return err
@@ -158,6 +171,34 @@ func mainError(ctx context.Context, command string) (err error) {
 		logger.Log("event", "envconsul.exec", "binary", envconsulBinaryPath, "path", tempConfigFile.Name())
 		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute envconsul")
+		}
+
+	// Hidden command that allows us to exec a command using base64 encoded arguments. As
+	// envconsul, the Hashicorp tool, only allows us to specify a command string, we have to
+	// ensure we preserve the original commands shellword split.
+	//
+	// We use the exec command to generate an envconsul config with base64 encoded
+	// arguments, passed to this base64-exec command, that we know will be split correctly.
+	// This command then does the final execution, ensuring the split remains consistent.
+	case base64Exec.FullCommand():
+		args := []string{}
+		for _, base64arg := range *base64ExecCommand {
+			arg, err := base64.StdEncoding.DecodeString(base64arg)
+			if err != nil {
+				app.Fatalf("failed to decode base64 argument: %s", arg)
+			}
+
+			args = append(args, string(arg))
+		}
+
+		var err error
+		args[0], err = execpkg.LookPath(args[0])
+		if err != nil {
+			app.Fatalf("could not resolve binary for command: %v", err)
+		}
+
+		if err := syscall.Exec(args[0], args, os.Environ()); err != nil {
+			return errors.Wrap(err, "failed to execute decoded arguments")
 		}
 
 	default:
@@ -337,7 +378,12 @@ func loadConfigFromFile(configFile string) (Config, error) {
 // pass to envconsul uses no interpolation, so multiple keys in a vault secret would be
 // assigned the same environment variable. This is undefined behaviour, resulting in
 // subsequent executions setting different values for the same env var.
-func (o *vaultOptions) EnvconsulConfig(env environment, token string, command []string) *EnvconsulConfig {
+func (o *vaultOptions) EnvconsulConfig(env environment, token string, theatreEnvconsulPath string, args []string) *EnvconsulConfig {
+	base64args := []string{}
+	for _, arg := range args {
+		base64args = append(base64args, base64.StdEncoding.EncodeToString([]byte(arg)))
+	}
+
 	cfg := &EnvconsulConfig{
 		Vault: envconsulVault{
 			Address: o.Address,
@@ -351,7 +397,10 @@ func (o *vaultOptions) EnvconsulConfig(env environment, token string, command []
 			},
 		},
 		Exec: envconsulExec{
-			Command: strings.Join(command, " "),
+			// Base64 encode the command and pass it to theatre-envconsul base64-exec. This
+			// ensures we preserve command splitting, instead of relying on envconsul's shell
+			// splitting to do the right thing.
+			Command: fmt.Sprintf("%s %s %s", theatreEnvconsulPath, base64Exec.FullCommand(), strings.Join(base64args, " ")),
 		},
 		Secret: []envconsulSecret{},
 	}

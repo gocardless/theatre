@@ -200,12 +200,13 @@ spec:
       imagePullPolicy: Never
       env:
         - name: VAULT_RESOLVED_KEY
-          value: vault:secret/data/kubernetes/staging/secret-reader/jimmy
+          value: vault:jimmy
       command:
         - /usr/local/bin/theatre-envconsul
       args:
         - exec
         - --vault-address=http://vault.vault.svc.cluster.local:8200
+        - --vault-path-prefix=secret/data/kubernetes/staging/secret-reader
         - --no-vault-use-tls
         - --install-path=/usr/local/bin
         - --service-account-token-file=/var/run/secrets/kubernetes.io/vault/token
@@ -234,7 +235,7 @@ spec:
       imagePullPolicy: Never
       env:
         - name: VAULT_RESOLVED_KEY
-          value: vault:secret/data/kubernetes/staging/secret-reader/jimmy
+          value: vault:jimmy
       command:
         - env
 `

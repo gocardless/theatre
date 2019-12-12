@@ -35,9 +35,10 @@ var _ = Describe("PodInjector", func() {
 	BeforeEach(func() {
 		injector = &PodInjector{
 			VaultConfig: VaultConfig{
-				Address:       "https://vault.example.com",
-				AuthMountPath: "kubernetes.gc-prd-effc.cluster",
-				AuthRole:      "default",
+				Address:               "https://vault.example.com",
+				AuthMountPath:         "kubernetes.gc-prd-effc.cluster",
+				AuthRole:              "default",
+				SecretMountPathPrefix: "secret/data/kubernetes",
 			},
 			InjectorOptions: InjectorOptions{
 				Image:       "theatre:latest",
@@ -121,6 +122,8 @@ var _ = Describe("PodInjector", func() {
 								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
+								"--vault-path-prefix",
+								"secret/data/kubernetes/staging/secret-reader",
 								"--auth-backend-mount-path",
 								"kubernetes.gc-prd-effc.cluster",
 								"--auth-backend-role",
@@ -232,6 +235,8 @@ var _ = Describe("PodInjector", func() {
 								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
+								"--vault-path-prefix",
+								"secret/data/kubernetes/staging/secret-reader",
 								"--auth-backend-mount-path",
 								"kubernetes.gc-prd-effc.cluster",
 								"--auth-backend-role",

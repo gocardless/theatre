@@ -79,3 +79,4 @@ data:
   address: http://vault.vault.svc.cluster.local:8200
   auth_mount_path: kubernetes
   auth_role: default
+  secret_mount_path_prefix: secret/data/kubernetes

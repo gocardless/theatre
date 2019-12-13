@@ -125,9 +125,10 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response
 //
 // If we can't parse the configmap into this structure, we should fail our webhook.
 type VaultConfig struct {
-	Address       string `mapstructure:"address"`
-	AuthMountPath string `mapstructure:"auth_mount_path"`
-	AuthRole      string `mapstructure:"auth_role"`
+	Address               string `mapstructure:"address"`
+	AuthMountPath         string `mapstructure:"auth_mount_path"`
+	AuthRole              string `mapstructure:"auth_role"`
+	SecretMountPathPrefix string `mapstructure:"secret_mount_path_prefix"`
 }
 
 func newVaultConfig(cfgmap *corev1.ConfigMap) (VaultConfig, error) {
@@ -184,13 +185,15 @@ func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
 		},
 	)
 
+	secretMountPathPrefix := path.Join(i.VaultConfig.SecretMountPathPrefix, pod.Namespace, pod.Spec.ServiceAccountName)
+
 	for idx, container := range mutatedPod.Spec.Containers {
 		containerConfigPath, ok := containerConfigs[container.Name]
 		if !ok {
 			continue
 		}
 
-		mutatedPod.Spec.Containers[idx] = i.configureContainer(container, containerConfigPath)
+		mutatedPod.Spec.Containers[idx] = i.configureContainer(container, containerConfigPath, secretMountPathPrefix)
 	}
 
 	return mutatedPod
@@ -255,12 +258,13 @@ func (i PodInjector) buildInitContainer() corev1.Container {
 
 // configureContainer returns a copy with the command modified to run theatre-envconsul,
 // along with a volume mount that will contain the envconsul binaries.
-func (i PodInjector) configureContainer(reference corev1.Container, containerConfigPath string) corev1.Container {
+func (i PodInjector) configureContainer(reference corev1.Container, containerConfigPath, secretMountPathPrefix string) corev1.Container {
 	c := &reference
 
 	args := []string{"exec"}
 	args = append(args, "--install-path", i.InstallPath)
 	args = append(args, "--vault-address", i.Address)
+	args = append(args, "--vault-path-prefix", secretMountPathPrefix)
 	args = append(args, "--auth-backend-mount-path", i.AuthMountPath)
 	args = append(args, "--auth-backend-role", i.AuthRole)
 	args = append(args, "--service-account-token-file", i.ServiceAccountTokenFile)

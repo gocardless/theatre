@@ -44,7 +44,7 @@ var (
 
 	exec                        = app.Command("exec", "Authenticate with vault and exec envconsul")
 	execVaultOptions            = newVaultOptions(exec)
-	execConfigFile              = exec.Flag("config-file", "app config file").String()
+	execConfigFile              = exec.Flag("config-file", "App config file").String()
 	execInstallPath             = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
 	execTheatreEnvconsulBinary  = exec.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
 	execServiceAccountTokenFile = exec.Flag("service-account-token-file", "Path to Kubernetes service account token file").String()
@@ -262,6 +262,7 @@ type vaultOptions struct {
 	Token                 string
 	AuthBackendMountPoint string
 	AuthBackendRole       string
+	PathPrefix            string
 }
 
 func newVaultOptions(cmd *kingpin.CmdClause) *vaultOptions {
@@ -273,6 +274,7 @@ func newVaultOptions(cmd *kingpin.CmdClause) *vaultOptions {
 	cmd.Flag("vault-token", "Vault token to use, instead of Kubernetes auth").OverrideDefaultFromEnvar("VAULT_TOKEN").StringVar(&opt.Token)
 	cmd.Flag("vault-use-tls", "Use TLS when connecting to Vault").Default("true").BoolVar(&opt.UseTLS)
 	cmd.Flag("vault-insecure-skip-verify", "Skip TLS certificate verification when connecting to Vault").Default("false").BoolVar(&opt.InsecureSkipVerify)
+	cmd.Flag("vault-path-prefix", "Path prefix to read Vault secret from").Default("").StringVar(&opt.PathPrefix)
 
 	return opt
 }
@@ -402,7 +404,8 @@ func (o *vaultOptions) EnvconsulConfig(env environment, token string, theatreEnv
 	}
 
 	for key, value := range env {
-		cfg.Secret = append(cfg.Secret, envconsulSecret{Format: key, Path: value})
+		path := path.Join(o.PathPrefix, value)
+		cfg.Secret = append(cfg.Secret, envconsulSecret{Format: key, Path: path})
 	}
 
 	return cfg

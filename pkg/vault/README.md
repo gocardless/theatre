@@ -179,6 +179,7 @@ spec:
       args:
         - exec
         - --vault-address=http://vault.vault.svc.cluster.local:8200
+        - --vault-path-prefix=secret/data/kubernetes/project/namespace/app
         - --install-path=/var/run/theatre
         - --service-account-token-file=/var/run/secrets/kubernetes.io/vault/token
         - --

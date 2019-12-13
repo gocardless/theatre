@@ -110,6 +110,8 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response
 		return admission.ErrorResponse(http.StatusInternalServerError, err)
 	}
 
+	// use request namespace as this is where the pod should be created
+	pod.Namespace = req.AdmissionRequest.Namespace
 	mutatedPod := PodInjector{InjectorOptions: i.opts, VaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")

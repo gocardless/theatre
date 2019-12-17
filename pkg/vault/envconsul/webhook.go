@@ -15,6 +15,8 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -77,11 +79,43 @@ type InjectorOptions struct {
 	ServiceAccountTokenAudience string           // optional token audience
 }
 
-func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response {
+var (
+	podLabels   = []string{"pod_namespace"}
+	handleTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_vault_envconsul_injector_handle_total",
+			Help: "Count of requests handled by the webhook",
+		},
+		podLabels,
+	)
+	mutateTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_vault_envconsul_injector_mutate_total",
+			Help: "Count of pods mutated by the webhook",
+		},
+		podLabels,
+	)
+	errorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_vault_envconsul_injector_errors_total",
+			Help: "Count of not-allowed responses from webhook",
+		},
+		podLabels,
+	)
+)
+
+func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
+	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
 	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {
 		logger.Log("event", "request.end", "duration", time.Since(start).Seconds())
+
+		handleTotal.With(labels).Inc()
+		// Catch any Allowed=false responses, as this means we've failed to accept this pod
+		if !resp.Response.Allowed {
+			errorsTotal.With(labels).Inc()
+		}
 	}(time.Now())
 
 	pod := &corev1.Pod{}
@@ -99,6 +133,7 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) types.Response
 	}
 
 	logger = kitlog.With(logger, "pod_namespace", pod.Namespace, "pod_name", pod.Name)
+	mutateTotal.With(labels).Inc() // we're committed to mutating this pod now
 
 	vaultConfigMap := &corev1.ConfigMap{}
 	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {

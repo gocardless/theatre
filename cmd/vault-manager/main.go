@@ -44,7 +44,7 @@ var (
 	serviceAccountTokenExpiry   = app.Flag("service-account-token-expiry", "Expiry for service account tokens").Default("15m").Duration()
 	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
 
-	commonOpts = cmd.NewCommonOptions(app)
+	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 
 	// Version is set at compile time
 	Version = "dev"
@@ -57,6 +57,10 @@ func main() {
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		app.Fatalf("failed to add schemes: %v", err)
 	}
+
+	go func() {
+		commonOpts.ListenAndServeMetrics(logger)
+	}()
 
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()

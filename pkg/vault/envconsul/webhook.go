@@ -218,6 +218,10 @@ func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
 			Name: "theatre-envconsul-serviceaccount",
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
+					// Ensure this token is readable by whatever user the container might run in, as
+					// your application might run with a non-root user but must be able to access
+					// its secrets.
+					DefaultMode: func() *int32 { mode := int32(0444); return &mode }(),
 					Sources: []corev1.VolumeProjection{
 						corev1.VolumeProjection{
 							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{

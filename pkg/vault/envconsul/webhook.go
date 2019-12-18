@@ -236,6 +236,17 @@ func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
 		},
 	)
 
+	// If we don't already have an fsGroup set, we'll need to configure it so we can read
+	// the contents of the volumes we mount. Failing to do this will prevent us from reading
+	// the projected service account token.
+	if mutatedPod.Spec.SecurityContext == nil {
+		mutatedPod.Spec.SecurityContext = &corev1.PodSecurityContext{}
+	}
+	if mutatedPod.Spec.SecurityContext.FSGroup == nil {
+		defaultFSGroup := int64(1000)
+		mutatedPod.Spec.SecurityContext.FSGroup = &defaultFSGroup
+	}
+
 	secretMountPathPrefix := path.Join(i.VaultConfig.SecretMountPathPrefix, pod.Namespace, pod.Spec.ServiceAccountName)
 
 	for idx, container := range mutatedPod.Spec.Containers {

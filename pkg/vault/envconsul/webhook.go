@@ -132,7 +132,19 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		return admission.PatchResponse(pod, pod)
 	}
 
-	logger = kitlog.With(logger, "pod_namespace", pod.Namespace, "pod_name", pod.Name)
+	// ensure the pod has a namespace if it has one as we use it in the secretMountPathPrefix
+	pod.Namespace = req.AdmissionRequest.Namespace
+
+	// if the request object (pod) has a name use it
+	if req.AdmissionRequest.Name != "" {
+		pod.Name = req.AdmissionRequest.Name
+	}
+
+	logger = kitlog.With(logger,
+		"pod_namespace", pod.Namespace,
+		"pod_name", pod.Name,
+	)
+
 	mutateTotal.With(labels).Inc() // we're committed to mutating this pod now
 
 	vaultConfigMap := &corev1.ConfigMap{}
@@ -145,8 +157,6 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		return admission.ErrorResponse(http.StatusInternalServerError, err)
 	}
 
-	// use request namespace as this is where the pod should be created
-	pod.Namespace = req.AdmissionRequest.Namespace
 	mutatedPod := PodInjector{InjectorOptions: i.opts, VaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")

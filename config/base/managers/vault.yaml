@@ -98,6 +98,8 @@ spec:
             - /usr/local/bin/vault-manager
             - --theatre-image
             - $(THEATRE_IMAGE)
+            - --metrics-address
+            - 0.0.0.0
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           name: manager
           env:

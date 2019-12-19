@@ -217,6 +217,8 @@ spec:
           mountPath: /var/run/secrets/kubernetes.io/vault
 `
 
+// This pod tests that our mutating webhook injects theatre-envconsul. We'll verify the
+// environment is set correctly.
 const annotatedPodYAML = `
 ---
 apiVersion: v1
@@ -233,6 +235,34 @@ spec:
     - name: app
       image: theatre:latest
       imagePullPolicy: Never
+      env:
+        - name: VAULT_RESOLVED_KEY
+          value: vault:jimmy
+      command:
+        - env
+`
+
+// As with annotatedPodYAML, but this time non-root. This validates that non-root users
+// can access the projected token, which relies on correctly setting the fsGroup.
+const annotatedNonRootPodYAML = `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: read-a-secret-
+  namespace: staging # provisioned by the acceptance kustomize overlay
+  annotations:
+    envconsul-injector.vault.crd.gocardless.com/configs: app
+spec:
+  serviceAccountName: secret-reader
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: theatre:latest
+      imagePullPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
       env:
         - name: VAULT_RESOLVED_KEY
           value: vault:jimmy
@@ -304,6 +334,12 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			BeforeEach(func() { podFixtureYAML = annotatedPodYAML })
 
 			It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+
+			Context("With a non-root user", func() {
+				BeforeEach(func() { podFixtureYAML = annotatedNonRootPodYAML })
+
+				It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+			})
 		})
 	})
 }

@@ -95,6 +95,13 @@ var (
 		},
 		podLabels,
 	)
+	skipTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_vault_envconsul_injector_skip_total",
+			Help: "Count of pods skipped by the webhook, as they lack annotations",
+		},
+		podLabels,
+	)
 	errorsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "theatre_vault_envconsul_injector_errors_total",
@@ -112,6 +119,12 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		logger.Log("event", "request.end", "duration", time.Since(start).Seconds())
 
 		handleTotal.With(labels).Inc()
+		{ // add 0 to initialise the metrics
+			mutateTotal.With(labels).Add(0)
+			skipTotal.With(labels).Add(0)
+			errorsTotal.With(labels).Add(0)
+		}
+
 		// Catch any Allowed=false responses, as this means we've failed to accept this pod
 		if !resp.Response.Allowed {
 			errorsTotal.With(labels).Inc()
@@ -129,6 +142,7 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 	// code futher along returns an error.
 	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]; !ok {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found")
+		skipTotal.With(labels).Inc()
 		return admission.PatchResponse(pod, pod)
 	}
 

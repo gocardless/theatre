@@ -782,13 +782,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b7c671f163aa6e06e8d5eed68b7b4319960054427fb6ddc24d7a44fac4e3cb95"
+  digest = "1:57ee313358d88be7d7772f115d6e8fba3d06df5db97683d683aaa6261352a60c"
   name = "google.golang.org/api"
   packages = [
     "admin/directory/v1",
+    "compute/v1",
     "gensupport",
     "googleapi",
     "googleapi/internal/uritemplates",
+    "iap/v1beta1",
   ]
   pruneopts = "UT"
   revision = "583d854617af4d2080b5d2a24d72f7fc5a128ab2"
@@ -1242,6 +1244,8 @@
     "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
+    "google.golang.org/api/compute/v1",
+    "google.golang.org/api/iap/v1beta1",
     "gopkg.in/h2non/gock.v1",
     "gopkg.in/yaml.v2",
     "k8s.io/api/admissionregistration/v1beta1",

@@ -9,7 +9,7 @@ RUN git clone https://github.com/gocardless/envconsul.git \
       && mv envconsul/pkg/linux_amd64/envconsul bin
 
 # Use ubuntu as our base package to enable generic system tools
-FROM ubuntu:bionic-20191029
+FROM ubuntu:bionic-20191202
 
 # Without these certificates we'll fail to validate TLS connections to Google's
 # services.

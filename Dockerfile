@@ -26,5 +26,4 @@ RUN set -x \
 
 WORKDIR /
 COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /usr/local/bin/
-COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /usr/local/bin/
 ENTRYPOINT ["/bin/bash"]

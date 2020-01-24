@@ -162,7 +162,7 @@ func mainError(ctx context.Context, command string) (err error) {
 		}
 
 		envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
-		envconsulArgs := []string{envconsulBinaryPath, "-config", tempConfigFile.Name()}
+		envconsulArgs := []string{envconsulBinaryPath, "-once", "-config", tempConfigFile.Name()}
 
 		logger.Log("event", "envconsul.exec", "binary", envconsulBinaryPath, "path", tempConfigFile.Name())
 		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {

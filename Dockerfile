@@ -13,7 +13,7 @@ RUN set -x \
       && mv pkg/linux_amd64/envconsul ../bin
 
 # Use ubuntu as our base package to enable generic system tools
-FROM ubuntu:bionic-20191202
+FROM ubuntu:bionic-20200112
 
 # Without these certificates we'll fail to validate TLS connections to Google's
 # services.

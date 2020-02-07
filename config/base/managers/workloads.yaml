@@ -19,7 +19,8 @@ rules:
   - apiGroups:
       - ""
     resources:
-      - "pods"
+      - pods
+      - namespaces
     verbs:
       - list
       - get

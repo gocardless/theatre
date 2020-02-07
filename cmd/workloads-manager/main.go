@@ -11,13 +11,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/apis"
 	"github.com/gocardless/theatre/pkg/apis/workloads"
 	"github.com/gocardless/theatre/pkg/signals"
 	"github.com/gocardless/theatre/pkg/workloads/console"
+	"github.com/gocardless/theatre/pkg/workloads/priority"
 )
 
 var (
@@ -78,12 +78,17 @@ func main() {
 	}
 
 	// Console webhook
-	var wh *admission.Webhook
-	if wh, err = console.NewWebhook(logger, mgr); err != nil {
+	consoleWh, err := console.NewWebhook(logger, mgr)
+	if err != nil {
 		app.Fatalf(err.Error())
 	}
 
-	if err := svr.Register(wh); err != nil {
+	priorityWh, err := priority.NewWebhook(logger, mgr, priority.InjectorOptions{})
+	if err != nil {
+		app.Fatalf(err.Error())
+	}
+
+	if err := svr.Register(consoleWh, priorityWh); err != nil {
 		app.Fatalf(err.Error())
 	}
 

@@ -142,6 +142,8 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		return admission.PatchResponse(pod, pod)
 	}
 
+	mutateTotal.With(labels).Inc() // we are committed to mutating this pod now
+
 	logger.Log("event", "pod.assign_priority_class", "class", priorityClassName)
 	copy := pod.DeepCopy()
 	copy.Spec.PriorityClassName = priorityClassName

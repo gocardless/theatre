@@ -9,13 +9,14 @@ commonLabels:
   app: theatre
 
 resources:
+  - managers/namespace.yaml
   - crds/rbac_v1alpha1_directoryrolebinding.yaml
   - crds/workloads_v1alpha1_console.yaml
   - crds/workloads_v1alpha1_consoletemplate.yaml
-  - managers/namespace.yaml
   - managers/rbac.yaml
-  - managers/vault.yaml
   - managers/workloads.yaml
+  # NOTE: Avoid this as we don't use vault, yet
+  # - managers/vault.yaml
 
 vars:
   # We want our mutating webhook to ensure it only ever configures pods to use
@@ -23,10 +24,10 @@ vars:
   # worry about maintaining compatibility between versions of the webhook and
   # theatre-envconsul, as both will use the same version and be deployed
   # atomically.
-  - name: THEATRE_IMAGE
-    objref:
-      apiVersion: apps/v1
-      kind: StatefulSet
-      name: vault-manager
-    fieldref:
-      fieldpath: spec.template.spec.containers[0].image
+  # - name: THEATRE_IMAGE
+  #   objref:
+  #     apiVersion: apps/v1
+  #     kind: StatefulSet
+  #     name: vault-manager
+  #   fieldref:
+  #     fieldpath: spec.template.spec.containers[0].image

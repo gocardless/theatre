@@ -4,13 +4,14 @@ WORKDIR /go/src/github.com/gocardless/theatre
 COPY . /go/src/github.com/gocardless/theatre
 RUN make VERSION=$(cat VERSION) build
 
-# Clone our fork of envconsul and build it
-RUN set -x \
-      && git clone https://github.com/gocardless/envconsul.git \
-      && cd envconsul \
-      && git checkout 2eb7fdc4dd1a13464e9a529e324ffd9b8d12ce25 \
-      && make linux/amd64 \
-      && mv pkg/linux_amd64/envconsul ../bin
+# NOTE: We don't need envconsul, as we dont yet run Vault.
+# # Clone our fork of envconsul and build it
+# RUN set -x \
+#       && git clone https://github.com/gocardless/envconsul.git \
+#       && cd envconsul \
+#       && git checkout 2eb7fdc4dd1a13464e9a529e324ffd9b8d12ce25 \
+#       && make linux/amd64 \
+#       && mv pkg/linux_amd64/envconsul ../bin
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:bionic-20191202

@@ -9,10 +9,9 @@ import (
 )
 
 var (
-	createSelector = create.Flag("selector", "Selector that matches console template").Required().String()
-	createTimeout  = create.Flag("timeout", "Timeout for the new console").Duration()
-	createReason   = create.Flag("reason", "Reason for creating console").String()
-	createCommand  = create.Arg("command", "Command to run in console").Strings()
+	createTimeout = create.Flag("timeout", "Timeout for the new console").Duration()
+	createReason  = create.Flag("reason", "Reason for creating console").String()
+	createCommand = create.Arg("command", "Command to run in console").Strings()
 )
 
 // Create attempts to create a console in the given in the given namespace after finding the a template using selectors.
@@ -20,7 +19,7 @@ func Create(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, na
 	var err error
 
 	// Create and attach to the console
-	tpl, err := runner.FindTemplateBySelector(namespace, *createSelector)
+	tpl, err := runner.FindTemplateBySelector(namespace, *cliSelector)
 	if err != nil {
 		return err
 	}

@@ -32,8 +32,13 @@ var (
 			Envar("KUBERNETES_NAMESPACE").
 			Default("").
 			String()
+	cliSelector = create.Flag("selector", "Selector that matches console template").
+			Short('s').
+			Required().
+			String()
 
 	create = cli.Command("create", "Creates a new console given a template")
+	attach = cli.Command("attach", "Attach to a running console")
 )
 
 func main() {
@@ -79,7 +84,7 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	kctx := *cliContext
 	namespace := *cliNamespace
 
-	runner, err := newRunner(kctx)
+	rctx, err := newRunner(kctx)
 	if err != nil {
 		return err
 	}
@@ -87,13 +92,22 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	// Match on the kingpin command and enter the main command
 	switch cmd {
 	case create.FullCommand():
-		return Create(ctx, logger, runner, namespace)
+		return Create(ctx, logger, rctx.runner, namespace)
+	case attach.FullCommand():
+		return Attach(ctx, logger, rctx.runner, namespace, rctx.kubeClient, rctx.config)
 	}
 
 	return nil
 }
 
-func newRunner(kctx string) (*runner.Runner, error) {
+type runnerContext struct {
+	config        *rest.Config
+	kubeClient    *kubernetes.Clientset
+	runner        *runner.Runner
+	theatreClient *theatre.Clientset
+}
+
+func newRunner(kctx string) (*runnerContext, error) {
 	config, err := newKubeConfig(kctx)
 	if err != nil {
 		return nil, err
@@ -109,5 +123,12 @@ func newRunner(kctx string) (*runner.Runner, error) {
 		return nil, err
 	}
 
-	return runner.New(client, theatreClient), nil
+	runner := runner.New(client, theatreClient)
+
+	return &runnerContext{
+		config:        config,
+		kubeClient:    client,
+		runner:        runner,
+		theatreClient: theatreClient,
+	}, nil
 }

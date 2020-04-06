@@ -38,9 +38,9 @@ type Options struct {
 }
 
 // New builds a runner
-func New(coreClient kubernetes.Interface, theatreClient versioned.Interface) *Runner {
+func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner {
 	return &Runner{
-		kubeClient:    coreClient,
+		kubeClient:    client,
 		theatreClient: theatreClient,
 	}
 }

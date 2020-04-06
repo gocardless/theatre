@@ -1,4 +1,4 @@
-PROG=bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul
+PROG=bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -14,13 +14,13 @@ build-all: build-darwin build-linux
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX
 bin/%.linux_amd64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
 bin/%.darwin_amd64:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
 
 bin/%:
-	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ cmd/$*/main.go
+	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:

@@ -28,6 +28,7 @@ import (
 type WorkloadsV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConsolesGetter
+	ConsoleAuthorisationsGetter
 	ConsoleTemplatesGetter
 }
 
@@ -38,6 +39,10 @@ type WorkloadsV1alpha1Client struct {
 
 func (c *WorkloadsV1alpha1Client) Consoles(namespace string) ConsoleInterface {
 	return newConsoles(c, namespace)
+}
+
+func (c *WorkloadsV1alpha1Client) ConsoleAuthorisations(namespace string) ConsoleAuthorisationInterface {
+	return newConsoleAuthorisations(c, namespace)
 }
 
 func (c *WorkloadsV1alpha1Client) ConsoleTemplates(namespace string) ConsoleTemplateInterface {

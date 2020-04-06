@@ -26,6 +26,8 @@ import (
 type Interface interface {
 	// Consoles returns a ConsoleInformer.
 	Consoles() ConsoleInformer
+	// ConsoleAuthorisations returns a ConsoleAuthorisationInformer.
+	ConsoleAuthorisations() ConsoleAuthorisationInformer
 	// ConsoleTemplates returns a ConsoleTemplateInformer.
 	ConsoleTemplates() ConsoleTemplateInformer
 }
@@ -44,6 +46,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // Consoles returns a ConsoleInformer.
 func (v *version) Consoles() ConsoleInformer {
 	return &consoleInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// ConsoleAuthorisations returns a ConsoleAuthorisationInformer.
+func (v *version) ConsoleAuthorisations() ConsoleAuthorisationInformer {
+	return &consoleAuthorisationInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ConsoleTemplates returns a ConsoleTemplateInformer.

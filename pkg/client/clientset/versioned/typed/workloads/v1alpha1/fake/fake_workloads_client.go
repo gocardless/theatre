@@ -32,6 +32,10 @@ func (c *FakeWorkloadsV1alpha1) Consoles(namespace string) v1alpha1.ConsoleInter
 	return &FakeConsoles{c, namespace}
 }
 
+func (c *FakeWorkloadsV1alpha1) ConsoleAuthorisations(namespace string) v1alpha1.ConsoleAuthorisationInterface {
+	return &FakeConsoleAuthorisations{c, namespace}
+}
+
 func (c *FakeWorkloadsV1alpha1) ConsoleTemplates(namespace string) v1alpha1.ConsoleTemplateInterface {
 	return &FakeConsoleTemplates{c, namespace}
 }

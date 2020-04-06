@@ -20,4 +20,6 @@ package v1alpha1
 
 type ConsoleExpansion interface{}
 
+type ConsoleAuthorisationExpansion interface{}
+
 type ConsoleTemplateExpansion interface{}

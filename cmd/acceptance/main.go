@@ -94,12 +94,6 @@ func main() {
 			app.Fatalf("failed to find control plane container: %v", err)
 		}
 
-		cfgPathBytes, err := exec.CommandContext(ctx, "kind", "get", "kubeconfig-path", "--name", *clusterName).Output()
-		cfgPath := string(bytes.TrimSpace(cfgPathBytes))
-		if err != nil {
-			app.Fatalf("failed to discover kind cluster config path: %v", err)
-		}
-
 		logger.Log("msg", "preparing acceptance docker image")
 		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", *prepareDockerfile, path.Dir(*prepareDockerfile))
 
@@ -120,9 +114,8 @@ func main() {
 		}
 
 		logger.Log("msg", "installing manager into cluster")
-		applyCmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", "-")
+		applyCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "apply", "-f", "-")
 		applyCmd.Stdin = bytes.NewReader(manifests)
-		applyCmd.Env = append(applyCmd.Env, fmt.Sprintf("KUBECONFIG=%s", cfgPath))
 
 		if err := pipeOutput(applyCmd).Run(); err != nil {
 			app.Fatalf("failed to install manager: %v", err)

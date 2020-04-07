@@ -49,7 +49,7 @@ the necessary dependencies:
 ```shell
 brew cask install docker
 brew install go@1.13.4 kubernetes-cli
-curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.6.0/kind-darwin-amd64 \
+curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-darwin-amd64 \
   && chmod a+x /usr/local/bin/kind
 curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_darwin_amd64.tar.gz \
   | tar -xvz -C /usr/local/bin

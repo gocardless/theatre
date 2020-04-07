@@ -34,6 +34,64 @@ spec:
               items:
                 type: object
               type: array
+            authorisationRules:
+              description:
+                List of authorisation rules to match against in order from
+                top to bottom.
+              items:
+                properties:
+                  authorisationsRequired:
+                    description:
+                      The number of authorisations required from members
+                      of the subjects before the console can run.
+                    format: int64
+                    type: integer
+                  matchCommand:
+                    description:
+                      The match expression to compare to the command and
+                      arguments of the console. Uses the glob format https://github.com/gobwas/glob.
+                    type: string
+                  name:
+                    description:
+                      Human readable name of authorisation rule added to
+                      logs for auditing.
+                    type: string
+                  subjects:
+                    description:
+                      List of subjects that can provide authorisation for
+                      the console command to run.
+                    items:
+                      type: object
+                    type: array
+                required:
+                  - name
+                  - matchCommand
+                  - authorisationsRequired
+                  - subjects
+                type: object
+              type: array
+            defaultAuthorisationRule:
+              description:
+                Default authorisation rule to use if no authorisation rules
+                are defined or no authorisation rules match.
+              properties:
+                authorisationsRequired:
+                  description:
+                    The number of authorisations required from members
+                    of the subjects before the console can run.
+                  format: int64
+                  type: integer
+                subjects:
+                  description:
+                    List of subjects that can provide authorisation for
+                    the console command to run.
+                  items:
+                    type: object
+                  type: array
+              required:
+                - authorisationsRequired
+                - subjects
+              type: object
             defaultTimeoutSeconds:
               description:
                 Default time, in seconds, that a Console will be created

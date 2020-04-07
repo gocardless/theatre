@@ -120,6 +120,34 @@ type ConsoleTemplateSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=604800
 	DefaultTTLSecondsAfterFinished *int32 `json:"defaultTtlSecondsAfterFinished,omitempty"`
+
+	// List of authorisation rules to match against in order from top to bottom.
+	// +optional
+	AuthorisationRules []ConsoleAuthorisationRule `json:"authorisationRules,omitempty"`
+	// Default authorisation rule to use if no authorisation rules are defined or no authorisation rules match.
+	// +optional
+	DefaultAuthorisationRule *ConsoleAuthorisers `json:"defaultAuthorisationRule,omitempty"`
+}
+
+// ConsoleAuthorisationRule declares rules specifying what commands need to be authorised and by whom.
+type ConsoleAuthorisationRule struct {
+	// Human readable name of authorisation rule added to logs for auditing.
+	Name string `json:"name"`
+
+	// The match expression to compare to the command and arguments of the console.
+	// Uses the glob format https://github.com/gobwas/glob.
+	MatchCommand string `json:"matchCommand"`
+
+	ConsoleAuthorisers `json:",inline"`
+}
+
+// ConsoleAuthorisers declares the subjects required to perform authorisations.
+type ConsoleAuthorisers struct {
+	// The number of authorisations required from members of the subjects before the console can run.
+	AuthorisationsRequired int `json:"authorisationsRequired"`
+
+	// List of subjects that can provide authorisation for the console command to run.
+	Subjects []rbacv1.Subject `json:"subjects"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -130,4 +158,37 @@ type ConsoleTemplateList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []ConsoleTemplate `json:"items"`
+}
+
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// ConsoleAuthorisation declares a console authorisation that is instantiated when a console that requires authoristion is created. It is used to store authorisations for the associated console.
+type ConsoleAuthorisation struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec ConsoleAuthorisationSpec `json:"spec"`
+}
+
+// ConsoleAuthorisationSpec defines the specification for a console authorisation
+type ConsoleAuthorisationSpec struct {
+	// The reference to the console by name that this console authorisation belongs to.
+	ConsoleRef corev1.LocalObjectReference `json:"consoleRef"`
+
+	// The user who created the referenced console.
+	Owner string `json:"owner"`
+
+	// List of authorisations that have been given to the referenced console.
+	Authorisations []rbacv1.Subject `json:"authorisations"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// ConsoleAuthorisationList is a list of console authorisations
+type ConsoleAuthorisationList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []ConsoleAuthorisation `json:"items"`
 }

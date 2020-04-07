@@ -1,0 +1,11 @@
+apiVersion: workloads.crd.gocardless.com/v1alpha1
+kind: ConsoleAuthorisation
+metadata:
+  name: console-container
+spec:
+  consoleRef:
+    name: change-console-container
+  owner: change-owner
+  authorisations:
+    - kind: User
+      name: user1

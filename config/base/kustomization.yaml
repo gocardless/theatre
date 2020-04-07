@@ -11,6 +11,7 @@ commonLabels:
 resources:
   - crds/rbac_v1alpha1_directoryrolebinding.yaml
   - crds/workloads_v1alpha1_console.yaml
+  - crds/workloads_v1alpha1_consoleauthorisation.yaml
   - crds/workloads_v1alpha1_consoletemplate.yaml
   - managers/namespace.yaml
   - managers/rbac.yaml

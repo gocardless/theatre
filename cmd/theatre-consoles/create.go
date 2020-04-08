@@ -6,7 +6,6 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 	consoleRunner "github.com/gocardless/theatre/pkg/workloads/console/runner"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -16,11 +15,12 @@ var (
 	createCommand  = create.Arg("command", "Command to run in console").Strings()
 )
 
-func Create(ctx context.Context, logger kitlog.Logger, runner *runner.Runner) error {
+// Create attempts to create a console in the given in the given namespace after finding the a template using selectors.
+func Create(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, namespace string) error {
 	var err error
 
 	// Create and attach to the console
-	tpl, err := runner.FindTemplateBySelector(metav1.NamespaceAll, *createSelector)
+	tpl, err := runner.FindTemplateBySelector(namespace, *createSelector)
 	if err != nil {
 		return err
 	}

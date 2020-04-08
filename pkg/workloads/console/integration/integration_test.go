@@ -26,6 +26,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	// Expect 2 reconcile events:
+	//   #1: In response to the creation of the console itself.
+	//   #2: In response to the creation of the job.
+	ReconcilesAfterCreate = 2
+)
+
 var (
 	timeout = 5 * time.Second
 	logger  = kitlog.NewLogfmtLogger(GinkgoWriter)
@@ -40,10 +47,10 @@ var _ = Describe("Console", func() {
 		mgr                        manager.Manager
 		calls                      chan integration.ReconcileCall
 		whcalls                    chan integration.HandleCall
+		consoleName                string
 		csl                        *workloadsv1alpha1.Console
-		waitForSuccessfulReconcile func(int, string)
 		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
-		createConsole              func(int, string)
+		waitForSuccessfulReconcile func(int)
 	)
 
 	BeforeEach(func() {
@@ -69,49 +76,80 @@ var _ = Describe("Console", func() {
 			),
 		))
 
-		By("Creating console template")
-		consoleTemplate = buildConsoleTemplate(namespace)
-		Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-			HaveOccurred(), "failed to create Console Template",
-		)
-
-		createConsole = func(timeout int, name string) {
-			csl = &workloadsv1alpha1.Console{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: namespace,
-					Labels: map[string]string{
-						"repo":        "no-app",
-						"other-label": "other-value",
+		consoleTemplate = &workloadsv1alpha1.ConsoleTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "console-template-0",
+				Namespace: namespace,
+				Labels: map[string]string{
+					"repo":        "myapp-owner-myapp-repo",
+					"environment": "myapp-env",
+				},
+			},
+			Spec: workloadsv1alpha1.ConsoleTemplateSpec{
+				DefaultTimeoutSeconds: 600,
+				MaxTimeoutSeconds:     7200,
+				AdditionalAttachSubjects: []rbacv1.Subject{
+					{Kind: "User", Name: "add-user@example.com"},
+					{Kind: "GoogleGroup", Name: "group@example.com"},
+				},
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							corev1.Container{
+								Image:   "alpine:latest",
+								Name:    "console-container-0",
+								Command: []string{"/bin/sh", "-c", "sleep 100"},
+							},
+						},
+						RestartPolicy: "OnFailure",
 					},
 				},
-				Spec: workloadsv1alpha1.ConsoleSpec{
-					Command:            []string{"bin/rails", "console", "--help"},
-					ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
-					TimeoutSeconds:     timeout,
-					User:               "", // deliberately blank: this should be set by the webhook
-				},
-			}
-
-			By("Creating console")
-			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-				HaveOccurred(), "failed to create Console",
-			)
+			},
 		}
 
-		waitForSuccessfulReconcile = func(times int, name string) {
+		consoleName = "console-0"
+		csl = &workloadsv1alpha1.Console{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      consoleName,
+				Namespace: namespace,
+				Labels: map[string]string{
+					"repo":        "no-app",
+					"other-label": "other-value",
+				},
+			},
+			Spec: workloadsv1alpha1.ConsoleSpec{
+				Command:            []string{"bin/rails", "console", "--help"},
+				ConsoleTemplateRef: corev1.LocalObjectReference{Name: "console-template-0"},
+				TimeoutSeconds:     3600,
+				User:               "", // deliberately blank: this should be set by the webhook
+			},
+		}
+
+		waitForSuccessfulReconcile = func(times int) {
 			// Wait twice for reconcile: the second reconciliation is triggered due to
 			// the update of the status field with an expiry time
 			for i := 1; i <= times; i++ {
 				By(fmt.Sprintf("Expect reconcile succeeded (%d of %d)", i, times))
 				Eventually(calls, timeout).Should(
 					Receive(
-						integration.ReconcileResourceSuccess(namespace, name),
+						integration.ReconcileResourceSuccess(namespace, consoleName),
 					),
 				)
 			}
 			By("Reconcile done")
 		}
+	})
+
+	JustBeforeEach(func() {
+		By("Creating console template")
+		Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
+			HaveOccurred(), "failed to create Console Template",
+		)
+
+		By("Creating console")
+		Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
+			HaveOccurred(), "failed to create Console",
+		)
 	})
 
 	AfterEach(func() {
@@ -120,52 +158,65 @@ var _ = Describe("Console", func() {
 	})
 
 	Describe("Enforcing valid timeout values", func() {
-		It("Enforces the console template's MaxTimeoutSeconds", func() {
-			By("Creating a console with a timeout > MaxTimeoutSeconds")
-			createConsole(7201, "console-0")
+		Describe("Timeout > MaxTimeoutSeconds", func() {
+			BeforeEach(func() {
+				csl.Spec.TimeoutSeconds = 7201
+			})
 
-			waitForSuccessfulReconcile(2, "console-0")
+			It("Enforces the console template's MaxTimeoutSeconds", func() {
+				By("Creating a console with a timeout > MaxTimeoutSeconds")
 
-			By("Expect console has timeout == MaxTimeoutSeconds")
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-			Expect(
-				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7200),
-				"console's timeout does not match template's MaxTimeoutSeconds",
-			)
+				waitForSuccessfulReconcile(ReconcilesAfterCreate)
+
+				By("Expect console has timeout == MaxTimeoutSeconds")
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+				Expect(
+					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7200),
+					"console's timeout does not match template's MaxTimeoutSeconds",
+				)
+			})
 		})
 
-		It("Uses the template's DefaultTimeoutSeconds if the template's timeout is zero", func() {
-			By("Creating a console with a timeout of 0")
-			createConsole(0, "console-0")
+		Describe("Timeout = 0", func() {
+			BeforeEach(func() {
+				csl.Spec.TimeoutSeconds = 0
+			})
 
-			waitForSuccessfulReconcile(2, "console-0")
+			It("Uses the template's DefaultTimeoutSeconds", func() {
+				By("Creating a console with a timeout of 0")
 
-			By("Expect console has timeout == MaxTimeoutSeconds")
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-			Expect(
-				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 600),
-				"console's timeout does not match template's DefaultTimeoutSeconds",
-			)
+				waitForSuccessfulReconcile(ReconcilesAfterCreate)
+
+				By("Expect console has timeout == MaxTimeoutSeconds")
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+				Expect(
+					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 600),
+					"console's timeout does not match template's DefaultTimeoutSeconds",
+				)
+			})
 		})
 
-		It("Keeps the console's timeout if it is valid", func() {
-			By("Creating a console with a timeout > MaxTimeoutSeconds")
-			createConsole(7199, "console-0")
+		Describe("Timeout < MaxTimeoutSeconds", func() {
+			BeforeEach(func() {
+				csl.Spec.TimeoutSeconds = 7199
+			})
 
-			waitForSuccessfulReconcile(2, "console-0")
+			It("Keeps the console's timeout", func() {
+				waitForSuccessfulReconcile(ReconcilesAfterCreate)
 
-			By("Expect console has timeout == MaxTimeoutSeconds")
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-			Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-			Expect(
-				csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7199),
-				"console's timeout does not match template's MaxTimeoutSeconds",
-			)
+				By("Expect console has timeout == MaxTimeoutSeconds")
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
+				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
+				Expect(
+					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7199),
+					"console's timeout does not match template's MaxTimeoutSeconds",
+				)
+			})
 		})
 
 		// Negative timeouts are not permitted by the openapi validations, so we don't need to
@@ -173,16 +224,15 @@ var _ = Describe("Console", func() {
 	})
 
 	Describe("Creating resources", func() {
-		BeforeEach(func() {
-			createConsole(3600, "console-0")
-			waitForSuccessfulReconcile(2, "console-0")
+		JustBeforeEach(func() {
+			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 		})
 
 		It("Sets console.spec.user from rbac", func() {
 			By("Expect webhook was invoked")
 			Eventually(whcalls, timeout).Should(
 				Receive(
-					integration.HandleResource(namespace, "console-0"),
+					integration.HandleResource(namespace, consoleName),
 				),
 			)
 
@@ -256,7 +306,7 @@ var _ = Describe("Console", func() {
 			)
 		})
 
-		It("Update a job trigger a reconcile", func() {
+		It("Triggers a reconcile when updating a job", func() {
 			parallelism := int32(20)
 			defaultParallelism := int32(1)
 
@@ -274,8 +324,9 @@ var _ = Describe("Console", func() {
 			Expect(*job.Spec.Parallelism).To(Equal(parallelism))
 
 			By("Expect job has properties restored")
-			waitForSuccessfulReconcile(1, "console-0")
+			waitForSuccessfulReconcile(1)
 			err = mgr.GetClient().Get(context.TODO(), identifier, job)
+			Expect(err).NotTo(HaveOccurred(), "failed to retrieve Job")
 			Expect(
 				*job.Spec.Parallelism).To(Equal(defaultParallelism),
 				"job Spec Parallelism is restored to original value",
@@ -295,13 +346,13 @@ var _ = Describe("Console", func() {
 			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
 			Expect(err).NotTo(HaveOccurred(), "failed to update console")
 
-			waitForSuccessfulReconcile(1, "console-0")
+			waitForSuccessfulReconcile(1)
 			// TODO: check that the 'already exists' event was logged
 		})
 
 		It("Creates a role and directory role binding for the user", func() {
-			podName := "console-0-console-abcde"
-			jobName := "console-0-console"
+			podName := fmt.Sprintf("%s-console-abcde", consoleName)
+			jobName := fmt.Sprintf("%s-console", consoleName)
 
 			By("Create a fake pod (to simulate a real job controller)")
 			pod := &corev1.Pod{
@@ -331,7 +382,7 @@ var _ = Describe("Console", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update fake pod status")
 
 			By("Reconciling again")
-			waitForSuccessfulReconcile(1, "console-0")
+			waitForSuccessfulReconcile(1)
 
 			By("Expect role was created")
 			role := &rbacv1.Role{}
@@ -377,7 +428,7 @@ var _ = Describe("Console", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated DirectoryRoleBinding")
 			Expect(drb.Spec.RoleRef).To(
 				Equal(
-					rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "console-0"},
+					rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: consoleName},
 				),
 			)
 			Expect(drb.Spec.Subjects).To(
@@ -440,7 +491,7 @@ var _ = Describe("Console", func() {
 			err = mgr.GetClient().Status().Update(context.TODO(), job)
 			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
 
-			waitForSuccessfulReconcile(1, "console-0")
+			waitForSuccessfulReconcile(1)
 
 			By("Expect console status updated")
 			identifier, _ = client.ObjectKeyFromObject(csl)
@@ -468,13 +519,15 @@ var _ = Describe("Console", func() {
 	})
 
 	Describe("Enforcing job name", func() {
+		BeforeEach(func() {
+			consoleName = "very-very-very-very-long-long-long-long-name-very-very-very-very-long-long-long-long-name"
+			csl.ObjectMeta.Name = consoleName
+		})
+
 		It("Truncates long job names and adds a 'console' suffix", func() {
-			consoleName := "very-very-very-very-long-long-long-long-name-very-very-very-very-long-long-long-long-name"
 			expectJobName := "very-very-very-very-long-long-long-long-name-very-console"
 
-			createConsole(100, consoleName)
-
-			waitForSuccessfulReconcile(2, consoleName)
+			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -487,36 +540,3 @@ var _ = Describe("Console", func() {
 
 	})
 })
-
-func buildConsoleTemplate(namespace string) *workloadsv1alpha1.ConsoleTemplate {
-	return &workloadsv1alpha1.ConsoleTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "console-template-0",
-			Namespace: namespace,
-			Labels: map[string]string{
-				"repo":        "myapp-owner-myapp-repo",
-				"environment": "myapp-env",
-			},
-		},
-		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			DefaultTimeoutSeconds: 600,
-			MaxTimeoutSeconds:     7200,
-			AdditionalAttachSubjects: []rbacv1.Subject{
-				{Kind: "User", Name: "add-user@example.com"},
-				{Kind: "GoogleGroup", Name: "group@example.com"},
-			},
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						corev1.Container{
-							Image:   "alpine:latest",
-							Name:    "console-container-0",
-							Command: []string{"/bin/sh", "-c", "sleep 100"},
-						},
-					},
-					RestartPolicy: "OnFailure",
-				},
-			},
-		},
-	}
-}

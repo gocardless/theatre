@@ -29,7 +29,7 @@ const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
 
 func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
-	handler = &Injector{
+	handler = &injector{
 		logger:  kitlog.With(logger, "component", "EnvconsulInjector"),
 		decoder: mgr.GetAdmissionDecoder(),
 		client:  mgr.GetClient(),
@@ -62,7 +62,7 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		Build()
 }
 
-type Injector struct {
+type injector struct {
 	logger  kitlog.Logger
 	decoder types.Decoder
 	client  client.Client
@@ -111,7 +111,7 @@ var (
 	)
 )
 
-func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
+func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
 	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
 	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")
@@ -171,7 +171,7 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		return admission.ErrorResponse(http.StatusInternalServerError, err)
 	}
 
-	mutatedPod := PodInjector{InjectorOptions: i.opts, VaultConfig: vaultConfig}.Inject(*pod)
+	mutatedPod := podInjector{InjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")
 		return admission.PatchResponse(pod, pod)
@@ -180,34 +180,34 @@ func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 	return admission.PatchResponse(pod, mutatedPod)
 }
 
-// VaultConfig specifies the structure we expect to find in a cluster-global namespace,
+// vaultConfig specifies the structure we expect to find in a cluster-global namespace,
 // which we intend to be provisioned as part of whatever process generates the auth
 // backend in Vault.
 //
 // If we can't parse the configmap into this structure, we should fail our webhook.
-type VaultConfig struct {
+type vaultConfig struct {
 	Address               string `mapstructure:"address"`
 	AuthMountPath         string `mapstructure:"auth_mount_path"`
 	AuthRole              string `mapstructure:"auth_role"`
 	SecretMountPathPrefix string `mapstructure:"secret_mount_path_prefix"`
 }
 
-func newVaultConfig(cfgmap *corev1.ConfigMap) (VaultConfig, error) {
-	var cfg VaultConfig
+func newVaultConfig(cfgmap *corev1.ConfigMap) (vaultConfig, error) {
+	var cfg vaultConfig
 	return cfg, mapstructure.Decode(cfgmap.Data, &cfg)
 }
 
-// PodInjector isolates the logic around injecting theatre-envconsul away from anything to
+// podInjector isolates the logic around injecting theatre-envconsul away from anything to
 // do with mutating webhooks. This makes it easy to unit test without getting tangled in
 // webhook noise.
-type PodInjector struct {
+type podInjector struct {
 	InjectorOptions
-	VaultConfig
+	vaultConfig
 }
 
 // Inject configures the given pod to use theatre-envconsul. If it returns nil, it's
 // because the pod isn't configured for injection.
-func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
+func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 	containerConfigs := parseContainerConfigs(pod)
 	if containerConfigs == nil {
 		return nil
@@ -261,7 +261,7 @@ func (i PodInjector) Inject(pod corev1.Pod) *corev1.Pod {
 		mutatedPod.Spec.SecurityContext.FSGroup = &defaultFSGroup
 	}
 
-	secretMountPathPrefix := path.Join(i.VaultConfig.SecretMountPathPrefix, pod.Namespace, pod.Spec.ServiceAccountName)
+	secretMountPathPrefix := path.Join(i.vaultConfig.SecretMountPathPrefix, pod.Namespace, pod.Spec.ServiceAccountName)
 
 	for idx, container := range mutatedPod.Spec.Containers {
 		containerConfigPath, ok := containerConfigs[container.Name]
@@ -306,7 +306,7 @@ func parseContainerConfigs(pod corev1.Pod) map[string]string {
 	return containerConfigs
 }
 
-func (i PodInjector) buildInitContainer() corev1.Container {
+func (i podInjector) buildInitContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "theatre-envconsul-injector",
 		Image:           i.Image,
@@ -334,7 +334,7 @@ func (i PodInjector) buildInitContainer() corev1.Container {
 
 // configureContainer returns a copy with the command modified to run theatre-envconsul,
 // along with a volume mount that will contain the envconsul binaries.
-func (i PodInjector) configureContainer(reference corev1.Container, containerConfigPath, secretMountPathPrefix string) corev1.Container {
+func (i podInjector) configureContainer(reference corev1.Container, containerConfigPath, secretMountPathPrefix string) corev1.Container {
 	c := &reference
 
 	args := []string{"exec"}

@@ -27,7 +27,7 @@ const (
 
 func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
-	handler = &Injector{
+	handler = &injector{
 		logger:  kitlog.With(logger, "component", "PriorityInjector"),
 		decoder: mgr.GetAdmissionDecoder(),
 		client:  mgr.GetClient(),
@@ -59,7 +59,7 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		Build()
 }
 
-type Injector struct {
+type injector struct {
 	logger  kitlog.Logger
 	decoder types.Decoder
 	client  client.Client
@@ -100,7 +100,7 @@ var (
 	)
 )
 
-func (i *Injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
+func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
 	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
 	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")

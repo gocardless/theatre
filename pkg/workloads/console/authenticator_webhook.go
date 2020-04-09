@@ -19,7 +19,7 @@ import (
 
 func NewAuthenticatorWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
-	handler = &ConsoleAuthenticator{
+	handler = &consoleAuthenticator{
 		logger:  kitlog.With(logger, "component", "ConsoleAuthenticator"),
 		decoder: mgr.GetAdmissionDecoder(),
 	}
@@ -38,12 +38,12 @@ func NewAuthenticatorWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...
 		Build()
 }
 
-type ConsoleAuthenticator struct {
+type consoleAuthenticator struct {
 	logger  kitlog.Logger
 	decoder types.Decoder
 }
 
-func (c *ConsoleAuthenticator) Handle(ctx context.Context, req types.Request) types.Response {
+func (c *consoleAuthenticator) Handle(ctx context.Context, req types.Request) types.Response {
 	logger := kitlog.With(c.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {

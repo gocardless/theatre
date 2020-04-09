@@ -109,7 +109,7 @@ func (u *consoleAuthorisationUpdate) Validate() error {
 	add := rbacutils.Diff(u.updatedAuth.Spec.Authorisations, u.existingAuth.Spec.Authorisations)
 	remove := rbacutils.Diff(u.existingAuth.Spec.Authorisations, u.updatedAuth.Spec.Authorisations)
 
-	if len(add) != 1 || len(remove) != 0 {
+	if len(add) > 1 || len(remove) != 0 {
 		err = multierror.Append(err, errors.New("the spec.authorisations field can only be appended to (with one subject) per update"))
 	}
 

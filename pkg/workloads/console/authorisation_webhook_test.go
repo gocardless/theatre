@@ -56,6 +56,18 @@ var _ = Describe("Authorisation webhook", func() {
 			})
 		})
 
+		// We don't want to prevent an update if there's changes to parts of the
+		// object that do not affect functionality, e.g. annotations and labels.
+		Context("Update to non-spec fields only", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_annotations.yaml"
+			})
+
+			It("Returns no errors", func() {
+				Expect(err).To(BeNil())
+			})
+		})
+
 		Context("Adding multiple authorisers", func() {
 			BeforeEach(func() {
 				updateFixture = "./testdata/console_authorisation_update_add_multiple.yaml"

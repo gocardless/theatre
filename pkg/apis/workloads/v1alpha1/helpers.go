@@ -40,3 +40,11 @@ func (c *Console) EligibleForGC() bool {
 func (c *Console) TTLDuration() time.Duration {
 	return time.Duration(*c.Spec.TTLSecondsAfterFinished) * time.Second
 }
+
+func (ct *ConsoleTemplate) HasAuthorisationRules() bool {
+	if len(ct.Spec.AuthorisationRules) > 0 || ct.Spec.DefaultAuthorisationRule != nil {
+		return true
+	}
+
+	return false
+}

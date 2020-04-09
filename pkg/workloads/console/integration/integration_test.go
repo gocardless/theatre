@@ -516,6 +516,54 @@ var _ = Describe("Console", func() {
 			Expect(csl.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(csl.ObjectMeta.OwnerReferences[0].Name).To(Equal(consoleTemplate.ObjectMeta.Name))
 		})
+
+		Describe("With an authorised console", func() {
+			BeforeEach(func() {
+				consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
+					AuthorisationsRequired: 1,
+					Subjects: []rbacv1.Subject{
+						{Kind: "User", Name: "authorising-user-1@example.com"},
+					},
+				}
+
+				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+					{
+						Name:         "no-review",
+						MatchCommand: "sleep 1",
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							AuthorisationsRequired: 0,
+							Subjects:               []rbacv1.Subject{},
+						},
+					},
+					{
+						Name:         "bad-command",
+						MatchCommand: "sleep 666",
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							AuthorisationsRequired: 1,
+							Subjects: []rbacv1.Subject{
+								{Kind: "User", Name: "authorising-user-2@example.com"},
+							},
+						},
+					},
+				}
+			})
+
+			It("Creates an authorisation object", func() {
+				By("Expect consoleauthorisation was created")
+				auth := &workloadsv1alpha1.ConsoleAuthorisation{}
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, auth)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to find consoleauthorisation")
+				Expect(auth.Spec.Authorisations).To(BeEmpty(),
+					"authorisations should not yet be populated",
+				)
+
+				By("Expect authorisation is owned by console")
+				Expect(auth.ObjectMeta.OwnerReferences).To(HaveLen(1))
+				Expect(auth.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+			})
+		})
 	})
 
 	Describe("Enforcing job name", func() {

@@ -17,7 +17,7 @@ import (
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 )
 
-func NewWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
+func NewAuthenticatorWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
 	handler = &ConsoleAuthenticator{
 		logger:  kitlog.With(logger, "component", "ConsoleAuthenticator"),

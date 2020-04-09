@@ -36,6 +36,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Console{},
 		&ConsoleList{},
+		&ConsoleAuthorisation{},
+		&ConsoleAuthorisationList{},
 		&ConsoleTemplate{},
 		&ConsoleTemplateList{},
 	)

@@ -62,7 +62,7 @@ var _ = Describe("Console", func() {
 		)
 
 		integration.NewServer(mgr, integration.MustWebhook(
-			console.NewWebhook(logger, mgr,
+			console.NewAuthenticatorWebhook(logger, mgr,
 				func(handler *admission.Handler) {
 					*handler, whcalls = integration.CaptureWebhook(mgr, *handler)
 				},

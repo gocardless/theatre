@@ -9,6 +9,11 @@ import (
 	consoleRunner "github.com/gocardless/theatre/pkg/workloads/console/runner"
 )
 
+// A Creater provides the ability to create new consoles
+type Creater interface {
+	Create(context.Context, kitlog.Logger, *runner.Runner) error
+}
+
 // CreateOptions encapsulates the arguments to create a console
 type CreateOptions struct {
 	Namespace string
@@ -18,8 +23,18 @@ type CreateOptions struct {
 	Command   []string
 }
 
+func NewCreater(namespace string, selector string, timeout time.Duration, reason string, command []string) Creater {
+	return &CreateOptions{
+		Namespace: namespace,
+		Selector:  selector,
+		Timeout:   timeout,
+		Reason:    reason,
+		Command:   command,
+	}
+}
+
 // Create attempts to create a console in the given in the given namespace after finding the a template using selectors.
-func Create(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, opts CreateOptions) error {
+func (opts CreateOptions) Create(ctx context.Context, logger kitlog.Logger, runner *runner.Runner) error {
 	var err error
 
 	// Create and attach to the console

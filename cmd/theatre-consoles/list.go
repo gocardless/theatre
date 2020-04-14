@@ -10,6 +10,11 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
 )
 
+// A Lister provides the ability to list consoles
+type Lister interface {
+	List(context.Context, kitlog.Logger, *runner.Runner) error
+}
+
 // ListOptions encapsulates the arguments used to list consoles
 type ListOptions struct {
 	Namespace string
@@ -17,8 +22,16 @@ type ListOptions struct {
 	Selector  string
 }
 
+func NewLister(namespace string, username string, selector string) Lister {
+	return &ListOptions{
+		Namespace: namespace,
+		Username:  username,
+		Selector:  selector,
+	}
+}
+
 // List provides the ability to list consoles, given a selector and/or username
-func List(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, opts ListOptions) error {
+func (opts ListOptions) List(ctx context.Context, logger kitlog.Logger, runner *runner.Runner) error {
 	consoles, err := runner.ListConsolesByLabelsAndUser(opts.Namespace, opts.Username, opts.Selector)
 	if err != nil {
 		return errors.Wrap(err, "failed to list consoles")

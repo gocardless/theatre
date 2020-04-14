@@ -5,6 +5,7 @@ import (
 	"os"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 	consoleRunner "github.com/gocardless/theatre/pkg/workloads/console/runner"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +16,11 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/util/term"
 )
 
+// An Attacher provides the ability to attach to existing consoles
+type Attacher interface {
+	Attach(context.Context, kitlog.Logger, *runner.Runner) error
+}
+
 // AttachOptions encapsulates the arguments to attach to a console
 type AttachOptions struct {
 	Namespace string
@@ -23,8 +29,17 @@ type AttachOptions struct {
 	Name      string
 }
 
+func NewAttacher(namespace string, client *kubernetes.Clientset, config *rest.Config, name string) Attacher {
+	return &AttachOptions{
+		Namespace: namespace,
+		Client:    client,
+		Config:    config,
+		Name:      name,
+	}
+}
+
 // Attach provides the ability to attach to a running console, given the console name
-func Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Runner, opts AttachOptions) error {
+func (opts AttachOptions) Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Runner) error {
 	csl, err := runner.FindConsoleByName(opts.Namespace, opts.Name)
 	if err != nil {
 		return err
@@ -37,15 +52,15 @@ func Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Run
 	logger.Log("pod", pod.Name, "msg", "console pod is ready")
 	logger.Log("pod", pod.Name, "msg", "If you don't see a prompt, press enter.")
 
-	if err := NewAttacher(opts.Client, opts.Config).Attach(pod); err != nil {
+	if err := NewPodAttacher(opts.Client, opts.Config).Attach(pod); err != nil {
 		return errors.Wrap(err, "failed to attach to console")
 	}
 
 	return nil
 }
 
-func NewAttacher(clientset *kubernetes.Clientset, restconfig *rest.Config) *Attacher {
-	return &Attacher{clientset, restconfig}
+func NewPodAttacher(clientset *kubernetes.Clientset, restconfig *rest.Config) *PodAttacher {
+	return &PodAttacher{clientset, restconfig}
 }
 
 // CreateInteractiveStreamOptions constructs streaming configuration that
@@ -79,14 +94,14 @@ func CreateInteractiveStreamOptions() (remotecommand.StreamOptions, func(term.Sa
 
 // Attacher knows how to attach to stdio of an existing container, relaying io
 // to the parent process file descriptors.
-type Attacher struct {
+type PodAttacher struct {
 	clientset  *kubernetes.Clientset
 	restconfig *rest.Config
 }
 
 // Attach will interactively attach to a containers output, creating a new TTY
 // and hooking this into the current processes file descriptors.
-func (a *Attacher) Attach(pod *corev1.Pod) error {
+func (a *PodAttacher) Attach(pod *corev1.Pod) error {
 	req := a.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Namespace(pod.GetNamespace()).

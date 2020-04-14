@@ -39,6 +39,7 @@ var (
 
 	create = cli.Command("create", "Creates a new console given a template")
 	attach = cli.Command("attach", "Attach to a running console")
+	list   = cli.Command("list", "List currently running consoles")
 )
 
 func main() {
@@ -95,6 +96,8 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 		return Create(ctx, logger, rctx.runner, namespace)
 	case attach.FullCommand():
 		return Attach(ctx, logger, rctx.runner, namespace, rctx.kubeClient, rctx.config)
+	case list.FullCommand():
+		return List(ctx, logger, rctx.runner, namespace)
 	}
 
 	return nil

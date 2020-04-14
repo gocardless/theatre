@@ -15,12 +15,17 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/util/term"
 )
 
-var (
-	consoleName = attach.Flag("name", "Console name").Required().String()
-)
+// AttachOptions encapsulates the arguments to attach to a console
+type AttachOptions struct {
+	Namespace string
+	Client    *kubernetes.Clientset
+	Config    *rest.Config
+	Name      string
+}
 
-func Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Runner, namespace string, client *kubernetes.Clientset, config *rest.Config) error {
-	csl, err := runner.FindConsoleByName(*cliNamespace, *consoleName)
+// Attach provides the ability to attach to a running console, given the console name
+func Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Runner, opts AttachOptions) error {
+	csl, err := runner.FindConsoleByName(opts.Namespace, opts.Name)
 	if err != nil {
 		return err
 	}
@@ -32,7 +37,7 @@ func Attach(ctx context.Context, logger kitlog.Logger, runner *consoleRunner.Run
 	logger.Log("pod", pod.Name, "msg", "console pod is ready")
 	logger.Log("pod", pod.Name, "msg", "If you don't see a prompt, press enter.")
 
-	if err := NewAttacher(client, config).Attach(pod); err != nil {
+	if err := NewAttacher(opts.Client, opts.Config).Attach(pod); err != nil {
 		return errors.Wrap(err, "failed to attach to console")
 	}
 

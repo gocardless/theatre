@@ -20,26 +20,42 @@ import (
 )
 
 var (
-	cli = kingpin.New("consoles", "Manages theatre consoles")
-
+	cli        = kingpin.New("consoles", "Manages theatre consoles")
 	cliContext = cli.Flag("context", "Kubernetes context to target. If not provided defaults to current context").
 			Short('c').
 			Envar("KUBERNETES_CONTEXT").
-			Default("").
 			String()
 	cliNamespace = cli.Flag("namespace", "Kubernetes namespace to target. If not provided defaults to target allnamespaces").
 			Short('n').
 			Envar("KUBERNETES_NAMESPACE").
-			Default("").
 			String()
-	cliSelector = create.Flag("selector", "Selector that matches console template").
+
+	create         = cli.Command("create", "Creates a new console given a template")
+	createSelector = create.Flag("selector", "Selector to match a console template").
 			Short('s').
 			Required().
 			String()
+	createTimeout = create.Flag("timeout", "Timeout for the new console").
+			Duration()
+	createReason = create.Flag("reason", "Reason for creating console").
+			String()
+	createCommand = create.Arg("command", "Command to run in console").
+			Strings()
 
-	create = cli.Command("create", "Creates a new console given a template")
-	attach = cli.Command("attach", "Attach to a running console")
-	list   = cli.Command("list", "List currently running consoles")
+	attach     = cli.Command("attach", "Attach to a running console")
+	attachName = attach.Flag("name", "Console name").
+			Required().
+			String()
+
+	list         = cli.Command("list", "List currently running consoles")
+	listUsername = list.Flag("user", "Kubernetes username. Not usually supplied, can be inferred from your gcloud login").
+			Short('u').
+			Default("").
+			String()
+	listSelector = list.Flag("selector", "Selector to match the console").
+			Short('s').
+			Default("").
+			String()
 )
 
 func main() {
@@ -93,11 +109,31 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	// Match on the kingpin command and enter the main command
 	switch cmd {
 	case create.FullCommand():
-		return Create(ctx, logger, rctx.runner, namespace)
+		return Create(ctx, logger, rctx.runner,
+			CreateOptions{
+				Namespace: namespace,
+				Selector:  *createSelector,
+			},
+		)
 	case attach.FullCommand():
-		return Attach(ctx, logger, rctx.runner, namespace, rctx.kubeClient, rctx.config)
+		return Attach(
+			ctx, logger, rctx.runner,
+			AttachOptions{
+				Namespace: namespace,
+				Client:    rctx.kubeClient,
+				Config:    rctx.config,
+				Name:      *attachName,
+			},
+		)
 	case list.FullCommand():
-		return List(ctx, logger, rctx.runner, namespace)
+		return List(
+			ctx, logger, rctx.runner,
+			ListOptions{
+				Namespace: namespace,
+				Username:  *listUsername,
+				Selector:  *listSelector,
+			},
+		)
 	}
 
 	return nil

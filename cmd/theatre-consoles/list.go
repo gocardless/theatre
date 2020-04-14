@@ -10,25 +10,16 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
 )
 
-var (
-	listUsername = list.Flag("user", "Kubernetes username. Not usually supplied, can be inferred from your gcloud login").
-		Short('u').
-		Default("").
-		String()
-)
+// ListOptions encapsulates the arguments used to list consoles
+type ListOptions struct {
+	Namespace string
+	Username  string
+	Selector  string
+}
 
-func List(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, namespace string) error {
-	username := ""
-	if listUsername != nil {
-		username = *listUsername
-	}
-
-	selector := ""
-	if cliSelector != nil {
-		selector = *cliSelector
-	}
-
-	consoles, err := runner.ListConsolesByLabelsAndUser(namespace, username, selector)
+// List provides the ability to list consoles, given a selector and/or username
+func List(ctx context.Context, logger kitlog.Logger, runner *runner.Runner, opts ListOptions) error {
+	consoles, err := runner.ListConsolesByLabelsAndUser(opts.Namespace, opts.Username, opts.Selector)
 	if err != nil {
 		return errors.Wrap(err, "failed to list consoles")
 	}

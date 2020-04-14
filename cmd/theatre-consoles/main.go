@@ -20,20 +20,27 @@ import (
 )
 
 var (
-	cli = kingpin.New("consoles", "Manages theatre consoles")
-
+	cli        = kingpin.New("consoles", "Manages theatre consoles")
 	cliContext = cli.Flag("context", "Kubernetes context to target. If not provided defaults to current context").
 			Short('c').
 			Envar("KUBERNETES_CONTEXT").
-			Default("").
 			String()
 	cliNamespace = cli.Flag("namespace", "Kubernetes namespace to target. If not provided defaults to target allnamespaces").
 			Short('n').
 			Envar("KUBERNETES_NAMESPACE").
-			Default("").
 			String()
 
-	create = cli.Command("create", "Creates a new console given a template")
+	create         = cli.Command("create", "Creates a new console given a template")
+	createSelector = create.Flag("selector", "Selector to match a console template").
+			Short('s').
+			Required().
+			String()
+	createTimeout = create.Flag("timeout", "Timeout for the new console").
+			Duration()
+	createReason = create.Flag("reason", "Reason for creating console").
+			String()
+	createCommand = create.Arg("command", "Command to run in console").
+			Strings()
 )
 
 func main() {
@@ -75,11 +82,7 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	// This is done here to bind the flags without creating multiple global variables.
 	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
 
-	// Get context and namespace from flags
-	kctx := *cliContext
-	namespace := *cliNamespace
-
-	runner, err := newRunner(kctx)
+	runner, err := newRunner(*cliContext)
 	if err != nil {
 		return err
 	}
@@ -87,7 +90,13 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	// Match on the kingpin command and enter the main command
 	switch cmd {
 	case create.FullCommand():
-		return Create(ctx, logger, runner, namespace)
+		return Create(
+			ctx, logger, runner,
+			CreateOptions{
+				Namespace: *cliNamespace,
+				Selector:  *createSelector,
+			},
+		)
 	}
 
 	return nil

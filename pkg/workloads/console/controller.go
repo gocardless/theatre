@@ -22,8 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -55,12 +57,21 @@ const (
 
 	Job                  = "job"
 	Console              = "console"
+	ConsoleAuthorisation = "consoleauthorisation"
 	ConsoleTemplate      = "consoletemplate"
 	Role                 = "role"
 	DirectoryRoleBinding = "directoryrolebinding"
 
 	DefaultTTL = 24 * time.Hour
 )
+
+type IgnoreCreatePredicate struct {
+	predicate.Funcs
+}
+
+func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
+	return false
+}
 
 func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
 	logger = kitlog.With(logger, "component", "Console")
@@ -92,6 +103,23 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 
 	err = ctrl.Watch(
 		&source.Kind{Type: &workloadsv1alpha1.Console{}}, &handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return ctrl, err
+	}
+
+	// Watch for updates to console authorisations: if this is a console that
+	// requires additional authorisation then this will be the trigger for
+	// whether to actually create the console Job.
+	err = ctrl.Watch(
+		&source.Kind{Type: &workloadsv1alpha1.ConsoleAuthorisation{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &workloadsv1alpha1.Console{},
+		},
+		// Don't unnecessarily reconcile when the controller initially creates the
+		// authorisation object.
+		IgnoreCreatePredicate{},
 	)
 	if err != nil {
 		return ctrl, err
@@ -139,6 +167,19 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// Clamp the console timeout
 	if err := r.clampTimeout(tpl); err != nil {
 		return res, err
+	}
+
+	// Create an authorisation object, if required.
+	//
+	// We will always stamp one of these out if the template has authorisation
+	// rules, regardless of whether the console itself has been started with a
+	// command that requires authorisation, as this makes reconciliation easier
+	// to reason about.
+	if tpl.HasAuthorisationRules() {
+		authorisation := r.buildAuthorisation(tpl)
+		if err := r.createOrUpdate(authorisation, ConsoleAuthorisation, authorisationDiff); err != nil {
+			return res, err
+		}
 	}
 
 	// Create or update the job
@@ -547,6 +588,50 @@ func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl
 			},
 		},
 	}
+}
+
+func (r *reconciler) buildAuthorisation(template *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.ConsoleAuthorisation {
+	csl := r.console
+
+	return &workloadsv1alpha1.ConsoleAuthorisation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.name.Name,
+			Namespace: r.name.Namespace,
+			Labels:    csl.Labels,
+		},
+		Spec: workloadsv1alpha1.ConsoleAuthorisationSpec{
+			ConsoleRef:     corev1.LocalObjectReference{Name: r.name.Name},
+			Owner:          csl.Spec.User,
+			Authorisations: []rbacv1.Subject{},
+		},
+	}
+}
+
+// authorisationDiff is a reconcile.DiffFunc for ConsoleAuthorisations
+func authorisationDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Outcome {
+	expected := expectedObj.(*workloadsv1alpha1.ConsoleAuthorisation)
+	existing := existingObj.(*workloadsv1alpha1.ConsoleAuthorisation)
+	operation := recutil.None
+
+	// compare labels
+	if !reflect.DeepEqual(expected.ObjectMeta.Labels, existing.ObjectMeta.Labels) {
+		existing.ObjectMeta.Labels = expected.ObjectMeta.Labels
+		operation = recutil.Update
+	}
+
+	// compare all spec fields other than `authorisations`, which will be mutated
+	// by the authorising user.
+
+	if !reflect.DeepEqual(expected.Spec.ConsoleRef, existing.Spec.ConsoleRef) {
+		existing.Spec.ConsoleRef = expected.Spec.ConsoleRef
+		operation = recutil.Update
+	}
+	if !reflect.DeepEqual(expected.Spec.Owner, existing.Spec.Owner) {
+		existing.Spec.Owner = expected.Spec.Owner
+		operation = recutil.Update
+	}
+
+	return operation
 }
 
 // jobDiff is a reconcile.DiffFunc for Jobs

@@ -23,7 +23,7 @@ func mustPodFixture(path string) *corev1.Pod {
 
 var _ = Describe("PodInjector", func() {
 	var (
-		injector *PodInjector
+		injector *podInjector
 		fixture  *corev1.Pod
 		pod      *corev1.Pod
 	)
@@ -33,8 +33,8 @@ var _ = Describe("PodInjector", func() {
 	})
 
 	BeforeEach(func() {
-		injector = &PodInjector{
-			VaultConfig: VaultConfig{
+		injector = &podInjector{
+			vaultConfig: vaultConfig{
 				Address:               "https://vault.example.com",
 				AuthMountPath:         "kubernetes.gc-prd-effc.cluster",
 				AuthRole:              "default",

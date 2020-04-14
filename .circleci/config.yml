@@ -38,7 +38,7 @@ jobs:
               | tar -xvz --strip=1 -C /usr/local/kubebuilder
       - run:
           name: Run tests
-          command: ginkgo -race -r -v
+          command: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v
 
   build:
     <<: *docker_golang

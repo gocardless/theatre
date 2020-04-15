@@ -573,7 +573,7 @@ var _ = Describe("Console", func() {
 		})
 
 		It("Truncates long job names and adds a 'console' suffix", func() {
-			expectJobName := "very-very-very-very-long-long-long-long-name-very-console"
+			expectJobName := "very-very-very-very-long-long-long-long-name-very-very--console"
 
 			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 

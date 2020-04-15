@@ -501,10 +501,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	backoffLimit := int32(0)
 	jobTemplate.Spec.RestartPolicy = corev1.RestartPolicyNever
 
-	// Ensure that the job name (after suffixing with `-console`) does not exceed 57
-	// characters, to allow an additional 6 characters to appended when the job
-	// creates a pod without truncation of the `-console` suffix.
-	jobName := fmt.Sprintf("%s-%s", truncateString(r.name.Name, 49), "console")
+	jobName := getJobName(r.name.Name)
 
 	// Merged labels from the console template and console. In case of
 	// conflicts second label set wins.
@@ -514,7 +511,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	jobLabels := labels.Merge(csl.Labels, template.Labels)
 	jobLabels = labels.Merge(jobLabels,
 		map[string]string{
-			"console-name": truncateString(csl.Name, 63),
+			"console-name": sanitiseLabel(csl.Name),
 			"user":         sanitiseLabel(username),
 		})
 
@@ -690,13 +687,20 @@ func auditLog(logger kitlog.Logger, c *workloadsv1alpha1.Console, duration *floa
 	loggerCtx.Log("msg", msg)
 }
 
-// Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?
+// Ensure that the job name (after suffixing with `-console`) does not exceed 63
+// characters. This is the string length limit on labels and the job name is added
+// as a label to the pods it creates.
+func getJobName(consoleName string) string {
+	return fmt.Sprintf("%s-%s", truncateString(consoleName, 55), "console")
+}
+
+// Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])? and not
+// exceed 63 characters in length.
 // We don't bother with the first and last character sanitisation here - just anything
 // dodgy in the middle.
 // This is mostly so that, in tests, we correctly handle the system:unsecured user.
-
 func sanitiseLabel(l string) string {
-	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
+	return truncateString(regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-"), 63)
 }
 
 func truncateString(str string, length int) string {

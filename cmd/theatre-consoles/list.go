@@ -7,6 +7,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 	"github.com/pkg/errors"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
 )
 
@@ -37,7 +38,18 @@ func (opts ListOptions) List(ctx context.Context, logger kitlog.Logger, runner *
 		return errors.Wrap(err, "failed to list consoles")
 	}
 
-	printer, err := get.NewGetPrintFlags().ToPrinter()
+	if len(consoles) == 0 {
+		logger.Log("namespace", opts.Namespace, "msg", "No consoles found.")
+		return nil
+	}
+
+	decoder := scheme.Codecs.UniversalDecoder(scheme.Scheme.PrioritizedVersionsAllGroups()...)
+
+	printer, err := get.NewCustomColumnsPrinterFromSpec(
+		"NAME:.metadata.name,NAMESPACE:.metadata.namespace,PHASE:.status.phase,CREATED:.metadata.creationTimestamp,USER:.spec.user,REASON:.spec.reason",
+		decoder,
+		false, // false => print headers
+	)
 	if err != nil {
 		return err
 	}

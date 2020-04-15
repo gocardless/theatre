@@ -25,6 +25,7 @@ const (
 	EventRequestStart = "ReconcileRequestStart"
 	EventNotFound     = "ReconcileNotFound"
 	EventStart        = "ReconcileStart"
+	EventSkipped      = "ReconcileSkipped"
 	EventRequeued     = "ReconcileRequeued"
 	EventError        = "ReconcileError"
 	EventComplete     = "ReconcileComplete"
@@ -58,7 +59,11 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 		logger.Log("event", EventRequestStart, "msg", "Reconcile request start")
 
 		// Prepare a new object for this request
-		obj := objType.DeepCopyObject()
+		rawObj := objType.DeepCopyObject()
+		obj, ok := rawObj.(ObjWithMeta)
+		if !ok {
+			return res, errors.New("reconciled object does not have metadata")
+		}
 
 		defer func() {
 			if err != nil {
@@ -92,6 +97,19 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 
 		logger = logging.WithRecorder(logger, mgr.GetRecorder("theatre"), obj)
 		logger.Log("event", EventStart, "msg", "Starting reconciliation")
+
+		// If the object is being deleted then don't attempt any further
+		// reconciliation, as this can lead to recreating child resources (which
+		// we'd expect to be eventually deleted via propagation) and getting stuck
+		// in an infinite loop, due to these resources now blocking the deletion of
+		// the parent.
+		// If we need to support finalizers in the future then this will need to be
+		// extended to call a function that performs the finalizer actions.
+		if !obj.GetDeletionTimestamp().IsZero() {
+			logger.Log("event", EventSkipped, "msg", "Skipping reconciliation due to deletion")
+			res = reconcile.Result{Requeue: false}
+			return res, nil
+		}
 
 		return inner(logger, request, obj)
 	})

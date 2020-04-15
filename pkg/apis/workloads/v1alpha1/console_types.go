@@ -72,6 +72,8 @@ const (
 	ConsoleRunning ConsolePhase = "Running"
 	// ConsoleStopped means the console has completed or timed out
 	ConsoleStopped ConsolePhase = "Stopped"
+	// ConsoleDestroyed means the consoles job has been deleted
+	ConsoleDestroyed ConsolePhase = "Destroyed"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

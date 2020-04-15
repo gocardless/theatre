@@ -175,6 +175,55 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			}).Should(HaveOccurred(), "expected not to find console, but did")
 		})
 
+		Specify("Deleting a job", func() {
+			By("Create a console template")
+			template := buildConsoleTemplate(nil, false)
+			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			Expect(err).NotTo(HaveOccurred(), "could not create console template")
+
+			defer func() {
+				By("(cleanup) Delete the console template")
+				policy := metav1.DeletePropagationForeground
+				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
+					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
+
+				Eventually(func() error {
+					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+					return err
+				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
+			}()
+
+			By("Create a console")
+			console := buildConsole()
+			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			Expect(err).NotTo(HaveOccurred(), "could not create console")
+
+			By("Expect a job has been created")
+			Eventually(func() error {
+				_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
+				return err
+			}).ShouldNot(HaveOccurred(), "could not find job")
+
+			By("Delete the job")
+			policy := metav1.DeletePropagationForeground
+			err = client.BatchV1().Jobs(namespace).Delete(jobName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+			Expect(err).NotTo(HaveOccurred(), "could not delete console job")
+
+			By("Expect that the job no longer exists")
+			Eventually(func() error {
+				_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).Should(HaveOccurred(), "expected not to find job, but did")
+
+			By("Expect the console phase is Destroyed")
+			Eventually(func() workloadsv1alpha1.ConsolePhase {
+				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred(), "could not find console")
+				return console.Status.Phase
+			}).Should(Equal(workloadsv1alpha1.ConsoleDestroyed))
+		})
+
 		Specify("Authorised console", func() {
 			By("Create a console template")
 			var ttl int32 = 30

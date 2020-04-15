@@ -17,7 +17,7 @@ bin/%.linux_amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
 bin/%.darwin_amd64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
 bin/%:
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.

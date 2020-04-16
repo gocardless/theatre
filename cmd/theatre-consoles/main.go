@@ -58,6 +58,48 @@ func main() {
 	}
 }
 
+// Run is the entrypoint for the cli application, after housekeeping tasks has been finished,
+// e.g. setting up logging.
+func Run(ctx context.Context, logger kitlog.Logger) error {
+	// Parse application args using kingpin
+	// This is done here to bind the flags without creating multiple global variables.
+	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
+
+	config, err := newKubeConfig(*cliContext)
+	if err != nil {
+		return err
+	}
+
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	theatreClient, err := theatre.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	consoleRunner := runner.New(client, theatreClient)
+
+	// Match on the kingpin command and enter the main command
+	switch cmd {
+	case create.FullCommand():
+		return Create(
+			ctx, logger, consoleRunner,
+			CreateOptions{
+				Namespace: *cliNamespace,
+				Selector:  *createSelector,
+				Timeout:   *createTimeout,
+				Reason:    *createReason,
+				Command:   *createCommand,
+			},
+		)
+	}
+
+	return nil
+}
+
 // newKubeConfig first tries using internal kubernetes configuration, and then falls back
 // to ~/.kube/config
 func newKubeConfig(kctx string) (*rest.Config, error) {
@@ -73,53 +115,4 @@ func newKubeConfig(kctx string) (*rest.Config, error) {
 	).ClientConfig()
 
 	return config, err
-}
-
-// Run is the entrypoint for the cli application, after housekeeping tasks has been finished,
-// e.g. setting up logging.
-func Run(ctx context.Context, logger kitlog.Logger) error {
-	// Parse application args using kingpin
-	// This is done here to bind the flags without creating multiple global variables.
-	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
-
-	runner, err := newRunner(*cliContext)
-	if err != nil {
-		return err
-	}
-
-	// Match on the kingpin command and enter the main command
-	switch cmd {
-	case create.FullCommand():
-		return Create(
-			ctx, logger, runner,
-			CreateOptions{
-				Namespace: *cliNamespace,
-				Selector:  *createSelector,
-				Timeout:   *createTimeout,
-				Reason:    *createReason,
-				Command:   *createCommand,
-			},
-		)
-	}
-
-	return nil
-}
-
-func newRunner(kctx string) (*runner.Runner, error) {
-	config, err := newKubeConfig(kctx)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	theatreClient, err := theatre.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return runner.New(client, theatreClient), nil
 }

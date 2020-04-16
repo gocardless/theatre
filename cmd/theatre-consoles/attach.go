@@ -48,35 +48,6 @@ func NewAttacher(clientset *kubernetes.Clientset, restconfig *rest.Config) *Atta
 	return &Attacher{clientset, restconfig}
 }
 
-// CreateInteractiveStreamOptions constructs streaming configuration that
-// attaches the default OS stdout, stderr, stdin, with a tty, and an additional
-// function which should be used to wrap any interactive process that will make
-// use of the tty.
-func CreateInteractiveStreamOptions() (remotecommand.StreamOptions, func(term.SafeFunc) error) {
-	// TODO: We may want to setup a parent interrupt handler, so that if/when the
-	// pod is terminated while a user is attached, they aren't left with their
-	// terminal in a strange state, if they're running something curses-based in
-	// the console.
-	// Parent: ...
-	tty := term.TTY{
-		In:     os.Stdin,
-		Out:    os.Stderr,
-		Raw:    true,
-		TryDev: false,
-	}
-
-	// This call spawns a goroutine to monitor/update the terminal size
-	sizeQueue := tty.MonitorSize(tty.GetSize())
-
-	return remotecommand.StreamOptions{
-		Stderr:            os.Stderr,
-		Stdout:            os.Stdout,
-		Stdin:             os.Stdin,
-		Tty:               true,
-		TerminalSizeQueue: sizeQueue,
-	}, tty.Safe
-}
-
 // Attacher knows how to attach to stdio of an existing container, relaying io
 // to the parent process file descriptors.
 type Attacher struct {
@@ -111,4 +82,33 @@ func (a *Attacher) Attach(pod *corev1.Pod) error {
 	streamOptions, safe := CreateInteractiveStreamOptions()
 
 	return safe(func() error { return remoteExecutor.Stream(streamOptions) })
+}
+
+// CreateInteractiveStreamOptions constructs streaming configuration that
+// attaches the default OS stdout, stderr, stdin, with a tty, and an additional
+// function which should be used to wrap any interactive process that will make
+// use of the tty.
+func CreateInteractiveStreamOptions() (remotecommand.StreamOptions, func(term.SafeFunc) error) {
+	// TODO: We may want to setup a parent interrupt handler, so that if/when the
+	// pod is terminated while a user is attached, they aren't left with their
+	// terminal in a strange state, if they're running something curses-based in
+	// the console.
+	// Parent: ...
+	tty := term.TTY{
+		In:     os.Stdin,
+		Out:    os.Stderr,
+		Raw:    true,
+		TryDev: false,
+	}
+
+	// This call spawns a goroutine to monitor/update the terminal size
+	sizeQueue := tty.MonitorSize(tty.GetSize())
+
+	return remotecommand.StreamOptions{
+		Stderr:            os.Stderr,
+		Stdout:            os.Stdout,
+		Stdin:             os.Stdin,
+		Tty:               true,
+		TerminalSizeQueue: sizeQueue,
+	}, tty.Safe
 }

@@ -41,6 +41,11 @@ var (
 			String()
 	createCommand = create.Arg("command", "Command to run in console").
 			Strings()
+
+	attach     = cli.Command("attach", "Attach to a running console")
+	attachName = attach.Flag("name", "Console name").
+			Required().
+			String()
 )
 
 func main() {
@@ -93,6 +98,16 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 				Timeout:   *createTimeout,
 				Reason:    *createReason,
 				Command:   *createCommand,
+			},
+		)
+	case attach.FullCommand():
+		return Attach(
+			ctx, logger, consoleRunner,
+			AttachOptions{
+				Namespace: *cliNamespace,
+				Client:    client,
+				Config:    config,
+				Name:      *attachName,
 			},
 		)
 	}

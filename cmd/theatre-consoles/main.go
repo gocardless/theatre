@@ -95,6 +95,9 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 			CreateOptions{
 				Namespace: *cliNamespace,
 				Selector:  *createSelector,
+				Timeout:   *createTimeout,
+				Reason:    *createReason,
+				Command:   *createCommand,
 			},
 		)
 	}

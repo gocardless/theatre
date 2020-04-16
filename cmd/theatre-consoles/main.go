@@ -46,6 +46,16 @@ var (
 	attachName = attach.Flag("name", "Console name").
 			Required().
 			String()
+
+	list         = cli.Command("list", "List currently running consoles")
+	listUsername = list.Flag("user", "Kubernetes username. Not usually supplied, can be inferred from your gcloud login").
+			Short('u').
+			Default("").
+			String()
+	listSelector = list.Flag("selector", "Selector to match the console").
+			Short('s').
+			Default("").
+			String()
 )
 
 func main() {
@@ -108,6 +118,15 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 				Client:    client,
 				Config:    config,
 				Name:      *attachName,
+			},
+		)
+	case list.FullCommand():
+		return List(
+			ctx, logger, consoleRunner,
+			ListOptions{
+				Namespace: *cliNamespace,
+				Username:  *listUsername,
+				Selector:  *listSelector,
 			},
 		)
 	}

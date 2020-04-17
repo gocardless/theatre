@@ -39,6 +39,8 @@ var (
 			Duration()
 	createReason = create.Flag("reason", "Reason for creating console").
 			String()
+	createAttach = create.Flag("attach", "Attach to the console if it starts successfully").
+			Bool()
 	createCommand = create.Arg("command", "Command to run in console").
 			Strings()
 
@@ -103,11 +105,14 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 		return Create(
 			ctx, logger, consoleRunner,
 			CreateOptions{
-				Namespace: *cliNamespace,
-				Selector:  *createSelector,
-				Timeout:   *createTimeout,
-				Reason:    *createReason,
-				Command:   *createCommand,
+				Namespace:  *cliNamespace,
+				Selector:   *createSelector,
+				Timeout:    *createTimeout,
+				Reason:     *createReason,
+				Command:    *createCommand,
+				Attach:     *createAttach,
+				Clientset:  client,
+				KubeConfig: config,
 			},
 		)
 	case attach.FullCommand():

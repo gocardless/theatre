@@ -546,6 +546,8 @@ var _ = Describe("Console", func() {
 						},
 					},
 				}
+
+				csl.Spec.Command = []string{"sleep", "666"}
 			})
 
 			It("Creates an authorisation object", func() {
@@ -562,6 +564,51 @@ var _ = Describe("Console", func() {
 				By("Expect authorisation is owned by console")
 				Expect(auth.ObjectMeta.OwnerReferences).To(HaveLen(1))
 				Expect(auth.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+
+				By("Expect role was created")
+				role := &rbacv1.Role{}
+				identifier, _ = client.ObjectKeyFromObject(csl)
+				identifier.Name = fmt.Sprintf("%s-authorisation", identifier.Name)
+				err = mgr.GetClient().Get(context.TODO(), identifier, role)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to find role")
+				Expect(role.Rules).To(
+					Equal(
+						[]rbacv1.PolicyRule{
+							{
+								Verbs:         []string{"update", "get"},
+								APIGroups:     []string{"workloads.crd.gocardless.com"},
+								Resources:     []string{"consoleauthorisations"},
+								ResourceNames: []string{csl.Name},
+							},
+						},
+					),
+					"role rule did not match expectation",
+				)
+
+				By("Expect role is owned by console")
+				Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
+				Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+
+				By("Expect directory role binding was created for authorising user")
+				drb := &rbacv1alpha1.DirectoryRoleBinding{}
+				err = mgr.GetClient().Get(context.TODO(), identifier, drb)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to find associated DirectoryRoleBinding")
+				Expect(drb.Spec.RoleRef).To(
+					Equal(
+						rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: identifier.Name},
+					),
+				)
+				Expect(drb.Spec.Subjects).To(
+					ConsistOf([]rbacv1.Subject{
+						rbacv1.Subject{Kind: "User", Name: "authorising-user-2@example.com"},
+					}),
+				)
+
+				By("Expect directory rolebinding is owned by console")
+				Expect(drb.ObjectMeta.OwnerReferences).To(HaveLen(1))
+				Expect(drb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 			})
 		})
 	})

@@ -168,6 +168,11 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
 			Expect(err).NotTo(HaveOccurred(), "could not delete console template")
 
+			Eventually(func() error {
+				_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+				return err
+			}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
+
 			By("Expect that the console no longer exists")
 			Eventually(func() error {
 				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})

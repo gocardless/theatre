@@ -176,8 +176,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// command that requires authorisation, as this makes reconciliation easier
 	// to reason about.
 	if tpl.HasAuthorisationRules() {
-		authorisation := r.buildAuthorisation(tpl)
-		if err := r.createOrUpdate(authorisation, ConsoleAuthorisation, authorisationDiff); err != nil {
+		if err := r.createAuthorisationObjects(tpl); err != nil {
 			return res, err
 		}
 	}
@@ -208,7 +207,12 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		}
 
 		// Create or update the directory role binding
-		drb := buildDirectoryRoleBinding(r.name, role, r.console, tpl)
+		subjects := append(
+			tpl.Spec.AdditionalAttachSubjects,
+			rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
+		)
+
+		drb := buildDirectoryRoleBinding(r.name, role, subjects)
 		if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 			return res, err
 		}
@@ -385,7 +389,7 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	if newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		r.console.Status.Phase == workloadsv1alpha1.ConsoleRunning {
 		duration := r.console.Status.ExpiryTime.Sub(job.Status.StartTime.Time).Seconds()
-		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reach expiration time")
+		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reaching expiration time")
 	}
 
 	updatedCsl := r.console.DeepCopy()
@@ -568,12 +572,7 @@ func buildRole(name types.NamespacedName, podName string) *rbacv1.Role {
 	}
 }
 
-func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl *workloadsv1alpha1.Console, tpl *workloadsv1alpha1.ConsoleTemplate) *rbacv1alpha1.DirectoryRoleBinding {
-	subjects := append(
-		tpl.Spec.AdditionalAttachSubjects,
-		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
-	)
-
+func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1alpha1.DirectoryRoleBinding {
 	return &rbacv1alpha1.DirectoryRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -590,10 +589,32 @@ func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, csl
 	}
 }
 
-func (r *reconciler) buildAuthorisation(template *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.ConsoleAuthorisation {
+func (r *reconciler) createAuthorisationObjects(template *workloadsv1alpha1.ConsoleTemplate) error {
 	csl := r.console
 
-	return &workloadsv1alpha1.ConsoleAuthorisation{
+	var command []string
+
+	if len(csl.Spec.Command) > 0 {
+		command = csl.Spec.Command
+	} else {
+		templateCommand, err := template.GetDefaultCommandWithArgs()
+		if err != nil {
+			return errors.Wrap(err, "neither the console or template have a command to evaluate")
+		}
+
+		command = templateCommand
+	}
+
+	// Firstly evaluate the console command against the authorisation rules in
+	// the template. This *could* perpetually fail, if the console template is
+	// setup incorrectly, therefore by doing this before any other creations we
+	// won't add any objects to the cluster unless we know they can be used.
+	rule, err := template.GetAuthorisationRuleForCommand(command)
+	if err != nil {
+		return errors.Wrap(err, "failed to determine authorisation rule for console command")
+	}
+
+	authorisation := &workloadsv1alpha1.ConsoleAuthorisation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.name.Name,
 			Namespace: r.name.Namespace,
@@ -605,6 +626,47 @@ func (r *reconciler) buildAuthorisation(template *workloadsv1alpha1.ConsoleTempl
 			Authorisations: []rbacv1.Subject{},
 		},
 	}
+
+	// Create the consoleauthorisation
+	if err := r.createOrUpdate(authorisation, ConsoleAuthorisation, authorisationDiff); err != nil {
+		return errors.Wrap(err, "failed to create consoleauthorisation")
+	}
+
+	// We already create roles and directory rolebindings with the same name as
+	// the console to provide permissions on the job/pod. Therefore for the name
+	// of these objects, suffix the console name with '-authorisation'.
+	rbacName := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-%s", r.name.Name, "authorisation"),
+		Namespace: r.name.Namespace,
+	}
+
+	// Create the role that allows updating this consoleauthorisation
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      rbacName.Name,
+			Namespace: r.name.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				Verbs:         []string{"update", "get"},
+				APIGroups:     []string{"workloads.crd.gocardless.com"},
+				Resources:     []string{"consoleauthorisations"},
+				ResourceNames: []string{r.name.Name},
+			},
+		},
+	}
+
+	if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
+		return errors.Wrap(err, "failed to create role for consoleauthorisation")
+	}
+
+	// Create or update the directory role binding
+	drb := buildDirectoryRoleBinding(rbacName, role, rule.Subjects)
+	if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+		return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
+	}
+
+	return nil
 }
 
 // authorisationDiff is a reconcile.DiffFunc for ConsoleAuthorisations

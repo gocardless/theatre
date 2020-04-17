@@ -134,9 +134,21 @@ type ConsoleAuthorisationRule struct {
 	// Human readable name of authorisation rule added to logs for auditing.
 	Name string `json:"name"`
 
-	// The match expression to compare to the command and arguments of the console.
-	// Uses the glob format https://github.com/gobwas/glob.
-	MatchCommand string `json:"matchCommand"`
+	// The matching rule to compare to the command and arguments of the console.
+	//
+	// This uses basic wildcard matching: Each element of the array is evaluated
+	// against the corresponding element of the console's `spec.command` field.
+	// An element consisting of a single `*` character will assert on the
+	// presence of an element, but will allow any contents.
+	// An element consisting of `**`, at the end of the match array, will match 0
+	// or more additional elements in the command, but can only be used at the
+	// end of the rule.
+	//
+	// Pattern matching _within_ elements is deliberately not supported, as this
+	// makes it much harder to construct rules which are secure and do not allow chaining of additional commands (e.g. in a shell context).
+	//
+	// +kubebuilder:validation:MinItems=1
+	MatchCommandElements []string `json:"matchCommandElements"`
 
 	ConsoleAuthorisers `json:",inline"`
 }

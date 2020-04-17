@@ -528,16 +528,16 @@ var _ = Describe("Console", func() {
 
 				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
 					{
-						Name:         "no-review",
-						MatchCommand: "sleep 1",
+						Name:                 "no-review",
+						MatchCommandElements: []string{"sleep", "1"},
 						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
 							AuthorisationsRequired: 0,
 							Subjects:               []rbacv1.Subject{},
 						},
 					},
 					{
-						Name:         "bad-command",
-						MatchCommand: "sleep 666",
+						Name:                 "bad-command",
+						MatchCommandElements: []string{"sleep", "666"},
 						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
 							AuthorisationsRequired: 1,
 							Subjects: []rbacv1.Subject{

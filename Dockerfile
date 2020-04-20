@@ -1,5 +1,5 @@
 # Build Go binary without cgo dependencies
-FROM golang:1.13.5 as builder
+FROM golang:1.14.2 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 
 # Clone our fork of envconsul and build it

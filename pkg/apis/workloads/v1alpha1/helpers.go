@@ -116,15 +116,29 @@ func (ct *ConsoleTemplate) GetAuthorisationRuleForCommand(command []string) (Con
 		return ConsoleAuthorisationRule{}, err
 	}
 
+matchRule:
 	for _, rule := range ct.Spec.AuthorisationRules {
-	matchElement:
-		for i, element := range rule.MatchCommandElements {
-			switch element {
+		numMatchers := len(rule.MatchCommandElements)
+
+		// Assert that the command provided matches the number of elements defined
+		// in the matchers array, but if the last matcher is '**' then the last
+		// element of the command is optional as well as anything following it.
+		if rule.MatchCommandElements[numMatchers-1] == "**" {
+			if len(command) < numMatchers-1 {
+				break matchRule
+			}
+		} else {
+			if len(command) != numMatchers {
+				break matchRule
+			}
+		}
+
+		for i, matcher := range rule.MatchCommandElements {
+			switch matcher {
 			case "*":
-				// Check only that there is an element at the position being evaluated.
-				if len(command) < (i + 1) {
-					break matchElement
-				}
+				// We have already validated that there is an element of the command
+				// array at this position.
+				continue
 
 			case "**":
 				// 'Exit early', because we want to match on anything (or nothing)
@@ -132,20 +146,19 @@ func (ct *ConsoleTemplate) GetAuthorisationRuleForCommand(command []string) (Con
 				return rule, nil
 
 			default:
-				// Treat everything else as an exact string match. Test that the
-				// element exists first, because the match pattern may be longer than
-				// what is being tested.
-				if len(command) < (i+1) || command[i] != element {
-					break matchElement
+				// Treat everything else as an exact string match.
+				if command[i] == matcher {
+					continue
 				}
 			}
 
-			// If we're at the end of this rule and we haven't already returned then
-			// we've fully matched the command.
-			if (i + 1) == len(rule.MatchCommandElements) {
-				return rule, nil
-			}
+			// If we didn't match anything for this element then move onto the next rule
+			continue matchRule
 		}
+
+		// If we're at the end of this rule and we haven't broken out or returned
+		// then we've fully matched the command.
+		return rule, nil
 	}
 
 	if ct.Spec.DefaultAuthorisationRule != nil {

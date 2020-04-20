@@ -42,6 +42,21 @@ var _ = Describe("Helpers", func() {
 			})
 		})
 
+		// Generally we'll never reach this case in real usage, as we should only
+		// be calling GetAuthorisationRuleForCommand if HasAuthorisationRules
+		// returns true.
+		Context("with no rules defined", func() {
+			BeforeEach(func() {
+				template.Spec.DefaultAuthorisationRule = nil
+				command = []string{"bash"}
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(BeEquivalentTo("no rules matched the command")))
+			})
+		})
+
 		Context("with a basic match pattern", func() {
 			BeforeEach(func() {
 				template.Spec.AuthorisationRules = []ConsoleAuthorisationRule{
@@ -60,7 +75,6 @@ var _ = Describe("Helpers", func() {
 			It("matches successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
-
 			It("returns the name of the matching rule", func() {
 				Expect(result.Name).To(Equal("matching"))
 			})
@@ -81,6 +95,21 @@ var _ = Describe("Helpers", func() {
 			})
 		})
 
+		Context("with a basic match pattern that is shorter than the command", func() {
+			BeforeEach(func() {
+				template.Spec.AuthorisationRules = []ConsoleAuthorisationRule{
+					{
+						MatchCommandElements: []string{"echo"},
+					},
+				}
+				command = []string{"echo", "hello"}
+			})
+
+			It("returns the default rule", func() {
+				Expect(result.AuthorisationsRequired).To(Equal(defaultRuleAuths))
+			})
+		})
+
 		Context("with a match pattern that contains single wildcards", func() {
 			BeforeEach(func() {
 				template.Spec.AuthorisationRules = []ConsoleAuthorisationRule{
@@ -93,6 +122,9 @@ var _ = Describe("Helpers", func() {
 
 			It("matches successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+			It("does not return the default rule", func() {
+				Expect(result.AuthorisationsRequired).NotTo(Equal(defaultRuleAuths))
 			})
 		})
 
@@ -115,7 +147,7 @@ var _ = Describe("Helpers", func() {
 			BeforeEach(func() {
 				template.Spec.AuthorisationRules = []ConsoleAuthorisationRule{
 					{
-						MatchCommandElements: []string{"rails", "**"},
+						MatchCommandElements: []string{"rails", "runner", "**"},
 					},
 				}
 				command = []string{"rails", "runner", "thing"}
@@ -124,17 +156,32 @@ var _ = Describe("Helpers", func() {
 			It("matches successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
+			It("does not return the default rule", func() {
+				Expect(result.AuthorisationsRequired).NotTo(Equal(defaultRuleAuths))
+			})
 
 			Context("with a command that has no additional arguments", func() {
 				BeforeEach(func() {
-					command = []string{"rails"}
+					command = []string{"rails", "runner"}
 				})
 
 				It("matches successfully", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
+				It("does not return the default rule", func() {
+					Expect(result.AuthorisationsRequired).NotTo(Equal(defaultRuleAuths))
+				})
 			})
 
+			Context("with a command that is shorter than the the pre-** matchers", func() {
+				BeforeEach(func() {
+					command = []string{"rails"}
+				})
+
+				It("returns the default rule", func() {
+					Expect(result.AuthorisationsRequired).To(Equal(defaultRuleAuths))
+				})
+			})
 		})
 
 		Context("with no matching rules", func() {
@@ -150,7 +197,6 @@ var _ = Describe("Helpers", func() {
 			It("matches successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
-
 			It("returns the default rule", func() {
 				Expect(result.AuthorisationsRequired).To(Equal(defaultRuleAuths))
 			})

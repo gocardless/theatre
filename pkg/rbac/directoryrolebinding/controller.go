@@ -108,6 +108,7 @@ func (r *Reconciler) ReconcileObject(logger kitlog.Logger, request reconcile.Req
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      drb.Name,
 				Namespace: drb.Namespace,
+				Labels:    drb.Labels,
 			},
 			RoleRef:  drb.Spec.RoleRef,
 			Subjects: []rbacv1.Subject{},

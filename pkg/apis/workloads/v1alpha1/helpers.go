@@ -6,6 +6,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Creating returns true if the console has no status (the console has just been created)
+func (c *Console) Creating() bool {
+	return c.Status.Phase == ""
+}
+
 // Pending returns true if the console is Pending
 func (c *Console) Pending() bool {
 	return c.Status.Phase == ConsolePending
@@ -21,10 +26,20 @@ func (c *Console) Stopped() bool {
 	return c.Status.Phase == ConsoleStopped
 }
 
+// Destroyed returns true if the console is Destroyed
+func (c *Console) Destroyed() bool {
+	return c.Status.Phase == ConsoleDestroyed
+}
+
+// Active returns true is the console is active
+func (c *Console) Active() bool {
+	return c.Creating() || c.Pending() || c.Running()
+}
+
 // EligibleForGC returns true if the console can be garbage collected. This is the case if
 // its TTLSecondsAfterFinished has elapsed.
 func (c *Console) EligibleForGC() bool {
-	if !c.Stopped() {
+	if c.Active() {
 		return false
 	}
 

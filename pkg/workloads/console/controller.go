@@ -52,8 +52,9 @@ const (
 
 	// Console log keys
 
-	ConsoleStarted = "ConsoleStarted"
-	ConsoleEnded   = "ConsoleEnded"
+	ConsoleStarted   = "ConsoleStarted"
+	ConsoleEnded     = "ConsoleEnded"
+	ConsoleDestroyed = "ConsoleDestroyed"
 
 	Job                  = "job"
 	Console              = "console"
@@ -102,7 +103,8 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 	}
 
 	err = ctrl.Watch(
-		&source.Kind{Type: &workloadsv1alpha1.Console{}}, &handler.EnqueueRequestForObject{},
+		&source.Kind{Type: &workloadsv1alpha1.Console{}},
+		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
 		return ctrl, err
@@ -181,10 +183,22 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		}
 	}
 
-	// Create or update the job
-	job := r.buildJob(tpl)
-	if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
-		return res, err
+	var job *batchv1.Job
+
+	// Try to get the consoles job
+	if j, err := r.getJob(); err == nil {
+		job = j
+	}
+
+	// Only create/update a job when the console is creating or when one
+	// already exists, i.e. if we've already passed the Creating phase, but the
+	// job no longer exists (it's been destroyed external to this controller)
+	// then don't recreate it.
+	if r.console.Creating() || job != nil {
+		job = r.buildJob(tpl)
+		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
+			return res, err
+		}
 	}
 
 	// Update the status fields in case they're out of sync, or the console spec
@@ -193,7 +207,6 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		return res, err
 	}
 
-	// Requeue reconciliation if the status may change
 	switch {
 	case r.console.Pending():
 		res = requeueAfterInterval(r.logger, time.Second)
@@ -217,7 +230,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 			return res, err
 		}
 
-	case r.console.Stopped():
+	case !r.console.Active():
 		// Requeue for when the console needs to be deleted
 		// In the future we could allow this to be configured in the template
 		res = requeueAfterInterval(r.logger, r.console.TTLDuration())
@@ -242,6 +255,16 @@ func (r *reconciler) getConsoleTemplate() (*workloadsv1alpha1.ConsoleTemplate, e
 
 	tpl := &workloadsv1alpha1.ConsoleTemplate{}
 	return tpl, r.client.Get(r.ctx, name, tpl)
+}
+
+func (r *reconciler) getJob() (*batchv1.Job, error) {
+	name := types.NamespacedName{
+		Name:      getJobName(r.name.Name),
+		Namespace: r.name.Namespace,
+	}
+
+	job := &batchv1.Job{}
+	return job, r.client.Get(r.ctx, name, job)
 }
 
 func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
@@ -351,20 +374,23 @@ func (r *reconciler) clampTimeout(template *workloadsv1alpha1.ConsoleTemplate) e
 }
 
 func (r *reconciler) updateStatus(job *batchv1.Job) error {
-	// Fetch the job's pod
 	podList := &corev1.PodList{}
 	pod := &corev1.Pod{}
-	opts := client.
-		InNamespace(r.name.Namespace).
-		MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
-	if err := r.client.List(r.ctx, opts, podList); err != nil {
-		return err
+
+	if job != nil {
+		opts := client.
+			InNamespace(r.name.Namespace).
+			MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
+		if err := r.client.List(r.ctx, opts, podList); err != nil {
+			return err
+		}
 	}
 	if len(podList.Items) > 0 {
 		pod = &podList.Items[0]
 	} else {
 		pod = nil
 	}
+
 	newStatus := calculateStatus(r.console, job, pod)
 
 	// If there's no changes in status, don't unnecessarily update the object.
@@ -392,6 +418,11 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reaching expiration time")
 	}
 
+	if newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed &&
+		r.console.Status.Phase != workloadsv1alpha1.ConsoleDestroyed {
+		auditLog(r.logger, r.console, nil, ConsoleDestroyed, "Console destroyed")
+	}
+
 	updatedCsl := r.console.DeepCopy()
 	updatedCsl.Status = newStatus
 
@@ -408,9 +439,7 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {
 	newStatus := csl.DeepCopy().Status
 
-	// We may have been passed an empty Job struct, if the job no longer exists,
-	// so determine whether it's a real job by checking if it has a name.
-	if job != nil && len(job.Name) != 0 {
+	if job != nil {
 		// We want to give the console session *at least* the time specified in the
 		// timeout, therefore base the expiry time on the job creation time, rather
 		// than the console creation time, to take into account any delays in
@@ -422,18 +451,22 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job, pod *core
 			jobCreationTime.Add(time.Second * time.Duration(csl.Spec.TimeoutSeconds)),
 		)
 		newStatus.ExpiryTime = &expiryTime
-		if pod != nil {
-			newStatus.PodName = pod.ObjectMeta.Name
-		}
-
-		newStatus.Phase = calculatePhase(job, pod)
 		newStatus.CompletionTime = job.Status.CompletionTime
 	}
+	if pod != nil {
+		newStatus.PodName = pod.ObjectMeta.Name
+	}
+
+	newStatus.Phase = calculatePhase(job, pod)
 
 	return newStatus
 }
 
 func calculatePhase(job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsolePhase {
+	if job == nil {
+		return workloadsv1alpha1.ConsoleDestroyed
+	}
+
 	// Currently a job can only have two conditions: Complete and Failed
 	// Both indicate that the console has stopped
 	for _, c := range job.Status.Conditions {
@@ -505,10 +538,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	backoffLimit := int32(0)
 	jobTemplate.Spec.RestartPolicy = corev1.RestartPolicyNever
 
-	// Ensure that the job name (after suffixing with `-console`) does not exceed 57
-	// characters, to allow an additional 6 characters to appended when the job
-	// creates a pod without truncation of the `-console` suffix.
-	jobName := fmt.Sprintf("%s-%s", truncateString(r.name.Name, 49), "console")
+	jobName := getJobName(r.name.Name)
 
 	// Merged labels from the console template and console. In case of
 	// conflicts second label set wins.
@@ -518,7 +548,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	jobLabels := labels.Merge(csl.Labels, template.Labels)
 	jobLabels = labels.Merge(jobLabels,
 		map[string]string{
-			"console-name": truncateString(csl.Name, 63),
+			"console-name": sanitiseLabel(csl.Name),
 			"user":         sanitiseLabel(username),
 		})
 
@@ -752,13 +782,20 @@ func auditLog(logger kitlog.Logger, c *workloadsv1alpha1.Console, duration *floa
 	loggerCtx.Log("msg", msg)
 }
 
-// Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?
+// Ensure that the job name (after suffixing with `-console`) does not exceed 63
+// characters. This is the string length limit on labels and the job name is added
+// as a label to the pods it creates.
+func getJobName(consoleName string) string {
+	return fmt.Sprintf("%s-%s", truncateString(consoleName, 55), "console")
+}
+
+// Kubernetes labels must satisfy (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])? and not
+// exceed 63 characters in length.
 // We don't bother with the first and last character sanitisation here - just anything
 // dodgy in the middle.
 // This is mostly so that, in tests, we correctly handle the system:unsecured user.
-
 func sanitiseLabel(l string) string {
-	return regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-")
+	return truncateString(regexp.MustCompile(`[^A-z0-9\-_.]`).ReplaceAllString(l, "-"), 63)
 }
 
 func truncateString(str string, length int) string {

@@ -51,7 +51,7 @@ jobs:
       - run:
           name: Lint
           command: |
-            ${GOPATH}/bin/golangci-lint run
+            ${GOPATH}/bin/golangci-lint run --new-from-rev=origin/master
 
   build:
     <<: *docker_golang

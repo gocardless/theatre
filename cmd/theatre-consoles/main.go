@@ -70,6 +70,8 @@ func main() {
 
 	ctx, _ := signals.SetupSignalHandler()
 
+	logger.Log("test log")
+
 	if err := Run(ctx, logger); err != nil {
 		cli.Fatalf("unexpected error: %s", err)
 	}

@@ -61,6 +61,7 @@ var _ = Describe("Reconciler", func() {
 		ctx       context.Context
 		cancel    func()
 		namespace string
+		labels    map[string]string
 		teardown  func()
 		mgr       manager.Manager
 		calls     chan integration.ReconcileCall
@@ -70,6 +71,10 @@ var _ = Describe("Reconciler", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
 		namespace, teardown = integration.CreateNamespace(clientset)
+		labels = map[string]string{
+			"repo":        "foo-repo",
+			"environment": "foo-env",
+		}
 		mgr = integration.StartTestManager(ctx, cfg)
 		groups = map[string][]string{}
 
@@ -120,6 +125,7 @@ var _ = Describe("Reconciler", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "foo",
 					Namespace: namespace,
+					Labels:    labels,
 				},
 				Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
 					Subjects: []rbacv1.Subject{},
@@ -152,6 +158,8 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
 			Expect(rb.RoleRef).To(Equal(drb.Spec.RoleRef), "associated RoleBinding should reference same Role as DRB")
 			Expect(rb.Subjects).To(BeEmpty(), "initial RoleBinding should contain no subjects")
+
+			Expect(rb.ObjectMeta.Labels).To(Equal(labels), "associated RoleBinding should have the same labels as DRB")
 
 			By("Update subject with groups and single user")
 			drb.Spec.Subjects = []rbacv1.Subject{

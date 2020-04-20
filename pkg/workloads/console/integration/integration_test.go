@@ -51,6 +51,7 @@ var _ = Describe("Console", func() {
 		csl                        *workloadsv1alpha1.Console
 		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
 		waitForSuccessfulReconcile func(int)
+		mustCreateResources        func()
 	)
 
 	BeforeEach(func() {
@@ -68,13 +69,17 @@ var _ = Describe("Console", func() {
 			),
 		)
 
-		integration.NewServer(mgr, integration.MustWebhook(
-			console.NewAuthenticatorWebhook(logger, mgr,
-				func(handler *admission.Handler) {
-					*handler, whcalls = integration.CaptureWebhook(mgr, *handler)
-				},
+		integration.NewServer(
+			mgr,
+			integration.MustWebhook(
+				console.NewAuthenticatorWebhook(logger, mgr,
+					func(handler *admission.Handler) {
+						*handler, whcalls = integration.CaptureWebhook(mgr, *handler)
+					},
+				),
 			),
-		))
+			integration.MustWebhook(console.NewTemplateValidationWebhook(logger, mgr)),
+		)
 
 		consoleTemplate = &workloadsv1alpha1.ConsoleTemplate{
 			ObjectMeta: metav1.ObjectMeta{
@@ -138,18 +143,18 @@ var _ = Describe("Console", func() {
 			}
 			By("Reconcile done")
 		}
-	})
 
-	JustBeforeEach(func() {
-		By("Creating console template")
-		Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
-			HaveOccurred(), "failed to create Console Template",
-		)
+		mustCreateResources = func() {
+			By("Creating console template")
+			Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
+				HaveOccurred(), "failed to create Console Template",
+			)
 
-		By("Creating console")
-		Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
-			HaveOccurred(), "failed to create Console",
-		)
+			By("Creating console")
+			Expect(mgr.GetClient().Create(context.TODO(), csl)).NotTo(
+				HaveOccurred(), "failed to create Console",
+			)
+		}
 	})
 
 	AfterEach(func() {
@@ -158,6 +163,10 @@ var _ = Describe("Console", func() {
 	})
 
 	Describe("Enforcing valid timeout values", func() {
+		JustBeforeEach(func() {
+			mustCreateResources()
+		})
+
 		Describe("Timeout > MaxTimeoutSeconds", func() {
 			BeforeEach(func() {
 				csl.Spec.TimeoutSeconds = 7201
@@ -225,6 +234,7 @@ var _ = Describe("Console", func() {
 
 	Describe("Creating resources", func() {
 		JustBeforeEach(func() {
+			mustCreateResources()
 			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 		})
 
@@ -619,10 +629,13 @@ var _ = Describe("Console", func() {
 			csl.ObjectMeta.Name = consoleName
 		})
 
+		JustBeforeEach(func() {
+			mustCreateResources()
+			waitForSuccessfulReconcile(ReconcilesAfterCreate)
+		})
+
 		It("Truncates long job names and adds a 'console' suffix", func() {
 			expectJobName := "very-very-very-very-long-long-long-long-name-very-very--console"
-
-			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
@@ -632,6 +645,79 @@ var _ = Describe("Console", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to retrieve job")
 			Expect(job.ObjectMeta.Labels["console-name"]).To(Equal(consoleName[0:63]))
 		})
+	})
 
+	Describe("Validating console templates", func() {
+		var (
+			createErr error
+		)
+
+		JustBeforeEach(func() {
+			By("Creating console template")
+			createErr = mgr.GetClient().Create(context.TODO(), consoleTemplate)
+		})
+
+		Context("when authorisation rules are defined", func() {
+			BeforeEach(func() {
+				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+					{
+						Name:                 "test",
+						MatchCommandElements: []string{"bash"},
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							Subjects: []rbacv1.Subject{},
+						},
+					},
+				}
+			})
+
+			Context("and a default rule is not set", func() {
+				BeforeEach(func() {
+					consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+						{
+							Name:                 "test",
+							MatchCommandElements: []string{"bash"},
+							ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+								Subjects: []rbacv1.Subject{},
+							},
+						},
+					}
+				})
+
+				It("rejects the template", func() {
+					Expect(createErr).To(MatchError(ContainSubstring(".spec.defaultAuthorisationRule must be set")))
+				})
+			})
+
+			Context("and a default rule is set", func() {
+				BeforeEach(func() {
+					consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
+						Subjects: []rbacv1.Subject{},
+					}
+				})
+
+				It("accepts the template", func() {
+					Expect(createErr).NotTo(HaveOccurred())
+				})
+			})
+
+		})
+
+		Context("when invalid auth rules are set", func() {
+			BeforeEach(func() {
+				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+					{
+						Name:                 "test",
+						MatchCommandElements: []string{"bash", "**", "abc"},
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							Subjects: []rbacv1.Subject{},
+						},
+					},
+				}
+			})
+
+			It("rejects the template", func() {
+				Expect(createErr).To(MatchError(ContainSubstring("a double wildcard is only valid at the end of the pattern")))
+			})
+		})
 	})
 })

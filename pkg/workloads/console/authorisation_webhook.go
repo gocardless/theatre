@@ -28,7 +28,7 @@ func NewAuthorisationWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...
 	var handler admission.Handler
 
 	handler = &consoleAuthorisation{
-		logger:  kitlog.With(logger, "component", "ConsoleAuthorisation"),
+		logger:  kitlog.With(logger, "component", "ConsoleAuthorisationWebhook"),
 		decoder: serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer(),
 	}
 

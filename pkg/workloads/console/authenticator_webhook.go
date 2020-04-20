@@ -20,7 +20,7 @@ import (
 func NewAuthenticatorWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
 	handler = &consoleAuthenticator{
-		logger:  kitlog.With(logger, "component", "ConsoleAuthenticator"),
+		logger:  kitlog.With(logger, "component", "ConsoleAuthenticatorWebhook"),
 		decoder: mgr.GetAdmissionDecoder(),
 	}
 

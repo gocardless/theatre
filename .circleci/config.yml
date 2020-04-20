@@ -42,6 +42,7 @@ jobs:
 
   lint:
     <<: *docker_golang
+    resource_class: large
     steps:
       - checkout
       - run:

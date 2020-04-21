@@ -77,7 +77,7 @@ func main() {
 		app.Fatalf(err.Error())
 	}
 
-	// Console webhook
+	// Console authenticator webhook
 	consoleAuthenticatorWh, err := console.NewAuthenticatorWebhook(logger, mgr)
 	if err != nil {
 		app.Fatalf(err.Error())
@@ -89,12 +89,18 @@ func main() {
 		app.Fatalf(err.Error())
 	}
 
+	// Console template webhook
+	consoleTemplateWh, err := console.NewTemplateValidationWebhook(logger, mgr)
+	if err != nil {
+		app.Fatalf(err.Error())
+	}
+
 	priorityWh, err := priority.NewWebhook(logger, mgr, priority.InjectorOptions{})
 	if err != nil {
 		app.Fatalf(err.Error())
 	}
 
-	if err := svr.Register(consoleAuthenticatorWh, consoleAuthorisationWh, priorityWh); err != nil {
+	if err := svr.Register(consoleAuthenticatorWh, consoleAuthorisationWh, consoleTemplateWh, priorityWh); err != nil {
 		app.Fatalf(err.Error())
 	}
 

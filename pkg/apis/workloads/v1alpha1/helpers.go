@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 )
 
@@ -106,45 +107,58 @@ func (ct *ConsoleTemplate) GetDefaultCommandWithArgs() ([]string, error) {
 // | ["echo", "**", "bye"] | ["echo", "hi", "bye" ]           | Error    |
 //
 func (ct *ConsoleTemplate) GetAuthorisationRuleForCommand(command []string) (ConsoleAuthorisationRule, error) {
+	// We expect that the Validate() function will already have been called
+	// before this, via the webhook that validates console templates. However,
+	// perform the check again here because the logic below depends upon the
+	// validity of these rules, and this expectation may not hold true when the
+	// function is called in other contexts, e.g. unit tests.
+	if err := ct.Validate(); err != nil {
+		return ConsoleAuthorisationRule{}, err
+	}
+
+matchRule:
 	for _, rule := range ct.Spec.AuthorisationRules {
-	matchElement:
-		for i, element := range rule.MatchCommandElements {
-			switch element {
+		numMatchers := len(rule.MatchCommandElements)
+
+		// Assert that the command provided matches the number of elements defined
+		// in the matchers array, but if the last matcher is '**' then the last
+		// element of the command is optional as well as anything following it.
+		if rule.MatchCommandElements[numMatchers-1] == "**" {
+			if len(command) < numMatchers-1 {
+				break matchRule
+			}
+		} else {
+			if len(command) != numMatchers {
+				break matchRule
+			}
+		}
+
+		for i, matcher := range rule.MatchCommandElements {
+			switch matcher {
 			case "*":
-				// Check only that there is an element at the position being evaluated.
-				if len(command) < (i + 1) {
-					break matchElement
-				}
+				// We have already validated that there is an element of the command
+				// array at this position.
+				continue
 
 			case "**":
-				// By only supporting double wildcards at the end we keep the logic
-				// simple, as there's no need to backtrack.
-				if (i + 1) < len(rule.MatchCommandElements) {
-					return rule, errors.New("a double wildcard is only valid at the end of the pattern")
-				}
-
 				// 'Exit early', because we want to match on anything (or nothing)
 				// subsequent to this.
 				return rule, nil
 
-			case "":
-				return rule, errors.New("an empty match element is not valid")
-
 			default:
-				// Treat everything else as an exact string match. Test that the
-				// element exists first, because the match pattern may be longer than
-				// what is being tested.
-				if len(command) < (i+1) || command[i] != element {
-					break matchElement
+				// Treat everything else as an exact string match.
+				if command[i] == matcher {
+					continue
 				}
 			}
 
-			// If we're at the end of this rule and we haven't already returned then
-			// we've fully matched the command.
-			if (i + 1) == len(rule.MatchCommandElements) {
-				return rule, nil
-			}
+			// If we didn't match anything for this element then move onto the next rule
+			continue matchRule
 		}
+
+		// If we're at the end of this rule and we haven't broken out or returned
+		// then we've fully matched the command.
+		return rule, nil
 	}
 
 	if ct.Spec.DefaultAuthorisationRule != nil {
@@ -167,4 +181,40 @@ func (ct *ConsoleTemplate) HasAuthorisationRules() bool {
 	}
 
 	return false
+}
+
+// Validate checks the console template object for correctness and returns a
+// list of errors.
+func (ct *ConsoleTemplate) Validate() error {
+	var err error
+
+	for i, rule := range ct.Spec.AuthorisationRules {
+		for j, element := range rule.MatchCommandElements {
+			switch element {
+			case "":
+				err = multierror.Append(err, errors.Errorf(
+					".spec.authorisationRules[%d].matchCommandElements[%d]: an empty matcher is invalid",
+					i, j,
+				))
+
+			case "**":
+				// By only supporting double wildcards at the end we keep the logic
+				// simple, as there's no need to backtrack.
+				if (j + 1) < len(rule.MatchCommandElements) {
+					err = multierror.Append(err, errors.Errorf(
+						".spec.authorisationRules[%d].matchCommandElements[%d]: a double wildcard is only valid at the end of the pattern",
+						i, j,
+					))
+				}
+			}
+		}
+	}
+
+	if len(ct.Spec.AuthorisationRules) > 0 && ct.Spec.DefaultAuthorisationRule == nil {
+		err = multierror.Append(err, errors.New(
+			".spec.defaultAuthorisationRule must be set if authorisation rules are defined",
+		))
+	}
+
+	return err
 }

@@ -39,7 +39,7 @@ var _ = Describe("Runner", func() {
 		runner = New(kubeClient, theatreClient)
 	})
 
-	Describe("Create", func() {
+	Describe("CreateResource", func() {
 		Context("When creating a new console", func() {
 			var (
 				createdCsl   *workloadsv1alpha1.Console
@@ -60,7 +60,7 @@ var _ = Describe("Runner", func() {
 			createOptions := Options{Cmd: cmd, Reason: reason}
 
 			JustBeforeEach(func() {
-				createdCsl, createCslErr = runner.Create(namespace, *cslTmplFixture, createOptions)
+				createdCsl, createCslErr = runner.CreateResource(namespace, *cslTmplFixture, createOptions)
 			})
 
 			It("Successfully creates a console", func() {
@@ -101,7 +101,7 @@ var _ = Describe("Runner", func() {
 				// is set). Therefore because we're only using a fake object store,
 				// which doesn't mutate GenerateName into a random Name, we'll get
 				// duplicate objects.
-				_, err := runner.Create(namespace, *cslTmplFixture, Options{})
+				_, err := runner.CreateResource(namespace, *cslTmplFixture, Options{})
 				Expect(err).To(MatchError(
 					errors.NewAlreadyExists(workloadsv1alpha1.Resource("consoles"), ""),
 				))

@@ -3,17 +3,30 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
+	"text/tabwriter"
+	"time"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
+	"k8s.io/kubernetes/pkg/kubectl/util/term"
 )
+
+// Alias genericclioptions.IOStreams to avoid additional imports
+type IOStreams genericclioptions.IOStreams
 
 // Runner is responsible for managing the lifecycle of a console
 type Runner struct {
@@ -45,8 +58,177 @@ func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner
 	}
 }
 
-// Create builds a console according to the supplied options and submits it to the API
-func (c *Runner) Create(namespace string, template workloadsv1alpha1.ConsoleTemplate, opts Options) (*workloadsv1alpha1.Console, error) {
+// CreateOptions encapsulates the arguments to create a console
+type CreateOptions struct {
+	Namespace string
+	Selector  string
+	Timeout   time.Duration
+	Reason    string
+	Command   []string
+	Attach    bool
+
+	// Options only used when Attach is true
+	KubeConfig *rest.Config
+	IO         IOStreams
+}
+
+// Create attempts to create a console in the given in the given namespace after finding the a template using selectors.
+func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1alpha1.Console, error) {
+	// Create and attach to the console
+	tpl, err := c.FindTemplateBySelector(opts.Namespace, opts.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason}
+	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	csl, err = c.WaitUntilReady(ctx, *csl)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = c.GetAttachablePod(csl)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.Attach {
+		return csl, c.Attach(
+			ctx,
+			AttachOptions{
+				Namespace:  csl.GetNamespace(),
+				KubeConfig: opts.KubeConfig,
+				Name:       csl.GetName(),
+				IO:         opts.IO,
+			},
+		)
+	}
+
+	return csl, nil
+}
+
+// AttachOptions encapsulates the arguments to attach to a console
+type AttachOptions struct {
+	Namespace  string
+	KubeConfig *rest.Config
+	Name       string
+
+	IO IOStreams
+}
+
+// Attach provides the ability to attach to a running console, given the console name
+func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
+	csl, err := c.FindConsoleByName(opts.Namespace, opts.Name)
+	if err != nil {
+		return err
+	}
+
+	pod, err := c.GetAttachablePod(csl)
+	if err != nil {
+		return errors.Wrap(err, "could not find pod to attach to")
+	}
+
+	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, opts.IO); err != nil {
+		return errors.Wrap(err, "failed to attach to console")
+	}
+
+	return nil
+}
+
+func NewAttacher(clientset kubernetes.Interface, restconfig *rest.Config) *Attacher {
+	return &Attacher{clientset, restconfig}
+}
+
+// Attacher knows how to attach to stdio of an existing container, relaying io
+// to the parent process file descriptors.
+type Attacher struct {
+	clientset  kubernetes.Interface
+	restconfig *rest.Config
+}
+
+// Attach will interactively attach to a containers output, creating a new TTY
+// and hooking this into the current processes file descriptors.
+func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, streams IOStreams) error {
+	req := a.clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Namespace(pod.GetNamespace()).
+		Name(pod.GetName()).
+		SubResource("attach")
+
+	req.Context(ctx)
+	req.VersionedParams(
+		&corev1.PodAttachOptions{
+			Stdin:  true,
+			Stdout: true,
+			Stderr: true,
+			TTY:    true,
+		},
+		scheme.ParameterCodec,
+	)
+
+	remoteExecutor, err := remotecommand.NewSPDYExecutor(a.restconfig, "POST", req.URL())
+	if err != nil {
+		return errors.Wrap(err, "failed to create SPDY executor")
+	}
+
+	streamOptions, safe := CreateInteractiveStreamOptions(streams)
+
+	return safe(func() error { return remoteExecutor.Stream(streamOptions) })
+}
+
+// CreateInteractiveStreamOptions constructs streaming configuration that
+// attaches the default OS stdout, stderr, stdin, with a tty, and an additional
+// function which should be used to wrap any interactive process that will make
+// use of the tty.
+func CreateInteractiveStreamOptions(streams IOStreams) (remotecommand.StreamOptions, func(term.SafeFunc) error) {
+	// TODO: We may want to setup a parent interrupt handler, so that if/when the
+	// pod is terminated while a user is attached, they aren't left with their
+	// terminal in a strange state, if they're running something curses-based in
+	// the console.
+	// Parent: ...
+	tty := term.TTY{
+		In:     streams.In,
+		Out:    streams.ErrOut,
+		Raw:    true,
+		TryDev: false,
+	}
+
+	// This call spawns a goroutine to monitor/update the terminal size
+	sizeQueue := tty.MonitorSize(tty.GetSize())
+
+	return remotecommand.StreamOptions{
+		Stderr:            streams.ErrOut,
+		Stdout:            streams.Out,
+		Stdin:             streams.In,
+		Tty:               true,
+		TerminalSizeQueue: sizeQueue,
+	}, tty.Safe
+}
+
+type ListOptions struct {
+	Namespace string
+	Username  string
+	Selector  string
+	Output    io.Writer
+}
+
+// List is a wrapper around ListConsolesByLabelsAndUser that will output to a specified output.
+// This functionality is intended to be used in a CLI setting, where you are usually outputting to os.Stdout.
+func (c *Runner) List(ctx context.Context, opts ListOptions) (ConsoleSlice, error) {
+	consoles, err := c.ListConsolesByLabelsAndUser(opts.Namespace, opts.Username, opts.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	return consoles, consoles.Print(opts.Output)
+}
+
+// CreateResource builds a console according to the supplied options and submits it to the API
+func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.ConsoleTemplate, opts Options) (*workloadsv1alpha1.Console, error) {
 	csl := &workloadsv1alpha1.Console{
 		ObjectMeta: metav1.ObjectMeta{
 			// Let Kubernetes generate a unique name
@@ -128,7 +310,37 @@ func (c *Runner) FindConsoleByName(namespace, name string) (*workloadsv1alpha1.C
 	return &matchingConsoles[0], nil
 }
 
-func (c *Runner) ListConsolesByLabelsAndUser(namespace, username, labelSelector string) ([]workloadsv1alpha1.Console, error) {
+type ConsoleSlice []workloadsv1alpha1.Console
+
+func (cs ConsoleSlice) Print(output io.Writer) error {
+	w := tabwriter.NewWriter(output, 0, 8, 2, ' ', 0)
+
+	if len(cs) == 0 {
+		return nil
+	}
+
+	decoder := scheme.Codecs.UniversalDecoder(scheme.Scheme.PrioritizedVersionsAllGroups()...)
+
+	printer, err := get.NewCustomColumnsPrinterFromSpec(
+		"NAME:.metadata.name,NAMESPACE:.metadata.namespace,PHASE:.status.phase,CREATED:.metadata.creationTimestamp,USER:.spec.user,REASON:.spec.reason",
+		decoder,
+		false, // false => print headers
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, cnsl := range cs {
+		printer.PrintObj(&cnsl, w)
+	}
+
+	// Flush the printed buffer to output
+	w.Flush()
+
+	return nil
+}
+
+func (c *Runner) ListConsolesByLabelsAndUser(namespace, username, labelSelector string) (ConsoleSlice, error) {
 	// We cannot use a FieldSelector on spec.user in conjunction with the
 	// LabelSelector for CRD types like Console. The error message "field label
 	// not supported: spec.user" is returned by the real Kubernetes client.

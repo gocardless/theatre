@@ -11,7 +11,9 @@ import (
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	apiTypes "k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
@@ -29,6 +31,7 @@ func NewAuthorisationWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...
 
 	handler = &consoleAuthorisation{
 		logger:  kitlog.With(logger, "component", "ConsoleAuthorisationWebhook"),
+		client:  mgr.GetClient(),
 		decoder: serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer(),
 	}
 
@@ -48,6 +51,7 @@ func NewAuthorisationWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...
 
 type consoleAuthorisation struct {
 	logger  kitlog.Logger
+	client  client.Client
 	decoder runtime.Decoder
 }
 
@@ -73,10 +77,16 @@ func (c *consoleAuthorisation) Handle(ctx context.Context, req types.Request) ty
 	// user making the request
 	user := req.AdmissionRequest.UserInfo.Username
 
+	csl, err := c.getConsole(ctx, existingAuth.Spec.ConsoleRef.Name, existingAuth.Namespace)
+	if err != nil {
+		return admission.ValidationResponse(false, fmt.Sprintf("failed to retrieve console for the authorisation: %v", err))
+	}
+
 	update := &consoleAuthorisationUpdate{
-		existingAuth,
-		updatedAuth,
-		user,
+		existingAuth: existingAuth,
+		updatedAuth:  updatedAuth,
+		user:         user,
+		owner:        csl.Spec.User,
 	}
 
 	if err := update.Validate(); err != nil {
@@ -88,10 +98,21 @@ func (c *consoleAuthorisation) Handle(ctx context.Context, req types.Request) ty
 	return admission.ValidationResponse(true, "")
 }
 
+func (c *consoleAuthorisation) getConsole(ctx context.Context, name, namespace string) (*workloadsv1alpha1.Console, error) {
+	namespacedName := apiTypes.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	csl := &workloadsv1alpha1.Console{}
+	return csl, c.client.Get(ctx, namespacedName, csl)
+}
+
 type consoleAuthorisationUpdate struct {
 	existingAuth *workloadsv1alpha1.ConsoleAuthorisation
 	updatedAuth  *workloadsv1alpha1.ConsoleAuthorisation
 	user         string
+	owner        string
 }
 
 func (u *consoleAuthorisationUpdate) Validate() error {
@@ -100,9 +121,6 @@ func (u *consoleAuthorisationUpdate) Validate() error {
 	// check immutable fields haven't been updated
 	if !reflect.DeepEqual(u.updatedAuth.Spec.ConsoleRef, u.existingAuth.Spec.ConsoleRef) {
 		err = multierror.Append(err, errors.New("the spec.consoleRef field is immutable"))
-	}
-	if u.updatedAuth.Spec.Owner != u.existingAuth.Spec.Owner {
-		err = multierror.Append(err, errors.New("the spec.owner field is immutable"))
 	}
 
 	// check no existing authorisation subjects have been modified and that a single subject has been added
@@ -123,7 +141,7 @@ func (u *consoleAuthorisationUpdate) Validate() error {
 
 	// check the owner of the console isn't adding themselves to the list of authorisers
 	for _, s := range add {
-		if s.Name == u.existingAuth.Spec.Owner {
+		if s.Name == u.owner {
 			err = multierror.Append(err, errors.New("an authoriser cannot authorise their own console"))
 			break
 		}

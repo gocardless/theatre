@@ -42,12 +42,8 @@ spec:
                 The reference to the console by name that this console
                 authorisation belongs to.
               type: object
-            owner:
-              description: The user who created the referenced console.
-              type: string
           required:
             - consoleRef
-            - owner
             - authorisations
           type: object
       required:

@@ -190,9 +190,6 @@ type ConsoleAuthorisationSpec struct {
 	// The reference to the console by name that this console authorisation belongs to.
 	ConsoleRef corev1.LocalObjectReference `json:"consoleRef"`
 
-	// The user who created the referenced console.
-	Owner string `json:"owner"`
-
 	// List of authorisations that have been given to the referenced console.
 	Authorisations []rbacv1.Subject `json:"authorisations"`
 }

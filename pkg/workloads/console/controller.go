@@ -718,10 +718,6 @@ func authorisationDiff(expectedObj runtime.Object, existingObj runtime.Object) r
 		existing.Spec.ConsoleRef = expected.Spec.ConsoleRef
 		operation = recutil.Update
 	}
-	if !reflect.DeepEqual(expected.Spec.Owner, existing.Spec.Owner) {
-		existing.Spec.Owner = expected.Spec.Owner
-		operation = recutil.Update
-	}
 
 	return operation
 }

@@ -41,6 +41,7 @@ var _ = Describe("Authorisation webhook", func() {
 				existingAuth: existingAuth,
 				updatedAuth:  updatedAuth,
 				user:         "current-user",
+				owner:        "user",
 			}
 
 			err = update.Validate()

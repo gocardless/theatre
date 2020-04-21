@@ -15,7 +15,7 @@ COPY . /go/src/github.com/gocardless/theatre
 RUN make VERSION=$(cat VERSION) build
 
 # Use ubuntu as our base package to enable generic system tools
-FROM ubuntu:bionic-20191202
+FROM ubuntu:bionic-20200311
 
 # Without these certificates we'll fail to validate TLS connections to Google's
 # services.

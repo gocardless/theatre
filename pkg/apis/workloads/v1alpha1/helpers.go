@@ -12,6 +12,17 @@ func (c *Console) Creating() bool {
 	return c.Status.Phase == ""
 }
 
+// PendingAuthorisation returns true if the is Pending Authorisation
+func (c *Console) PendingAuthorisation() bool {
+	return c.Status.Phase == ConsolePendingAuthorisation
+}
+
+// PendingJob returns true if the console is in a phase that occurs before job
+// creation
+func (c *Console) PendingJob() bool {
+	return c.Creating() || c.PendingAuthorisation()
+}
+
 // Pending returns true if the console is Pending
 func (c *Console) Pending() bool {
 	return c.Status.Phase == ConsolePending

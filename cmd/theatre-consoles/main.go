@@ -102,38 +102,49 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	// Match on the kingpin command and enter the main command
 	switch cmd {
 	case create.FullCommand():
-		return Create(
-			ctx, logger, consoleRunner,
-			CreateOptions{
+		_, err = consoleRunner.Create(
+			ctx,
+			runner.CreateOptions{
 				Namespace:  *cliNamespace,
 				Selector:   *createSelector,
 				Timeout:    *createTimeout,
 				Reason:     *createReason,
 				Command:    *createCommand,
 				Attach:     *createAttach,
-				Clientset:  client,
 				KubeConfig: config,
+				IO: runner.IOStreams{
+					In:     os.Stdin,
+					Out:    os.Stdout,
+					ErrOut: os.Stderr,
+				},
 			},
 		)
+		return err
 	case attach.FullCommand():
-		return Attach(
-			ctx, logger, consoleRunner,
-			AttachOptions{
-				Namespace: *cliNamespace,
-				Client:    client,
-				Config:    config,
-				Name:      *attachName,
+		return consoleRunner.Attach(
+			ctx,
+			runner.AttachOptions{
+				Namespace:  *cliNamespace,
+				KubeConfig: config,
+				Name:       *attachName,
+				IO: runner.IOStreams{
+					In:     os.Stdin,
+					Out:    os.Stdout,
+					ErrOut: os.Stderr,
+				},
 			},
 		)
 	case list.FullCommand():
-		return List(
-			ctx, logger, consoleRunner,
-			ListOptions{
+		_, err = consoleRunner.List(
+			ctx,
+			runner.ListOptions{
 				Namespace: *cliNamespace,
 				Username:  *listUsername,
 				Selector:  *listSelector,
+				Output:    os.Stdout,
 			},
 		)
+		return err
 	}
 
 	return nil

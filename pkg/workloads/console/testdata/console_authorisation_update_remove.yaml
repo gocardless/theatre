@@ -5,5 +5,4 @@ metadata:
 spec:
   consoleRef:
     name: console-container
-  owner: user
   authorisations: []

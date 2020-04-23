@@ -21,6 +21,7 @@ const (
 	consoleName  = "console-0"
 	templateName = "console-template-0"
 	jobName      = "console-0-console"
+	user         = "kubernetes-admin"
 )
 
 // This clientset is a union of the default kubernetes clientset and the workloads client.
@@ -78,12 +79,13 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Specify("Happy path", func() {
 			By("Create a console template")
 			var ttl int32 = 10
-			template := buildConsoleTemplate(&ttl, false)
+			template := buildConsoleTemplate(&ttl, true)
 			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 			By("Create a console")
 			console := buildConsole()
+			console.Spec.Command = []string{"sleep", "666"}
 			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
@@ -99,6 +101,43 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					return err
 				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
 			}()
+
+			By("Expect an authorisation has been created")
+			Eventually(func() error {
+				_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).ShouldNot(HaveOccurred(), "could not find authorisation")
+
+			By("Expect the console phase is pending authorisation")
+			Eventually(func() workloadsv1alpha1.ConsolePhase {
+				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred(), "could not find console")
+				return console.Status.Phase
+			}).Should(Equal(workloadsv1alpha1.ConsolePendingAuthorisation))
+
+			By("Expect that the job has not been created")
+			Eventually(func() error {
+				_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).Should(HaveOccurred(), "expected not to find job, but did")
+
+			By("Expect a console authorisation has been created")
+			consoleAuthorisation := &workloadsv1alpha1.ConsoleAuthorisation{}
+			Eventually(func() error {
+				consoleAuthorisation, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}).ShouldNot(HaveOccurred(), "could not find console authorisation")
+
+			// Change the console user to another user as a user cannot authorise their own console
+			By("Update the console user")
+			console.Spec.User = "another-user@example.com"
+			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Update(console)
+			Expect(err).NotTo(HaveOccurred(), "could not update console user")
+
+			By("Authorise a console")
+			consoleAuthorisation.Spec.Authorisations = []rbacv1.Subject{{Kind: "User", Name: user}}
+			_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Update(consoleAuthorisation)
+			Expect(err).NotTo(HaveOccurred(), "could not authorise console")
 
 			By("Expect a job has been created")
 			Eventually(func() error {
@@ -125,7 +164,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
 				return console.Status.Phase
-			}, 8*time.Second).Should(Equal(workloadsv1alpha1.ConsoleStopped))
+			}).Should(Equal(workloadsv1alpha1.ConsoleStopped))
 
 			// TODO: attach to pod
 
@@ -228,46 +267,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				return console.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsoleDestroyed))
 		})
-
-		Specify("Authorised console", func() {
-			By("Create a console template")
-			var ttl int32 = 30
-			template := buildConsoleTemplate(&ttl, true)
-			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
-			Expect(err).NotTo(HaveOccurred(), "could not create console template")
-
-			By("Create a console")
-			console := buildConsole()
-			console.Spec.Command = []string{"sleep", "666"}
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
-			Expect(err).NotTo(HaveOccurred(), "could not create console")
-
-			defer func() {
-				By("(cleanup) Delete the console template")
-				policy := metav1.DeletePropagationForeground
-				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
-					return err
-				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
-			}()
-
-			By("Expect an authorisation has been created")
-			Eventually(func() error {
-				_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(consoleName, metav1.GetOptions{})
-				return err
-			}).ShouldNot(HaveOccurred(), "could not find authorisation")
-
-			// TODO: Check that job has not been created
-			// TODO: Check that console phase is currently 'Pending'
-
-			// TODO: Add an authorisation
-
-			// TODO: Check that job has now been created
-		})
 	})
 }
 
@@ -281,7 +280,7 @@ func buildConsoleTemplate(ttl *int32, authorised bool) *workloadsv1alpha1.Consol
 		defaultAuthorisation = &workloadsv1alpha1.ConsoleAuthorisers{
 			AuthorisationsRequired: 1,
 			Subjects: []rbacv1.Subject{
-				{Kind: "User", Name: "authorising-user-1@example.com"},
+				{Kind: "User", Name: user},
 			},
 		}
 		authorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
@@ -299,7 +298,7 @@ func buildConsoleTemplate(ttl *int32, authorised bool) *workloadsv1alpha1.Consol
 				ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
 					AuthorisationsRequired: 1,
 					Subjects: []rbacv1.Subject{
-						{Kind: "User", Name: "authorising-user-2@example.com"},
+						{Kind: "User", Name: user},
 					},
 				},
 			},

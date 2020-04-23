@@ -66,6 +66,8 @@ type ConsolePhase string
 
 // These are valid phases for a console
 const (
+	// ConsolePendingAuthorisation means the console been created but it is not yet authorised to run
+	ConsolePendingAuthorisation ConsolePhase = "Pending Authorisation"
 	// ConsolePending means the console has been created but its pod is not yet ready
 	ConsolePending ConsolePhase = "Pending"
 	// ConsoleRunning means the pod has started and is running
@@ -189,9 +191,6 @@ type ConsoleAuthorisation struct {
 type ConsoleAuthorisationSpec struct {
 	// The reference to the console by name that this console authorisation belongs to.
 	ConsoleRef corev1.LocalObjectReference `json:"consoleRef"`
-
-	// The user who created the referenced console.
-	Owner string `json:"owner"`
 
 	// List of authorisations that have been given to the referenced console.
 	Authorisations []rbacv1.Subject `json:"authorisations"`

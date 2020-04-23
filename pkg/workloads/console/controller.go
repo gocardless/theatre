@@ -52,9 +52,11 @@ const (
 
 	// Console log keys
 
-	ConsoleStarted   = "ConsoleStarted"
-	ConsoleEnded     = "ConsoleEnded"
-	ConsoleDestroyed = "ConsoleDestroyed"
+	ConsolePendingAuthorisation = "ConsolePendingAuthorisation"
+	ConsoleAuthorised           = "ConsoleAuthorised"
+	ConsoleStarted              = "ConsoleStarted"
+	ConsoleEnded                = "ConsoleEnded"
+	ConsoleDestroyed            = "ConsoleDestroyed"
 
 	Job                  = "job"
 	Console              = "console"
@@ -161,6 +163,12 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		return res, err
 	}
 
+	// Get the command for the console to run
+	var command []string
+	if command, err = r.getCommand(tpl); err != nil {
+		return res, errors.Wrap(err, "neither the console or template have a command to evaluate")
+	}
+
 	// Set the TTL of the console
 	if err := r.setConsoleTTL(tpl); err != nil {
 		return res, err
@@ -172,29 +180,34 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	// Create an authorisation object, if required.
-	//
-	// We will always stamp one of these out if the template has authorisation
-	// rules, regardless of whether the console itself has been started with a
-	// command that requires authorisation, as this makes reconciliation easier
-	// to reason about.
+	var authRule *workloadsv1alpha1.ConsoleAuthorisationRule
 	if tpl.HasAuthorisationRules() {
-		if err := r.createAuthorisationObjects(tpl); err != nil {
+		rule, err := tpl.GetAuthorisationRuleForCommand(command)
+		if err != nil {
+			return res, errors.Wrap(err, "failed to determine authorisation rule for console command")
+		}
+
+		authRule = &rule
+		if err := r.createAuthorisationObjects(authRule.Subjects); err != nil {
 			return res, err
 		}
 	}
 
-	var job *batchv1.Job
-
 	// Try to get the consoles job
+	var job *batchv1.Job
 	if j, err := r.getJob(); err == nil {
 		job = j
 	}
 
-	// Only create/update a job when the console is creating or when one
-	// already exists, i.e. if we've already passed the Creating phase, but the
-	// job no longer exists (it's been destroyed external to this controller)
-	// then don't recreate it.
-	if r.console.Creating() || job != nil {
+	// Only create/update a job when the console is authorised and pending job
+	// creation or when a job already exists, i.e. if we've already passed the
+	// Creating phase, but the job no longer exists (it's been destroyed external
+	// to this controller) then don't recreate it.
+	authorised, err := r.isAuthorised(authRule)
+	if err != nil {
+		return res, err
+	}
+	if (authorised && r.console.PendingJob()) || job != nil {
 		job = r.buildJob(tpl)
 		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
 			return res, err
@@ -203,7 +216,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	if err = r.updateStatus(job); err != nil {
+	if err = r.updateStatus(authorised, job); err != nil {
 		return res, err
 	}
 
@@ -255,6 +268,24 @@ func (r *reconciler) getConsoleTemplate() (*workloadsv1alpha1.ConsoleTemplate, e
 
 	tpl := &workloadsv1alpha1.ConsoleTemplate{}
 	return tpl, r.client.Get(r.ctx, name, tpl)
+}
+
+func (r *reconciler) getCommand(template *workloadsv1alpha1.ConsoleTemplate) ([]string, error) {
+	csl := r.console
+	if len(csl.Spec.Command) > 0 {
+		return csl.Spec.Command, nil
+	}
+	return template.GetDefaultCommandWithArgs()
+}
+
+func (r *reconciler) getConsoleAuthorisation() (*workloadsv1alpha1.ConsoleAuthorisation, error) {
+	name := types.NamespacedName{
+		Name:      r.name.Name,
+		Namespace: r.name.Namespace,
+	}
+
+	auth := &workloadsv1alpha1.ConsoleAuthorisation{}
+	return auth, r.client.Get(r.ctx, name, auth)
 }
 
 func (r *reconciler) getJob() (*batchv1.Job, error) {
@@ -373,7 +404,24 @@ func (r *reconciler) clampTimeout(template *workloadsv1alpha1.ConsoleTemplate) e
 	return nil
 }
 
-func (r *reconciler) updateStatus(job *batchv1.Job) error {
+func (r *reconciler) isAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule) (bool, error) {
+	if rule == nil {
+		return true, nil
+	}
+
+	auth, err := r.getConsoleAuthorisation()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to retrieve console authorisation")
+	}
+
+	if len(auth.Spec.Authorisations) >= rule.ConsoleAuthorisers.AuthorisationsRequired {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 	podList := &corev1.PodList{}
 	pod := &corev1.Pod{}
 
@@ -391,7 +439,7 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 		pod = nil
 	}
 
-	newStatus := calculateStatus(r.console, job, pod)
+	newStatus := calculateStatus(r.console, authorised, job, pod)
 
 	// If there's no changes in status, don't unnecessarily update the object.
 	// This would cause an infinite loop!
@@ -399,9 +447,17 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 		return nil
 	}
 
+	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
+		auditLog(r.logger, r.console, nil, ConsolePendingAuthorisation, "Console pending authorisation")
+	}
+
+	// Console phase from Pending Authorisation
+	if r.console.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
+		auditLog(r.logger, r.console, nil, ConsoleAuthorised, "Console authorised")
+	}
+
 	// Console phase from Pending to Running
-	if newStatus.Phase == workloadsv1alpha1.ConsoleRunning &&
-		r.console.Status.Phase == workloadsv1alpha1.ConsolePending {
+	if r.console.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
 		auditLog(r.logger, r.console, nil, ConsoleStarted, "Console started")
 	}
 
@@ -412,14 +468,13 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	}
 
 	// Console phase from Running to Stopped without CompletionTime (expire)
-	if newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
-		r.console.Status.Phase == workloadsv1alpha1.ConsoleRunning {
+	if r.console.Running() &&
+		newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
 		duration := r.console.Status.ExpiryTime.Sub(job.Status.StartTime.Time).Seconds()
 		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reaching expiration time")
 	}
 
-	if newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed &&
-		r.console.Status.Phase != workloadsv1alpha1.ConsoleDestroyed {
+	if !r.console.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
 		auditLog(r.logger, r.console, nil, ConsoleDestroyed, "Console destroyed")
 	}
 
@@ -436,7 +491,7 @@ func (r *reconciler) updateStatus(job *batchv1.Job) error {
 	return nil
 }
 
-func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {
+func calculateStatus(csl *workloadsv1alpha1.Console, authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {
 	newStatus := csl.DeepCopy().Status
 
 	if job != nil {
@@ -457,12 +512,16 @@ func calculateStatus(csl *workloadsv1alpha1.Console, job *batchv1.Job, pod *core
 		newStatus.PodName = pod.ObjectMeta.Name
 	}
 
-	newStatus.Phase = calculatePhase(job, pod)
+	newStatus.Phase = calculatePhase(authorised, job, pod)
 
 	return newStatus
 }
 
-func calculatePhase(job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsolePhase {
+func calculatePhase(authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsolePhase {
+	if !authorised {
+		return workloadsv1alpha1.ConsolePendingAuthorisation
+	}
+
 	if job == nil {
 		return workloadsv1alpha1.ConsoleDestroyed
 	}
@@ -619,40 +678,15 @@ func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, sub
 	}
 }
 
-func (r *reconciler) createAuthorisationObjects(template *workloadsv1alpha1.ConsoleTemplate) error {
-	csl := r.console
-
-	var command []string
-
-	if len(csl.Spec.Command) > 0 {
-		command = csl.Spec.Command
-	} else {
-		templateCommand, err := template.GetDefaultCommandWithArgs()
-		if err != nil {
-			return errors.Wrap(err, "neither the console or template have a command to evaluate")
-		}
-
-		command = templateCommand
-	}
-
-	// Firstly evaluate the console command against the authorisation rules in
-	// the template. This *could* perpetually fail, if the console template is
-	// setup incorrectly, therefore by doing this before any other creations we
-	// won't add any objects to the cluster unless we know they can be used.
-	rule, err := template.GetAuthorisationRuleForCommand(command)
-	if err != nil {
-		return errors.Wrap(err, "failed to determine authorisation rule for console command")
-	}
-
+func (r *reconciler) createAuthorisationObjects(subjects []rbacv1.Subject) error {
 	authorisation := &workloadsv1alpha1.ConsoleAuthorisation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.name.Name,
 			Namespace: r.name.Namespace,
-			Labels:    csl.Labels,
+			Labels:    r.console.Labels,
 		},
 		Spec: workloadsv1alpha1.ConsoleAuthorisationSpec{
 			ConsoleRef:     corev1.LocalObjectReference{Name: r.name.Name},
-			Owner:          csl.Spec.User,
 			Authorisations: []rbacv1.Subject{},
 		},
 	}
@@ -691,7 +725,7 @@ func (r *reconciler) createAuthorisationObjects(template *workloadsv1alpha1.Cons
 	}
 
 	// Create or update the directory role binding
-	drb := buildDirectoryRoleBinding(rbacName, role, rule.Subjects)
+	drb := buildDirectoryRoleBinding(rbacName, role, subjects)
 	if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 		return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
 	}
@@ -716,10 +750,6 @@ func authorisationDiff(expectedObj runtime.Object, existingObj runtime.Object) r
 
 	if !reflect.DeepEqual(expected.Spec.ConsoleRef, existing.Spec.ConsoleRef) {
 		existing.Spec.ConsoleRef = expected.Spec.ConsoleRef
-		operation = recutil.Update
-	}
-	if !reflect.DeepEqual(expected.Spec.Owner, existing.Spec.Owner) {
-		existing.Spec.Owner = expected.Spec.Owner
 		operation = recutil.Update
 	}
 

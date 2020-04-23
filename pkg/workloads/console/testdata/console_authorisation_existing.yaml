@@ -5,7 +5,6 @@ metadata:
 spec:
   consoleRef:
     name: console-container
-  owner: user
   authorisations:
     - kind: User
       name: user1

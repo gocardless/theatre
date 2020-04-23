@@ -73,7 +73,7 @@ jobs:
       # Sleep to wait for everything to install properly before beginning tests
       - run:
           name: Prepare the cluster
-          command: workspace/bin/acceptance.linux_amd64 prepare && sleep 10
+          command: workspace/bin/acceptance.linux_amd64 prepare --verbose && sleep 10
       - run:
           name: Run acceptance tests
           command: workspace/bin/acceptance.linux_amd64 run --verbose

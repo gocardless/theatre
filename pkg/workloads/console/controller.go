@@ -65,7 +65,8 @@ const (
 	Role                 = "role"
 	DirectoryRoleBinding = "directoryrolebinding"
 
-	DefaultTTL = 24 * time.Hour
+	DefaultTTLBeforeRunning = 1 * time.Hour
+	DefaultTTLAfterFinished = 24 * time.Hour
 )
 
 type IgnoreCreatePredicate struct {
@@ -169,7 +170,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		return res, errors.Wrap(err, "neither the console or template have a command to evaluate")
 	}
 
-	// Set the TTL of the console
+	// Set the TTLs of the console
 	if err := r.setConsoleTTL(tpl); err != nil {
 		return res, err
 	}
@@ -221,7 +222,15 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	switch {
+	case r.console.PendingAuthorisation():
+		// Requeue for when the console has reached its before-running TTL, so that
+		// it can be deleted if it has not yet been authorised by that point.
+		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
 	case r.console.Pending():
+		// Requeue every second while job has been created but there is not yet a
+		// running pod: we won't receive an event via the job watcher when this
+		// event happens, so this is a cheaper alternative to watching the
+		// pods resource and triggering reconciliations via that.
 		res = requeueAfterInterval(r.logger, time.Second)
 	case r.console.Running():
 		// Create or update the role
@@ -242,11 +251,9 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 			return res, err
 		}
-
-	case !r.console.Active():
-		// Requeue for when the console needs to be deleted
-		// In the future we could allow this to be configured in the template
-		res = requeueAfterInterval(r.logger, r.console.TTLDuration())
+	case r.console.PostRunning():
+		// Requeue for when the console has reached its after finished TTL so it can be deleted
+		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
 	}
 
 	if r.console.EligibleForGC() {
@@ -316,21 +323,29 @@ func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleT
 }
 
 func (r *reconciler) setConsoleTTL(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
-	if r.console.Spec.TTLSecondsAfterFinished != nil {
-		return nil
-	}
+	defaultTTLSecondsBeforeRunning := int32(DefaultTTLBeforeRunning.Seconds())
+	defaultTTLSecondsAfterFinished := int32(DefaultTTLAfterFinished.Seconds())
 
 	updatedCsl := r.console.DeepCopy()
-	defaultTTL := int32(DefaultTTL.Seconds())
 
-	if consoleTemplate.Spec.DefaultTTLSecondsAfterFinished != nil {
+	if r.console.Spec.TTLSecondsBeforeRunning != nil {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = r.console.Spec.TTLSecondsBeforeRunning
+	} else if consoleTemplate.Spec.DefaultTTLSecondsBeforeRunning != nil {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = consoleTemplate.Spec.DefaultTTLSecondsBeforeRunning
+	} else {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = &defaultTTLSecondsBeforeRunning
+	}
+
+	if r.console.Spec.TTLSecondsAfterFinished != nil {
+		updatedCsl.Spec.TTLSecondsAfterFinished = r.console.Spec.TTLSecondsAfterFinished
+	} else if consoleTemplate.Spec.DefaultTTLSecondsAfterFinished != nil {
 		updatedCsl.Spec.TTLSecondsAfterFinished = consoleTemplate.Spec.DefaultTTLSecondsAfterFinished
 	} else {
-		updatedCsl.Spec.TTLSecondsAfterFinished = &defaultTTL
+		updatedCsl.Spec.TTLSecondsAfterFinished = &defaultTTLSecondsAfterFinished
 	}
 
 	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return errors.Wrap(err, "failed to set TTL")
+		return errors.Wrap(err, "failed to set TTLs")
 	}
 
 	r.console = updatedCsl

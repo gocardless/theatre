@@ -40,9 +40,19 @@ type ConsoleSpec struct {
 
 	ConsoleTemplateRef corev1.LocalObjectReference `json:"consoleTemplateRef"`
 
-	// Specifies the TTL for this Console. The Console will be eligible for garbage
-	// collection ConsoleTTLSecondsAfterFinished seconds after it enters the Stopped phase.
-	// This field is modeled on the TTL mechanism in Kubernetes 1.12.
+	// Specifies the TTL before running for this Console. The Console will be
+	// eligible for garbage collection TTLSecondsBeforeRunning seconds if it has
+	// not progressed to the Running phase. This field is modeled on the TTL
+	// mechanism in Kubernetes 1.12.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=86400
+	TTLSecondsBeforeRunning *int32 `json:"ttlSecondsBeforeRunning,omitempty"`
+
+	// Specifies the TTL for this Console. The Console will be eligible for
+	// garbage collection TTLSecondsAfterFinished seconds after it enters the
+	// Stopped or Destroyed phase. This field is modeled on the TTL mechanism in
+	// Kubernetes 1.12.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=604800
 	// +optional
@@ -116,10 +126,21 @@ type ConsoleTemplateSpec struct {
 	MaxTimeoutSeconds        int              `json:"maxTimeoutSeconds"`
 	AdditionalAttachSubjects []rbacv1.Subject `json:"additionalAttachSubjects,omitempty"`
 
-	// Specifies the TTL for any Console created with this template. If set, the Console
-	// will be eligible for garbage collection ConsoleTTLSecondsAfterFinished seconds after
-	// it enters the Stopped phase. If not set, this value defaults to 24 hours.
-	// This field is modeled closely on the TTL mechanism in Kubernetes 1.12.
+	// Specifies the TTL before running for any Console created with this
+	// template. If set, the Console will be eligible for garbage collection
+	// TTLSecondsBeforeRunning seconds if it has not progressed to the Running
+	// phase. If not set, this value defaults to 60 minutes. This field is
+	// modeled on the TTL mechanism in Kubernetes 1.12.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=86400
+	DefaultTTLSecondsBeforeRunning *int32 `json:"ttlSecondsBeforeRunning,omitempty"`
+
+	// Specifies the TTL for any Console created with this template. If set, the
+	// Console will be eligible for garbage collection
+	// DefaultTTLSecondsAfterFinished seconds after it enters the Stopped or
+	// Destroyed phase. If not set, this value defaults to 24 hours. This field
+	// is modeled closely on the TTL mechanism in Kubernetes 1.12.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=604800

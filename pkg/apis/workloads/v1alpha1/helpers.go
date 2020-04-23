@@ -43,33 +43,60 @@ func (c *Console) Destroyed() bool {
 	return c.Status.Phase == ConsoleDestroyed
 }
 
-// Active returns true is the console is active
-func (c *Console) Active() bool {
-	return c.Creating() || c.Pending() || c.Running()
+// PreRunning returns true if the console is in a phase before Running
+func (c *Console) PreRunning() bool {
+	return c.Creating() || c.PendingAuthorisation() || c.Pending()
 }
 
-// EligibleForGC returns true if the console can be garbage collected. This is the case if
-// its TTLSecondsAfterFinished has elapsed.
+// PostRunning returns true if the console is in a phase after Running
+func (c *Console) PostRunning() bool {
+	return c.Stopped() || c.Destroyed()
+}
+
+// EligibleForGC returns whether a console can be garbage collected
 func (c *Console) EligibleForGC() bool {
-	if c.Active() {
+	gcTime := c.GetGCTime()
+	if gcTime == nil {
 		return false
 	}
 
-	if c.Status.ExpiryTime == nil {
-		return false
-	}
-
-	// When the console is completed
-	if c.Status.CompletionTime != nil {
-		return c.Status.CompletionTime.Time.Add(c.TTLDuration()).Before(time.Now())
-	}
-
-	return c.Status.ExpiryTime.Time.Add(c.TTLDuration()).Before(time.Now())
+	return gcTime.Before(time.Now())
 }
 
-// TTLDuration returns the console's TTL as a time.Duration
-func (c *Console) TTLDuration() time.Duration {
+// GetGCTime returns time time at which a console can be garbage collected, or
+// nil if it cannot be.
+//
+// This will be the case if:
+// - TTLSecondsBeforeRunning has elapsed and the console hasn't progressed to running
+// - TTLSecondsAfterFinished has elapsed and the console is stopped or destroyed
+func (c *Console) GetGCTime() *time.Time {
+	switch {
+	case c.PreRunning():
+		// When the console hasn't progressed to the running phase
+		t := c.CreationTimestamp.Add(c.TTLSecondsBeforeRunning())
+		return &t
+	case c.PostRunning():
+		// When the console is completed
+		if c.Status.CompletionTime != nil {
+			t := c.Status.CompletionTime.Time.Add(c.TTLSecondsAfterFinished())
+			return &t
+		}
+		// When the console never completed
+		t := c.Status.ExpiryTime.Time.Add(c.TTLSecondsAfterFinished())
+		return &t
+	}
+
+	return nil
+}
+
+// TTLSecondsAfterFinished returns the console's after finished TTL as a time.Duration
+func (c *Console) TTLSecondsAfterFinished() time.Duration {
 	return time.Duration(*c.Spec.TTLSecondsAfterFinished) * time.Second
+}
+
+// TTLSecondsBeforeRunning returns the console's before running TTL as a time.Duration
+func (c *Console) TTLSecondsBeforeRunning() time.Duration {
+	return time.Duration(*c.Spec.TTLSecondsBeforeRunning) * time.Second
 }
 
 // GetDefaultCommandWithArgs returns a concatenated list of command and

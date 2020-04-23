@@ -7,9 +7,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
-
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -23,6 +20,9 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
 	"k8s.io/kubernetes/pkg/kubectl/util/term"
+
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
 )
 
 // Alias genericclioptions.IOStreams to avoid additional imports
@@ -58,6 +58,51 @@ func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner
 	}
 }
 
+// LifecycleHook provides a communication to react to console lifecycle changes
+type LifecycleHook interface {
+	AttachingToConsole(*workloadsv1alpha1.Console) error
+	ConsoleCreated(*workloadsv1alpha1.Console) error
+	ConsoleReady(*workloadsv1alpha1.Console) error
+	TemplateFound(*workloadsv1alpha1.ConsoleTemplate) error
+}
+
+var _ LifecycleHook = DefaultLifecycleHook{}
+
+type DefaultLifecycleHook struct {
+	AttachingToPodFunc func(*workloadsv1alpha1.Console) error
+	ConsoleCreatedFunc func(*workloadsv1alpha1.Console) error
+	ConsoleReadyFunc   func(*workloadsv1alpha1.Console) error
+	TemplateFoundFunc  func(*workloadsv1alpha1.ConsoleTemplate) error
+}
+
+func (d DefaultLifecycleHook) AttachingToConsole(c *workloadsv1alpha1.Console) error {
+	if d.AttachingToPodFunc != nil {
+		return d.AttachingToPodFunc(c)
+	}
+	return nil
+}
+
+func (d DefaultLifecycleHook) ConsoleCreated(c *workloadsv1alpha1.Console) error {
+	if d.ConsoleCreatedFunc != nil {
+		return d.ConsoleCreatedFunc(c)
+	}
+	return nil
+}
+
+func (d DefaultLifecycleHook) ConsoleReady(c *workloadsv1alpha1.Console) error {
+	if d.ConsoleReadyFunc != nil {
+		return d.ConsoleReadyFunc(c)
+	}
+	return nil
+}
+
+func (d DefaultLifecycleHook) TemplateFound(c *workloadsv1alpha1.ConsoleTemplate) error {
+	if d.TemplateFoundFunc != nil {
+		return d.TemplateFoundFunc(c)
+	}
+	return nil
+}
+
 // CreateOptions encapsulates the arguments to create a console
 type CreateOptions struct {
 	Namespace string
@@ -70,12 +115,32 @@ type CreateOptions struct {
 	// Options only used when Attach is true
 	KubeConfig *rest.Config
 	IO         IOStreams
+
+	// Lifecycle hook to notify when the state of the console changes
+	Hook LifecycleHook
+}
+
+// WithDefaults sets any unset options to defaults
+func (opts CreateOptions) WithDefaults() CreateOptions {
+	if opts.Hook == nil {
+		opts.Hook = DefaultLifecycleHook{}
+	}
+
+	return opts
 }
 
 // Create attempts to create a console in the given in the given namespace after finding the a template using selectors.
 func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1alpha1.Console, error) {
+	// Get options with any unset values defaulted
+	opts = opts.WithDefaults()
+
 	// Create and attach to the console
 	tpl, err := c.FindTemplateBySelector(opts.Namespace, opts.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	err = opts.Hook.TemplateFound(tpl)
 	if err != nil {
 		return nil, err
 	}
@@ -86,9 +151,19 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
+	err = opts.Hook.ConsoleCreated(csl)
+	if err != nil {
+		return csl, err
+	}
+
 	csl, err = c.WaitUntilReady(ctx, *csl)
 	if err != nil {
 		return nil, err
+	}
+
+	err = opts.Hook.ConsoleReady(csl)
+	if err != nil {
+		return csl, err
 	}
 
 	_, err = c.GetAttachablePod(csl)
@@ -104,6 +179,7 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 				KubeConfig: opts.KubeConfig,
 				Name:       csl.GetName(),
 				IO:         opts.IO,
+				Hook:       opts.Hook,
 			},
 		)
 	}
@@ -118,10 +194,25 @@ type AttachOptions struct {
 	Name       string
 
 	IO IOStreams
+
+	// Lifecycle hook to notify when the state of the console changes
+	Hook LifecycleHook
+}
+
+// WithDefaults sets any unset options to defaults
+func (opts AttachOptions) WithDefaults() AttachOptions {
+	if opts.Hook == nil {
+		opts.Hook = DefaultLifecycleHook{}
+	}
+
+	return opts
 }
 
 // Attach provides the ability to attach to a running console, given the console name
 func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
+	// Get options with any unset values defaulted
+	opts = opts.WithDefaults()
+
 	csl, err := c.FindConsoleByName(opts.Namespace, opts.Name)
 	if err != nil {
 		return err
@@ -130,6 +221,11 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 	pod, err := c.GetAttachablePod(csl)
 	if err != nil {
 		return errors.Wrap(err, "could not find pod to attach to")
+	}
+
+	err = opts.Hook.AttachingToConsole(csl)
+	if err != nil {
+		return err
 	}
 
 	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, opts.IO); err != nil {

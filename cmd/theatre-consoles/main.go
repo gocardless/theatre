@@ -8,15 +8,17 @@ import (
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	theatre "github.com/gocardless/theatre/pkg/client/clientset/versioned"
-	"github.com/gocardless/theatre/pkg/logging"
-	"github.com/gocardless/theatre/pkg/signals"
-	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
+
+	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	theatre "github.com/gocardless/theatre/pkg/client/clientset/versioned"
+	"github.com/gocardless/theatre/pkg/logging"
+	"github.com/gocardless/theatre/pkg/signals"
+	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 )
 
 var (
@@ -117,6 +119,7 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 					Out:    os.Stdout,
 					ErrOut: os.Stderr,
 				},
+				Hook: LifecyclePrinter(logger),
 			},
 		)
 		return err
@@ -132,6 +135,7 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 					Out:    os.Stdout,
 					ErrOut: os.Stderr,
 				},
+				Hook: LifecyclePrinter(logger),
 			},
 		)
 	case list.FullCommand():
@@ -148,6 +152,39 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 	}
 
 	return nil
+}
+
+// LifecyclePrinter hooks into console lifecycle events,
+// reporting on the change of console phases during creation or attaching
+func LifecyclePrinter(logger kitlog.Logger) runner.LifecycleHook {
+	return runner.DefaultLifecycleHook{
+		AttachingToPodFunc: func(csl *workloadsv1alpha1.Console) error {
+			logger.Log(
+				"msg", "Attaching to pod",
+				"console", csl.Name,
+				"namespace", csl.Namespace,
+				"pod", csl.Status.PodName,
+			)
+			return nil
+		},
+		ConsoleReadyFunc: func(csl *workloadsv1alpha1.Console) error {
+			logger.Log(
+				"msg", "Console is ready",
+				"console", csl.Name,
+				"namespace", csl.Namespace,
+				"pod", csl.Status.PodName,
+			)
+			return nil
+		},
+		ConsoleCreatedFunc: func(csl *workloadsv1alpha1.Console) error {
+			logger.Log(
+				"msg", "Console has been requested",
+				"console", csl.Name,
+				"namespace", csl.Namespace,
+			)
+			return nil
+		},
+	}
 }
 
 // newKubeConfig first tries using internal kubernetes configuration, and then falls back

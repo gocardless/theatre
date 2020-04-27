@@ -2,17 +2,20 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"text/tabwriter"
 	"time"
 
 	"github.com/pkg/errors"
+	"gomodules.xyz/jsonpatch/v3"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -62,6 +65,7 @@ func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner
 type LifecycleHook interface {
 	AttachingToConsole(*workloadsv1alpha1.Console) error
 	ConsoleCreated(*workloadsv1alpha1.Console) error
+	ConsoleRequiresAuthorisation(*workloadsv1alpha1.Console) error
 	ConsoleReady(*workloadsv1alpha1.Console) error
 	TemplateFound(*workloadsv1alpha1.ConsoleTemplate) error
 }
@@ -69,10 +73,11 @@ type LifecycleHook interface {
 var _ LifecycleHook = DefaultLifecycleHook{}
 
 type DefaultLifecycleHook struct {
-	AttachingToPodFunc func(*workloadsv1alpha1.Console) error
-	ConsoleCreatedFunc func(*workloadsv1alpha1.Console) error
-	ConsoleReadyFunc   func(*workloadsv1alpha1.Console) error
-	TemplateFoundFunc  func(*workloadsv1alpha1.ConsoleTemplate) error
+	AttachingToPodFunc               func(*workloadsv1alpha1.Console) error
+	ConsoleCreatedFunc               func(*workloadsv1alpha1.Console) error
+	ConsoleRequiresAuthorisationFunc func(*workloadsv1alpha1.Console) error
+	ConsoleReadyFunc                 func(*workloadsv1alpha1.Console) error
+	TemplateFoundFunc                func(*workloadsv1alpha1.ConsoleTemplate) error
 }
 
 func (d DefaultLifecycleHook) AttachingToConsole(c *workloadsv1alpha1.Console) error {
@@ -85,6 +90,13 @@ func (d DefaultLifecycleHook) AttachingToConsole(c *workloadsv1alpha1.Console) e
 func (d DefaultLifecycleHook) ConsoleCreated(c *workloadsv1alpha1.Console) error {
 	if d.ConsoleCreatedFunc != nil {
 		return d.ConsoleCreatedFunc(c)
+	}
+	return nil
+}
+
+func (d DefaultLifecycleHook) ConsoleRequiresAuthorisation(c *workloadsv1alpha1.Console) error {
+	if d.ConsoleRequiresAuthorisationFunc != nil {
+		return d.ConsoleRequiresAuthorisationFunc(c)
 	}
 	return nil
 }
@@ -156,10 +168,16 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return csl, err
 	}
 
-	csl, err = c.WaitUntilReady(ctx, *csl)
-	if err != nil {
+	// Wait for authorisation step or until ready
+	_, err = c.WaitUntilReady(ctx, *csl, false)
+	if err == consolePendingAuthorisationError {
+		opts.Hook.ConsoleRequiresAuthorisation(csl)
+	} else if err != nil {
 		return nil, err
 	}
+
+	// Wait for the console to enter a ready state
+	csl, err = c.WaitUntilReady(ctx, *csl, true)
 
 	err = opts.Hook.ConsoleReady(csl)
 	if err != nil {
@@ -303,6 +321,45 @@ func CreateInteractiveStreamOptions(streams IOStreams) (remotecommand.StreamOpti
 		Tty:               true,
 		TerminalSizeQueue: sizeQueue,
 	}, tty.Safe
+}
+
+type AuthoriseOptions struct {
+	Namespace   string
+	ConsoleName string
+	Username    string
+}
+
+func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
+	patch := []jsonpatch.Operation{
+		jsonpatch.NewOperation(
+			"add",
+			"/spec/authorisations/-",
+			rbacv1.Subject{
+				Kind:      rbacv1.UserKind,
+				Namespace: opts.Namespace,
+				Name:      opts.Username,
+			},
+		),
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.theatreClient.
+		Workloads().
+		ConsoleAuthorisations(opts.Namespace).
+		Patch(
+			opts.ConsoleName,
+			types.JSONPatchType,
+			patchBytes,
+		)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type ListOptions struct {
@@ -461,8 +518,8 @@ func (c *Runner) ListConsolesByLabelsAndUser(namespace, username, labelSelector 
 // It will then block until an associated RoleBinding exists that contains the
 // console user in its subject list. This RoleBinding gives the console user
 // permission to attach to the pod.
-func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
-	csl, err := c.waitForConsole(ctx, createdCsl)
+func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
+	csl, err := c.waitForConsole(ctx, createdCsl, waitForAuthorisation)
 	if err != nil {
 		return nil, err
 	}
@@ -474,9 +531,20 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 	return csl, nil
 }
 
-func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
+var (
+	consolePendingAuthorisationError = errors.New("console pending authorisation")
+	consoleStoppedError              = errors.New("console is stopped")
+	consoleNotFoundError             = errors.New("console not found")
+)
+
+func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
 	isRunning := func(csl *workloadsv1alpha1.Console) bool {
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleRunning
+	}
+	isPendingAuthorisation := func(csl *workloadsv1alpha1.Console) bool {
+		return !waitForAuthorisation &&
+			csl != nil &&
+			csl.Status.Phase == workloadsv1alpha1.ConsolePendingAuthorisation
 	}
 	isStopped := func(csl *workloadsv1alpha1.Console) bool {
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleStopped
@@ -502,8 +570,11 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 	if isRunning(csl) {
 		return csl, nil
 	}
+	if isPendingAuthorisation(csl) {
+		return csl, consolePendingAuthorisationError
+	}
 	if isStopped(csl) {
-		return nil, fmt.Errorf("console is Stopped")
+		return nil, consoleStoppedError
 	}
 
 	status := w.ResultChan()
@@ -515,19 +586,22 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 			// If our channel is closed, exit with error, as we'll otherwise assume
 			// we were successful when we never reached this state.
 			if !ok {
-				return nil, fmt.Errorf("watch channel closed")
+				return nil, errors.New("watch channel closed")
 			}
 
 			csl = event.Object.(*workloadsv1alpha1.Console)
 			if isRunning(csl) {
 				return csl, nil
 			}
+			if isPendingAuthorisation(csl) {
+				return csl, consolePendingAuthorisationError
+			}
 			if isStopped(csl) {
-				return nil, fmt.Errorf("console is Stopped")
+				return nil, consoleStoppedError
 			}
 		case <-ctx.Done():
 			if csl == nil {
-				return nil, errors.Wrap(ctx.Err(), "console not found")
+				return nil, errors.Wrap(ctx.Err(), consoleNotFoundError.Error())
 			}
 			return nil, errors.Wrap(ctx.Err(), fmt.Sprintf(
 				"console's last phase was: '%v'", csl.Status.Phase),

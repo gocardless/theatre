@@ -71,3 +71,7 @@ required = [
 [[override]]
   name = "github.com/russross/blackfriday"
   version = "v1.5.2"
+
+[[constraint]]
+  name = "gomodules.xyz/jsonpatch"
+  version = "3.0.1"

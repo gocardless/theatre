@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	stdlog "log"
 	"os"
 
@@ -59,6 +60,13 @@ var (
 	listSelector = list.Flag("selector", "Selector to match the console").
 			Short('s').
 			Default("").
+			String()
+
+	authorise     = cli.Command("authorise", "Authorise a peer-reviewed console request")
+	authoriseUser = authorise.Flag("user", "Name of the user to attribute to verification. This must match the username that the Kubernetes API recognises you as").
+			String()
+	authoriseName = authorise.Flag("name", "Console to authorise").
+			Required().
 			String()
 )
 
@@ -149,6 +157,15 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 			},
 		)
 		return err
+	case authorise.FullCommand():
+		err = consoleRunner.Authorise(
+			ctx,
+			runner.AuthoriseOptions{
+				Namespace:   *cliNamespace,
+				ConsoleName: *authoriseName,
+				Username:    *authoriseUser,
+			},
+		)
 	}
 
 	return nil
@@ -161,6 +178,16 @@ func LifecyclePrinter(logger kitlog.Logger) runner.LifecycleHook {
 		AttachingToPodFunc: func(csl *workloadsv1alpha1.Console) error {
 			logger.Log(
 				"msg", "Attaching to pod",
+				"console", csl.Name,
+				"namespace", csl.Namespace,
+				"pod", csl.Status.PodName,
+			)
+			return nil
+		},
+		ConsoleRequiresAuthorisationFunc: func(csl *workloadsv1alpha1.Console) error {
+			logger.Log(
+				"msg", "Console requires authorisation",
+				"prompt", fmt.Sprintf("Please get a relevant user to run `theatre-consoles authorise --name %s --namespace %s --username {THEIR_USERNAME}`", csl.Name, csl.Namespace),
 				"console", csl.Name,
 				"namespace", csl.Namespace,
 				"pod", csl.Status.PodName,

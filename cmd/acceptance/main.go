@@ -38,6 +38,7 @@ var (
 	prepareImage      = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
 	prepareConfigFile = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
+	prepareVerbose    = prepare.Flag("verbose", "Use a higher log level when creating the cluster").Short('v').Bool()
 
 	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 
@@ -81,7 +82,15 @@ func main() {
 
 		if !strings.Contains(string(clusters), fmt.Sprintf("%s\n", *clusterName)) {
 			logger.Log("msg", "creating new cluster")
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile)).Run(); err != nil {
+
+			// Kind uses Klog, so should be following these levels:
+			// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md
+			logLevel := 1
+			if *prepareVerbose {
+				logLevel = 5
+			}
+
+			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}

@@ -250,9 +250,8 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				}()
 
 				By("Expect an authorisation has been created")
-				var consoleAuthorisation *workloadsv1alpha1.ConsoleAuthorisation
 				Eventually(func() error {
-					consoleAuthorisation, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(console.Name, metav1.GetOptions{})
+					_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(console.Name, metav1.GetOptions{})
 					return err
 				}).ShouldNot(HaveOccurred(), "could not find authorisation")
 
@@ -276,8 +275,11 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				Expect(err).NotTo(HaveOccurred(), "could not update console user")
 
 				By("Authorise a console")
-				consoleAuthorisation.Spec.Authorisations = []rbacv1.Subject{{Kind: "User", Name: user}}
-				_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Update(consoleAuthorisation)
+				err = consoleRunner.Authorise(context.TODO(), runner.AuthoriseOptions{
+					Namespace:   namespace,
+					ConsoleName: console.Name,
+					Username:    user,
+				})
 				Expect(err).NotTo(HaveOccurred(), "could not authorise console")
 
 				By("Expect a pod has been created")

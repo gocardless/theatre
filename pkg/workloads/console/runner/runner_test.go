@@ -318,7 +318,7 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 					defer cancel()
-					_, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(err.Error()).To(ContainSubstring("last phase was: 'Pending'"))
 					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
@@ -334,7 +334,7 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
-						upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+						upToDateCsl, err := runner.WaitUntilReady(ctx, csl, true)
 
 						Expect(err).ToNot(HaveOccurred())
 						Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
@@ -349,9 +349,9 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
-						_, err := runner.WaitUntilReady(ctx, csl)
+						_, err := runner.WaitUntilReady(ctx, csl, true)
 
-						Expect(err.Error()).To(ContainSubstring("console is Stopped"))
+						Expect(err.Error()).To(ContainSubstring("console is stopped"))
 						Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
 					})
 				})
@@ -366,7 +366,7 @@ var _ = Describe("Runner", func() {
 				It("Returns successfully", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
-					upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+					upToDateCsl, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(err).ToNot(HaveOccurred())
 					Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
@@ -383,10 +383,10 @@ var _ = Describe("Runner", func() {
 				It("Returns an error immediately", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
-					_, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(ctx.Err()).To(BeNil(), "context should not have timed out")
-					Expect(err.Error()).To(ContainSubstring("console is Stopped"))
+					Expect(err.Error()).To(ContainSubstring("console is stopped"))
 				})
 			})
 
@@ -398,7 +398,7 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
-					_, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(err.Error()).To(ContainSubstring("console not found"))
 					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
@@ -421,7 +421,7 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
-						upToDateCsl, err := runner.WaitUntilReady(ctx, csl)
+						upToDateCsl, err := runner.WaitUntilReady(ctx, csl, true)
 
 						Expect(err).ToNot(HaveOccurred())
 						Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
@@ -446,7 +446,7 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
-					_, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
 					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
@@ -479,7 +479,7 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
-						_, err := runner.WaitUntilReady(ctx, csl)
+						_, err := runner.WaitUntilReady(ctx, csl, true)
 
 						Expect(err).ToNot(HaveOccurred())
 					})
@@ -497,7 +497,7 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 					defer cancel()
-					_, err := runner.WaitUntilReady(ctx, csl)
+					_, err := runner.WaitUntilReady(ctx, csl, true)
 
 					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
 					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
@@ -516,7 +516,7 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
-						_, err := runner.WaitUntilReady(ctx, csl)
+						_, err := runner.WaitUntilReady(ctx, csl, true)
 
 						Expect(err).ToNot(HaveOccurred())
 
@@ -538,7 +538,7 @@ var _ = Describe("Runner", func() {
 
 						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 						defer cancel()
-						_, err := runner.WaitUntilReady(ctx, csl)
+						_, err := runner.WaitUntilReady(ctx, csl, true)
 
 						Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
 						Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")

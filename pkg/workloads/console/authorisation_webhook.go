@@ -90,7 +90,7 @@ func (c *consoleAuthorisation) Handle(ctx context.Context, req types.Request) ty
 	}
 
 	if err := update.Validate(); err != nil {
-		logger.Log("event", "authorisation.failure")
+		logger.Log("event", "authorisation.failure", "error", err)
 		return admission.ValidationResponse(false, fmt.Sprintf("the console authorisation spec is invalid: %v", err))
 	}
 

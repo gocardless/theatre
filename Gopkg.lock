@@ -955,6 +955,22 @@
   revision = "92cdcd90bf52150d9c63b7a8432ab7b10fc92385"
 
 [[projects]]
+  digest = "1:e8daf3b83dae3c3ebcd571b8c6e0b7b64b98649a9790ef106ec5d479ef060885"
+  name = "gomodules.xyz/jsonpatch"
+  packages = ["v3"]
+  pruneopts = "UT"
+  revision = "e2d6410c0299d49b797482dc765a3b49ecc8a4b6"
+  version = "v3.0.1"
+
+[[projects]]
+  digest = "1:c612fbc45ae4fd33caefd7a527c0081d1e7b55905db215cf3af13c0748e8089b"
+  name = "gomodules.xyz/orderedmap"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "07fa05d90fd03d788ed9b2f973e0c6044ebc343b"
+  version = "v0.1.0"
+
+[[projects]]
   branch = "master"
   digest = "1:b7c671f163aa6e06e8d5eed68b7b4319960054427fb6ddc24d7a44fac4e3cb95"
   name = "google.golang.org/api"
@@ -1571,6 +1587,7 @@
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
+    "gomodules.xyz/jsonpatch/v3",
     "google.golang.org/api/admin/directory/v1",
     "gopkg.in/h2non/gock.v1",
     "gopkg.in/yaml.v2",
@@ -1589,6 +1606,7 @@
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/runtime",
     "k8s.io/apimachinery/pkg/watch",
+    "k8s.io/cli-runtime/pkg/genericclioptions",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/discovery/fake",
     "k8s.io/client-go/kubernetes",

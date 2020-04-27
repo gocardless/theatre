@@ -2,20 +2,98 @@ package runner
 
 import (
 	"context"
+	"os"
 	"time"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
 	theatreFake "github.com/gocardless/theatre/pkg/client/clientset/versioned/fake"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/flowcontrol"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/common/log"
 )
+
+var (
+	logger log.Logger
+)
+
+func newTheatreKubeClient(context string) (tcs *versioned.Clientset, cs *kubernetes.Clientset, cfg *rest.Config, err error) {
+	defer func() {
+		if err != nil {
+			logger.With("link", "https://github.com/gocardless/anu#cluster-credentials").
+				Error("Failed to generate kubernetes config, have you run the setup steps?")
+		}
+	}()
+
+	config, err := newKubeConfig(context)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	theatreClient, err := NewForConfig(config)
+	if err != nil {
+		return nil, nil, nil, WrapUserError(errors.Wrap(err, "failed to create kubernetes client"))
+	}
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, nil, nil, WrapUserError(errors.Wrap(err, "failed to create kubernetes client"))
+	}
+
+	return theatreClient, kubeClient, config, nil
+}
+
+// newKubeConfig first tries using internal kubernetes configuration, and then falls back
+// to ~/.kube/config
+func newKubeConfig(context string) (*rest.Config, error) {
+	if config, err := rest.InClusterConfig(); err == nil {
+		return config, nil
+	}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{
+			CurrentContext: context,
+		},
+	).ClientConfig()
+
+	return config, WrapUserError(err)
+}
+
+// NewForConfig creates a new Clientset for the given config.
+func NewForConfig(c *rest.Config) (*Clientset, error) {
+	configShallowCopy := *c
+	if configShallowCopy.RateLimiter == nil && configShallowCopy.QPS > 0 {
+		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
+	}
+	var cs Clientset
+	var err error
+	cs.rbacV1alpha1, err = rbacv1alpha1.NewForConfig(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+	cs.workloadsV1alpha1, err = workloadsv1alpha1.NewForConfig(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	cs.DiscoveryClient, err = discovery.NewDiscoveryClientForConfig(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
+	return &cs, nil
+}
 
 var _ = Describe("Runner", func() {
 	var (
@@ -24,10 +102,23 @@ var _ = Describe("Runner", func() {
 		runner          *Runner
 		fakeConsoles    []runtime.Object
 		fakeKubeObjects []runtime.Object
+		kubeContext     = "default"
 		namespace       = "testns"
 	)
 
 	BeforeEach(func() {
+		logger = log.NewLogger(os.Stderr)
+
+		// Setup client
+		logger.Info("Connecting to Kubernetes...")
+
+		theatreClient, kubeClient, config, err := newTheatreKubeClient(kubeContext)
+
+		if err != nil {
+			return errors.Wrap(err, "failed to create Kubernetes client")
+		}
+		consoleRunner := runner.New(kubeClient, theatreClient)
+
 		// Remove test order dependency by resetting state between tests
 		fakeConsoles = []runtime.Object{}
 		fakeKubeObjects = []runtime.Object{}
@@ -37,6 +128,37 @@ var _ = Describe("Runner", func() {
 		theatreClient = theatreFake.NewSimpleClientset(fakeConsoles...)
 		kubeClient = fake.NewSimpleClientset(fakeKubeObjects...)
 		runner = New(kubeClient, theatreClient)
+	})
+
+	Describe("Create Console", func() {
+		cslTmpl := &workloadsv1alpha1.ConsoleTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-template",
+				Namespace: namespace,
+				Labels: map[string]string{
+					"release": "hello-world",
+				},
+			},
+		}
+
+		Context("When creating a new console from command", func() {
+			BeforeEach(func() {
+				fakeConsoles = []runtime.Object{cslTmpl}
+			})
+
+			opts := CreateOptions{
+				Namespace: namespace,
+				Selector:  "release=hello-world",
+				Timeout:   60 * time.Second,
+				Reason:    "testing console",
+				Command:   []string{"/bin/rails", "console"},
+				Attach:    true,
+			}
+			csl, err := runner.Create(context.TODO(), opts)
+			if err != nil {
+				_ = csl
+			}
+		})
 	})
 
 	Describe("CreateResource", func() {

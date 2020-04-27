@@ -232,9 +232,16 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	if err = r.updateStatus(authorised, job); err != nil {
+	console, err = r.generateStatusAndAuditEvents(authorised, job)
+	if err != nil {
+		return res, errors.Wrap(err, "failed to generate console status or audit events")
+	}
+
+	if err := r.createOrUpdate(console, Console, consoleDiff); err != nil {
 		return res, err
 	}
+
+	r.console = console
 
 	switch {
 	case r.console.PendingAuthorisation():
@@ -434,7 +441,7 @@ func (r *reconciler) isAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRu
 	return false, nil
 }
 
-func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
+func (r *reconciler) generateStatusAndAuditEvents(authorised bool, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
 	podList := &corev1.PodList{}
 	pod := &corev1.Pod{}
 
@@ -443,7 +450,7 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 			InNamespace(r.name.Namespace).
 			MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
 		if err := r.client.List(r.ctx, opts, podList); err != nil {
-			return err
+			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}
 	if len(podList.Items) > 0 {
@@ -453,12 +460,6 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 	}
 
 	newStatus := calculateStatus(r.console, authorised, job, pod)
-
-	// If there's no changes in status, don't unnecessarily update the object.
-	// This would cause an infinite loop!
-	if reflect.DeepEqual(r.console.Status, newStatus) {
-		return nil
-	}
 
 	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
 		auditLog(r.logger, r.console, nil, ConsolePendingAuthorisation, "Console pending authorisation")
@@ -494,14 +495,7 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 	updatedCsl := r.console.DeepCopy()
 	updatedCsl.Status = newStatus
 
-	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
-	// the CustomResourceSubresources feature will be available.
-	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return errors.Wrap(err, "failed to update status")
-	}
-
-	r.console = updatedCsl
-	return nil
+	return updatedCsl, nil
 }
 
 func calculateStatus(csl *workloadsv1alpha1.Console, authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {

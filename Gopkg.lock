@@ -709,11 +709,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:33c81bf709f084827a560e14415b1d7001a6d1d6fa4bec2cc2e60b84ecbc0e0a"
+  digest = "1:431b9a07ee6b8fc686f382ce52357d3381a94bfa2b456a6f795f6b7bee864f09"
   name = "github.com/prometheus/common"
   packages = [
     "expfmt",
     "internal/bitbucket.org/ww/goautoneg",
+    "log",
     "model",
   ]
   pruneopts = "UT"
@@ -881,11 +882,13 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d2e2664759605e148003ca729ba3a7799caf81551915c8b6cb63894ac6a6a64d"
+  digest = "1:e2b93917f81bd6eacae2fc13f0ef0c1f7cc89e81c560b158f8a139ed013a3f39"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
+    "windows/registry",
+    "windows/svc/eventlog",
   ]
   pruneopts = "UT"
   revision = "97b4c2a9293883a2418b8bba5485dc86b24460f7"
@@ -985,6 +988,14 @@
   pruneopts = "UT"
   revision = "4a4468ece617fc8205e99368fa2200e9d1fad421"
   version = "v1.3.0"
+
+[[projects]]
+  digest = "1:c06d9e11d955af78ac3bbb26bd02e01d2f61f689e1a3bce2ef6fb683ef8a7f2d"
+  name = "gopkg.in/alecthomas/kingpin.v2"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
+  version = "v2.2.6"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -1569,6 +1580,7 @@
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promauto",
     "github.com/prometheus/client_golang/prometheus/promhttp",
+    "github.com/prometheus/common/log",
     "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/admin/directory/v1",
@@ -1589,6 +1601,7 @@
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/runtime",
     "k8s.io/apimachinery/pkg/watch",
+    "k8s.io/cli-runtime/pkg/genericclioptions",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/discovery/fake",
     "k8s.io/client-go/kubernetes",

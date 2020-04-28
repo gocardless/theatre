@@ -11,6 +11,7 @@ import (
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -56,6 +57,21 @@ func newTheatreClient(config *rest.Config) theatre.Interface {
 	return client
 }
 
+// The console template is the ultimate owner of all resources created during
+// this test, so by removing it we will clean up all objects.
+func deleteConsoleTemplate(client clientset) {
+	By("Delete the console template")
+
+	policy := metav1.DeletePropagationForeground
+	err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
+		Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+
+	Eventually(func() metav1.StatusReason {
+		_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+		return apierrors.ReasonForError(err)
+	}).Should(Equal(metav1.StatusReasonNotFound), "expected console template to be deleted, it still exists")
+}
+
 type Runner struct{}
 
 func (r *Runner) Name() string {
@@ -86,6 +102,15 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				}
 				return true
 			}).Should(Equal(true))
+
+			// Because we use the same namespace for each spec, remove any templates
+			// that are left over from previous failed runs to avoid 'already exists'
+			// errors.
+			deleteConsoleTemplate(client)
+		})
+
+		AfterEach(func() {
+			deleteConsoleTemplate(client)
 		})
 
 		Specify("Happy path", func() {
@@ -101,19 +126,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			console.Spec.Command = []string{"sleep", "666"}
 			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
-
-			defer func() {
-				By("(cleanup) Delete the console template")
-				policy := metav1.DeletePropagationForeground
-				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
-					return err
-				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
-			}()
 
 			By("Expect an authorisation has been created")
 			var consoleAuthorisation *workloadsv1alpha1.ConsoleAuthorisation
@@ -239,19 +251,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					return nil
 				}).ShouldNot(BeNil())
 
-				defer func() {
-					By("(cleanup) Delete the console template")
-					policy := metav1.DeletePropagationForeground
-					err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-						Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-					Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-					Eventually(func() error {
-						_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
-						return err
-					}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
-				}()
-
 				By("Expect an authorisation has been created")
 				Eventually(func() error {
 					_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(console.Name, metav1.GetOptions{})
@@ -337,19 +336,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
-			defer func() {
-				By("(cleanup) Delete the console template")
-				policy := metav1.DeletePropagationForeground
-				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
-					return err
-				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
-			}()
-
 			By("Expect that the console is deleted when stuck pending authorisation, due to its TTL before running")
 			Eventually(func() error {
 				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
@@ -372,6 +358,10 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred(), "could not find console")
 
+			// Leave this assertion rather than using the deleteConsoleTemplate
+			// function, as it's useful to assert on any errors that are returned
+			// from the deletion operation, which deleteConsoleTemplate deliberately
+			// omits.
 			By("Delete the console template")
 			policy := metav1.DeletePropagationForeground
 			err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
@@ -395,19 +385,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			template := buildConsoleTemplate(nil, nil, false)
 			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
-
-			defer func() {
-				By("(cleanup) Delete the console template")
-				policy := metav1.DeletePropagationForeground
-				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
-				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
-
-				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
-					return err
-				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
-			}()
 
 			By("Create a console")
 			console := buildConsole()

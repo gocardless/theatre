@@ -65,7 +65,7 @@ func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner
 type LifecycleHook interface {
 	AttachingToConsole(*workloadsv1alpha1.Console) error
 	ConsoleCreated(*workloadsv1alpha1.Console) error
-	ConsoleRequiresAuthorisation(*workloadsv1alpha1.Console) error
+	ConsoleRequiresAuthorisation(*workloadsv1alpha1.Console, *workloadsv1alpha1.ConsoleAuthorisationRule) error
 	ConsoleReady(*workloadsv1alpha1.Console) error
 	TemplateFound(*workloadsv1alpha1.ConsoleTemplate) error
 }
@@ -75,7 +75,7 @@ var _ LifecycleHook = DefaultLifecycleHook{}
 type DefaultLifecycleHook struct {
 	AttachingToPodFunc               func(*workloadsv1alpha1.Console) error
 	ConsoleCreatedFunc               func(*workloadsv1alpha1.Console) error
-	ConsoleRequiresAuthorisationFunc func(*workloadsv1alpha1.Console) error
+	ConsoleRequiresAuthorisationFunc func(*workloadsv1alpha1.Console, *workloadsv1alpha1.ConsoleAuthorisationRule) error
 	ConsoleReadyFunc                 func(*workloadsv1alpha1.Console) error
 	TemplateFoundFunc                func(*workloadsv1alpha1.ConsoleTemplate) error
 }
@@ -94,9 +94,9 @@ func (d DefaultLifecycleHook) ConsoleCreated(c *workloadsv1alpha1.Console) error
 	return nil
 }
 
-func (d DefaultLifecycleHook) ConsoleRequiresAuthorisation(c *workloadsv1alpha1.Console) error {
+func (d DefaultLifecycleHook) ConsoleRequiresAuthorisation(c *workloadsv1alpha1.Console, r *workloadsv1alpha1.ConsoleAuthorisationRule) error {
 	if d.ConsoleRequiresAuthorisationFunc != nil {
-		return d.ConsoleRequiresAuthorisationFunc(c)
+		return d.ConsoleRequiresAuthorisationFunc(c, r)
 	}
 	return nil
 }
@@ -171,7 +171,11 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	// Wait for authorisation step or until ready
 	_, err = c.WaitUntilReady(ctx, *csl, false)
 	if err == consolePendingAuthorisationError {
-		opts.Hook.ConsoleRequiresAuthorisation(csl)
+		rule, err := tpl.GetAuthorisationRuleForCommand(opts.Command)
+		if err != nil {
+			return csl, fmt.Errorf("failed to get authorisation rule %w", err)
+		}
+		opts.Hook.ConsoleRequiresAuthorisation(csl, &rule)
 	} else if err != nil {
 		return nil, err
 	}

@@ -231,7 +231,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 					_, createError = consoleRunner.Create(context.TODO(), runner.CreateOptions{
 						Namespace: namespace,
-						Selector:  "",
+						Selector:  "app=acceptance",
 						Timeout:   6 * time.Second,
 						Reason:    "",
 						Command:   []string{"sleep", "666"},
@@ -460,6 +460,9 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      templateName,
 			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "acceptance",
+			},
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
 			MaxTimeoutSeconds:              60,

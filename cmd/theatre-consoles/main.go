@@ -5,6 +5,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
@@ -184,10 +185,17 @@ func LifecyclePrinter(logger kitlog.Logger) runner.LifecycleHook {
 			)
 			return nil
 		},
-		ConsoleRequiresAuthorisationFunc: func(csl *workloadsv1alpha1.Console) error {
+		ConsoleRequiresAuthorisationFunc: func(csl *workloadsv1alpha1.Console, rule *workloadsv1alpha1.ConsoleAuthorisationRule) error {
+			authoriserSlice := make([]string, 0, len(rule.ConsoleAuthorisers.Subjects))
+			for _, authoriser := range rule.ConsoleAuthorisers.Subjects {
+				authoriserSlice = append(authoriserSlice, authoriser.Kind+":"+authoriser.Name)
+			}
+			authorisers := strings.Join(authoriserSlice, ",")
+
 			logger.Log(
 				"msg", "Console requires authorisation",
-				"prompt", fmt.Sprintf("Please get a relevant user to run `theatre-consoles authorise --name %s --namespace %s --username {THEIR_USERNAME}`", csl.Name, csl.Namespace),
+				"prompt", fmt.Sprintf("Please get a user from the list of authorisers to approve by running `theatre-consoles authorise --name %s --namespace %s --username {THEIR_USERNAME}`", csl.Name, csl.Namespace),
+				"authorisers", authorisers,
 				"console", csl.Name,
 				"namespace", csl.Namespace,
 				"pod", csl.Status.PodName,

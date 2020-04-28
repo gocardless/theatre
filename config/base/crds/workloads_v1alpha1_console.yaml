@@ -69,11 +69,21 @@ spec:
             ttlSecondsAfterFinished:
               description:
                 Specifies the TTL for this Console. The Console will be
-                eligible for garbage collection ConsoleTTLSecondsAfterFinished seconds
-                after it enters the Stopped phase. This field is modeled on the TTL
-                mechanism in Kubernetes 1.12.
+                eligible for garbage collection TTLSecondsAfterFinished seconds after
+                it enters the Stopped or Destroyed phase. This field is modeled on
+                the TTL mechanism in Kubernetes 1.12.
               format: int32
               maximum: 604800
+              minimum: 0
+              type: integer
+            ttlSecondsBeforeRunning:
+              description:
+                Specifies the TTL before running for this Console. The
+                Console will be eligible for garbage collection TTLSecondsBeforeRunning
+                seconds if it has not progressed to the Running phase. This field
+                is modeled on the TTL mechanism in Kubernetes 1.12.
+              format: int32
+              maximum: 86400
               minimum: 0
               type: integer
             user:

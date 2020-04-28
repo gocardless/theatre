@@ -116,10 +116,10 @@ spec:
             defaultTtlSecondsAfterFinished:
               description:
                 Specifies the TTL for any Console created with this template.
-                If set, the Console will be eligible for garbage collection ConsoleTTLSecondsAfterFinished
-                seconds after it enters the Stopped phase. If not set, this value
-                defaults to 24 hours. This field is modeled closely on the TTL mechanism
-                in Kubernetes 1.12.
+                If set, the Console will be eligible for garbage collection DefaultTTLSecondsAfterFinished
+                seconds after it enters the Stopped or Destroyed phase. If not set,
+                this value defaults to 24 hours. This field is modeled closely on
+                the TTL mechanism in Kubernetes 1.12.
               format: int32
               maximum: 604800
               minimum: 0
@@ -134,6 +134,17 @@ spec:
               type: integer
             template:
               type: object
+            ttlSecondsBeforeRunning:
+              description:
+                Specifies the TTL before running for any Console created
+                with this template. If set, the Console will be eligible for garbage
+                collection TTLSecondsBeforeRunning seconds if it has not progressed
+                to the Running phase. If not set, this value defaults to 60 minutes.
+                This field is modeled on the TTL mechanism in Kubernetes 1.12.
+              format: int32
+              maximum: 86400
+              minimum: 0
+              type: integer
           required:
             - template
             - defaultTimeoutSeconds

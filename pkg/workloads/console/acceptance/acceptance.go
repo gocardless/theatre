@@ -90,8 +90,9 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 		Specify("Happy path", func() {
 			By("Create a console template")
-			var ttl int32 = 10
-			template := buildConsoleTemplate(&ttl, true)
+			var TTLBeforeRunning int32 = 60
+			var TTLAfterFinished int32 = 10
+			template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
 			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
@@ -178,7 +179,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred(), "could not find job")
 
-			By("Expect that the console is deleted shortly after stopping, due to its TTL")
+			By("Expect that the console is deleted shortly after stopping, due to its TTL after running")
 			Eventually(func() error {
 				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
 				return err
@@ -202,10 +203,12 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			BeforeEach(func() {
 				consoleRunner = runner.New(client, newTheatreClient(config))
 			})
+
 			Specify("Happy path", func() {
 				By("Create a console template")
-				var ttl int32 = 10
-				template := buildConsoleTemplate(&ttl, true)
+				var TTLBeforeRunning int32 = 60
+				var TTLAfterFinished int32 = 10
+				template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
 				template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 				Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
@@ -320,9 +323,43 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			})
 		})
 
+		Specify("Deleted if not authorised within TTLBeforeRunning", func() {
+			By("Create a console template")
+			var TTLBeforeRunning int32 = 10
+			var TTLAfterFinished int32 = 10
+			template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
+			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			Expect(err).NotTo(HaveOccurred(), "could not create console template")
+
+			By("Create a console")
+			console := buildConsole()
+			console.Spec.Command = []string{"sleep", "666"}
+			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			Expect(err).NotTo(HaveOccurred(), "could not create console")
+
+			defer func() {
+				By("(cleanup) Delete the console template")
+				policy := metav1.DeletePropagationForeground
+				err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
+					Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+				Expect(err).NotTo(HaveOccurred(), "could not delete console template")
+
+				Eventually(func() error {
+					_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+					return err
+				}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
+			}()
+
+			By("Expect that the console is deleted when stuck pending authorisation, due to its TTL before running")
+			Eventually(func() error {
+				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				return err
+			}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
+		})
+
 		Specify("Deleting a console template", func() {
 			By("Create a console template")
-			template := buildConsoleTemplate(nil, false)
+			template := buildConsoleTemplate(nil, nil, false)
 			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
@@ -355,7 +392,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 		Specify("Deleting a job", func() {
 			By("Create a console template")
-			template := buildConsoleTemplate(nil, false)
+			template := buildConsoleTemplate(nil, nil, false)
 			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
@@ -404,7 +441,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	})
 }
 
-func buildConsoleTemplate(ttl *int32, authorised bool) *workloadsv1alpha1.ConsoleTemplate {
+func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised bool) *workloadsv1alpha1.ConsoleTemplate {
 	var (
 		defaultAuthorisation *workloadsv1alpha1.ConsoleAuthorisers
 		authorisationRules   []workloadsv1alpha1.ConsoleAuthorisationRule
@@ -446,7 +483,8 @@ func buildConsoleTemplate(ttl *int32, authorised bool) *workloadsv1alpha1.Consol
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
 			MaxTimeoutSeconds:              60,
-			DefaultTTLSecondsAfterFinished: ttl,
+			DefaultTTLSecondsBeforeRunning: TTLBeforeRunning,
+			DefaultTTLSecondsAfterFinished: TTLAfterFinished,
 			AdditionalAttachSubjects:       []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
 			AuthorisationRules:             authorisationRules,
 			DefaultAuthorisationRule:       defaultAuthorisation,

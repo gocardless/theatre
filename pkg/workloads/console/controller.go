@@ -65,7 +65,8 @@ const (
 	Role                 = "role"
 	DirectoryRoleBinding = "directoryrolebinding"
 
-	DefaultTTL = 24 * time.Hour
+	DefaultTTLBeforeRunning = 1 * time.Hour
+	DefaultTTLAfterFinished = 24 * time.Hour
 )
 
 type IgnoreCreatePredicate struct {
@@ -159,24 +160,39 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	if err := r.setConsoleOwner(tpl); err != nil {
+	console, err := setConsoleOwner(r.console, tpl)
+	if err != nil {
+		return res, errors.Wrap(err, "failed to set controller reference on console object")
+	}
+
+	console = setConsoleTTLs(console, tpl)
+
+	console = r.setConsoleTimeout(console, tpl)
+
+	// We call this function here to ensure that we perform an update on the
+	// console object *if* one is needed; i.e. it defends against not correctly
+	// wrapping an `Update()` call in a conditional. It also makes the console
+	// object updates more consistent with the other resources we maintain in this
+	// control loop.
+	//
+	// This will in turn call the recutil.CreateOrUpdate function, which _could_
+	// be considered a slight impedance mismatch in this context: That function
+	// will go and retrieve the latest version of the object from the Kubernetes
+	// API before performing the update, but this isn't strictly necessary here
+	// because we've already been provided a fresh version of the object when
+	// entering the reconciliation loop.
+	// For the moment though, the simplification and safety outweighs the cost of
+	// the extra API call.
+	if err := r.createOrUpdate(console, Console, consoleDiff); err != nil {
 		return res, err
 	}
+
+	r.console = console
 
 	// Get the command for the console to run
 	var command []string
 	if command, err = r.getCommand(tpl); err != nil {
 		return res, errors.Wrap(err, "neither the console or template have a command to evaluate")
-	}
-
-	// Set the TTL of the console
-	if err := r.setConsoleTTL(tpl); err != nil {
-		return res, err
-	}
-
-	// Clamp the console timeout
-	if err := r.clampTimeout(tpl); err != nil {
-		return res, err
 	}
 
 	// Create an authorisation object, if required.
@@ -216,12 +232,27 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	if err = r.updateStatus(authorised, job); err != nil {
+	console, err = r.generateStatusAndAuditEvents(authorised, job)
+	if err != nil {
+		return res, errors.Wrap(err, "failed to generate console status or audit events")
+	}
+
+	if err := r.createOrUpdate(console, Console, consoleDiff); err != nil {
 		return res, err
 	}
 
+	r.console = console
+
 	switch {
+	case r.console.PendingAuthorisation():
+		// Requeue for when the console has reached its before-running TTL, so that
+		// it can be deleted if it has not yet been authorised by that point.
+		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
 	case r.console.Pending():
+		// Requeue every second while job has been created but there is not yet a
+		// running pod: we won't receive an event via the job watcher when this
+		// event happens, so this is a cheaper alternative to watching the
+		// pods resource and triggering reconciliations via that.
 		res = requeueAfterInterval(r.logger, time.Second)
 	case r.console.Running():
 		// Create or update the role
@@ -242,11 +273,9 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 			return res, err
 		}
-
-	case !r.console.Active():
-		// Requeue for when the console needs to be deleted
-		// In the future we could allow this to be configured in the template
-		res = requeueAfterInterval(r.logger, r.console.TTLDuration())
+	case r.console.PostRunning():
+		// Requeue for when the console has reached its after finished TTL so it can be deleted
+		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
 	}
 
 	if r.console.EligibleForGC() {
@@ -298,48 +327,47 @@ func (r *reconciler) getJob() (*batchv1.Job, error) {
 	return job, r.client.Get(r.ctx, name, job)
 }
 
-func (r *reconciler) setConsoleOwner(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
-	updatedCsl := r.console.DeepCopy()
+func setConsoleOwner(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate) (*workloadsv1alpha1.Console, error) {
+	updatedCsl := console.DeepCopy()
 	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
-		return errors.Wrap(err, "failed to set controller reference")
+		return nil, errors.Wrap(err, "failed to set controller reference")
 	}
 
-	if reflect.DeepEqual(r.console.ObjectMeta, updatedCsl.ObjectMeta) {
-		return nil
-	}
-	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return errors.Wrap(err, "failed to update controller reference")
-	}
-
-	r.console = updatedCsl
-	return nil
+	return updatedCsl, nil
 }
 
-func (r *reconciler) setConsoleTTL(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) error {
-	if r.console.Spec.TTLSecondsAfterFinished != nil {
-		return nil
+func setConsoleTTLs(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.Console {
+	defaultTTLSecondsBeforeRunning := int32(DefaultTTLBeforeRunning.Seconds())
+	defaultTTLSecondsAfterFinished := int32(DefaultTTLAfterFinished.Seconds())
+
+	updatedCsl := console.DeepCopy()
+
+	if console.Spec.TTLSecondsBeforeRunning != nil {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = console.Spec.TTLSecondsBeforeRunning
+	} else if consoleTemplate.Spec.DefaultTTLSecondsBeforeRunning != nil {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = consoleTemplate.Spec.DefaultTTLSecondsBeforeRunning
+	} else {
+		updatedCsl.Spec.TTLSecondsBeforeRunning = &defaultTTLSecondsBeforeRunning
 	}
 
-	updatedCsl := r.console.DeepCopy()
-	defaultTTL := int32(DefaultTTL.Seconds())
-
-	if consoleTemplate.Spec.DefaultTTLSecondsAfterFinished != nil {
+	if console.Spec.TTLSecondsAfterFinished != nil {
+		updatedCsl.Spec.TTLSecondsAfterFinished = console.Spec.TTLSecondsAfterFinished
+	} else if consoleTemplate.Spec.DefaultTTLSecondsAfterFinished != nil {
 		updatedCsl.Spec.TTLSecondsAfterFinished = consoleTemplate.Spec.DefaultTTLSecondsAfterFinished
 	} else {
-		updatedCsl.Spec.TTLSecondsAfterFinished = &defaultTTL
+		updatedCsl.Spec.TTLSecondsAfterFinished = &defaultTTLSecondsAfterFinished
 	}
 
-	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return errors.Wrap(err, "failed to set TTL")
-	}
-
-	r.console = updatedCsl
-	return nil
+	return updatedCsl
 }
 
 func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, diffFunc recutil.DiffFunc) error {
-	if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
-		return err
+	// If operating on the console itself, don't attempt to set the controller
+	// reference, as this isn't valid.
+	if kind != Console {
+		if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
+			return err
+		}
 	}
 
 	outcome, err := recutil.CreateOrUpdate(r.ctx, r.client, expected, diffFunc)
@@ -373,35 +401,27 @@ func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, d
 }
 
 // Ensure the console timeout is between [0, template.MaxTimeoutSeconds]
-func (r *reconciler) clampTimeout(template *workloadsv1alpha1.ConsoleTemplate) error {
+func (r *reconciler) setConsoleTimeout(console *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.Console {
 	var timeout int
 	max := template.Spec.MaxTimeoutSeconds
 
 	switch {
-	case r.console.Spec.TimeoutSeconds < 1:
+	case console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
-	case r.console.Spec.TimeoutSeconds > max:
+	case console.Spec.TimeoutSeconds > max:
 		r.logger.Log(
 			"event", EventInvalidSpecification,
 			"error", fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max),
 		)
 		timeout = max
 	default:
-		timeout = r.console.Spec.TimeoutSeconds
+		timeout = console.Spec.TimeoutSeconds
 	}
 
-	if timeout == r.console.Spec.TimeoutSeconds {
-		return nil
-	}
-
-	updatedCsl := r.console.DeepCopy()
+	updatedCsl := console.DeepCopy()
 	updatedCsl.Spec.TimeoutSeconds = timeout
-	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return err
-	}
 
-	r.console = updatedCsl
-	return nil
+	return updatedCsl
 }
 
 func (r *reconciler) isAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule) (bool, error) {
@@ -421,7 +441,7 @@ func (r *reconciler) isAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRu
 	return false, nil
 }
 
-func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
+func (r *reconciler) generateStatusAndAuditEvents(authorised bool, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
 	podList := &corev1.PodList{}
 	pod := &corev1.Pod{}
 
@@ -430,7 +450,7 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 			InNamespace(r.name.Namespace).
 			MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
 		if err := r.client.List(r.ctx, opts, podList); err != nil {
-			return err
+			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}
 	if len(podList.Items) > 0 {
@@ -440,12 +460,6 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 	}
 
 	newStatus := calculateStatus(r.console, authorised, job, pod)
-
-	// If there's no changes in status, don't unnecessarily update the object.
-	// This would cause an infinite loop!
-	if reflect.DeepEqual(r.console.Status, newStatus) {
-		return nil
-	}
 
 	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
 		auditLog(r.logger, r.console, nil, ConsolePendingAuthorisation, "Console pending authorisation")
@@ -481,14 +495,7 @@ func (r *reconciler) updateStatus(authorised bool, job *batchv1.Job) error {
 	updatedCsl := r.console.DeepCopy()
 	updatedCsl.Status = newStatus
 
-	// Run a full Update, rather than UpdateStatus, as we can't guarantee that
-	// the CustomResourceSubresources feature will be available.
-	if err := r.client.Update(r.ctx, updatedCsl); err != nil {
-		return errors.Wrap(err, "failed to update status")
-	}
-
-	r.console = updatedCsl
-	return nil
+	return updatedCsl, nil
 }
 
 func calculateStatus(csl *workloadsv1alpha1.Console, authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {
@@ -750,6 +757,33 @@ func authorisationDiff(expectedObj runtime.Object, existingObj runtime.Object) r
 
 	if !reflect.DeepEqual(expected.Spec.ConsoleRef, existing.Spec.ConsoleRef) {
 		existing.Spec.ConsoleRef = expected.Spec.ConsoleRef
+		operation = recutil.Update
+	}
+
+	return operation
+}
+
+// consoleDiff is a reconcile.DiffFunc for Consoles
+func consoleDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Outcome {
+	expected := expectedObj.(*workloadsv1alpha1.Console)
+	existing := existingObj.(*workloadsv1alpha1.Console)
+	operation := recutil.None
+
+	// Because this controller is responsible for the Console object the diff
+	// calculation is simple: if any of the spec or status fields, or the
+	// controller reference, have changed then perform an update.
+	if !reflect.DeepEqual(expected.ObjectMeta.OwnerReferences, existing.ObjectMeta.OwnerReferences) {
+		existing.ObjectMeta.OwnerReferences = expected.ObjectMeta.OwnerReferences
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Spec, existing.Spec) {
+		existing.Spec = expected.Spec
+		operation = recutil.Update
+	}
+
+	if !reflect.DeepEqual(expected.Status, existing.Status) {
+		existing.Status = expected.Status
 		operation = recutil.Update
 	}
 

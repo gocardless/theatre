@@ -215,6 +215,11 @@ func (in *ConsoleList) DeepCopyObject() runtime.Object {
 func (in *ConsoleSpec) DeepCopyInto(out *ConsoleSpec) {
 	*out = *in
 	out.ConsoleTemplateRef = in.ConsoleTemplateRef
+	if in.TTLSecondsBeforeRunning != nil {
+		in, out := &in.TTLSecondsBeforeRunning, &out.TTLSecondsBeforeRunning
+		*out = new(int32)
+		**out = **in
+	}
 	if in.TTLSecondsAfterFinished != nil {
 		in, out := &in.TTLSecondsAfterFinished, &out.TTLSecondsAfterFinished
 		*out = new(int32)
@@ -330,6 +335,11 @@ func (in *ConsoleTemplateSpec) DeepCopyInto(out *ConsoleTemplateSpec) {
 		in, out := &in.AdditionalAttachSubjects, &out.AdditionalAttachSubjects
 		*out = make([]v1.Subject, len(*in))
 		copy(*out, *in)
+	}
+	if in.DefaultTTLSecondsBeforeRunning != nil {
+		in, out := &in.DefaultTTLSecondsBeforeRunning, &out.DefaultTTLSecondsBeforeRunning
+		*out = new(int32)
+		**out = **in
 	}
 	if in.DefaultTTLSecondsAfterFinished != nil {
 		in, out := &in.DefaultTTLSecondsAfterFinished, &out.DefaultTTLSecondsAfterFinished

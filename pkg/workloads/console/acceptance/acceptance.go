@@ -226,6 +226,9 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Create a console")
 				go func() {
+					// https://onsi.github.io/ginkgo/#marking-specs-as-failed
+					defer GinkgoRecover()
+
 					_, createError = consoleRunner.Create(context.TODO(), runner.CreateOptions{
 						Namespace: namespace,
 						Selector:  "",

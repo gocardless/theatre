@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -196,7 +197,11 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	// Create an authorisation object, if required.
-	var authRule *workloadsv1alpha1.ConsoleAuthorisationRule
+	var (
+		authRule      *workloadsv1alpha1.ConsoleAuthorisationRule
+		authorisation *workloadsv1alpha1.ConsoleAuthorisation
+	)
+
 	if tpl.HasAuthorisationRules() {
 		rule, err := tpl.GetAuthorisationRuleForCommand(command)
 		if err != nil {
@@ -206,6 +211,11 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		authRule = &rule
 		if err := r.createAuthorisationObjects(authRule.Subjects); err != nil {
 			return res, err
+		}
+
+		authorisation, err = r.getConsoleAuthorisation()
+		if err != nil {
+			return res, errors.Wrap(err, "failed to retrieve console authorisation")
 		}
 	}
 
@@ -219,10 +229,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// creation or when a job already exists, i.e. if we've already passed the
 	// Creating phase, but the job no longer exists (it's been destroyed external
 	// to this controller) then don't recreate it.
-	authorised, err := r.isAuthorised(authRule)
-	if err != nil {
-		return res, err
-	}
+	authorised := isConsoleAuthorised(authRule, authorisation)
 	if (authorised && r.console.PendingJob()) || job != nil {
 		job = r.buildJob(tpl)
 		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
@@ -232,7 +239,15 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
-	console, err = r.generateStatusAndAuditEvents(authorised, job)
+	statusCtx := consoleStatusContext{
+		Command:           command,
+		IsAuthorised:      authorised,
+		Authorisation:     authorisation,
+		AuthorisationRule: authRule,
+		Job:               job,
+	}
+
+	console, err = r.generateStatusAndAuditEvents(statusCtx)
 	if err != nil {
 		return res, errors.Wrap(err, "failed to generate console status or audit events")
 	}
@@ -424,32 +439,44 @@ func (r *reconciler) setConsoleTimeout(console *workloadsv1alpha1.Console, templ
 	return updatedCsl
 }
 
-func (r *reconciler) isAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule) (bool, error) {
+func isConsoleAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule, auth *workloadsv1alpha1.ConsoleAuthorisation) bool {
 	if rule == nil {
-		return true, nil
+		return true
 	}
-
-	auth, err := r.getConsoleAuthorisation()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to retrieve console authorisation")
+	if auth == nil {
+		return false
 	}
 
 	if len(auth.Spec.Authorisations) >= rule.ConsoleAuthorisers.AuthorisationsRequired {
-		return true, nil
+		return true
 	}
 
-	return false, nil
+	return false
 }
 
-func (r *reconciler) generateStatusAndAuditEvents(authorised bool, job *batchv1.Job) (*workloadsv1alpha1.Console, error) {
-	podList := &corev1.PodList{}
-	pod := &corev1.Pod{}
+// consoleStatusContext is a wrapper for the objects required to calculate the
+// status of a console and generate audit log events - primarily to help keep
+// function signatures concise.
+type consoleStatusContext struct {
+	Command           []string
+	IsAuthorised      bool
+	Authorisation     *workloadsv1alpha1.ConsoleAuthorisation
+	AuthorisationRule *workloadsv1alpha1.ConsoleAuthorisationRule
+	Pod               *corev1.Pod
+	Job               *batchv1.Job
+}
 
-	if job != nil {
+func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
+	var (
+		pod     *corev1.Pod
+		podList corev1.PodList
+	)
+
+	if statusCtx.Job != nil {
 		opts := client.
 			InNamespace(r.name.Namespace).
-			MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
-		if err := r.client.List(r.ctx, opts, podList); err != nil {
+			MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
+		if err := r.client.List(r.ctx, opts, &podList); err != nil {
 			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}
@@ -459,37 +486,40 @@ func (r *reconciler) generateStatusAndAuditEvents(authorised bool, job *batchv1.
 		pod = nil
 	}
 
-	newStatus := calculateStatus(r.console, authorised, job, pod)
+	statusCtx.Pod = pod
+
+	logger := getAuditLogger(r.logger, r.console, statusCtx)
+	newStatus := calculateStatus(r.console, statusCtx)
 
 	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
-		auditLog(r.logger, r.console, nil, ConsolePendingAuthorisation, "Console pending authorisation")
+		logger.Log("event", ConsolePendingAuthorisation, "msg", "Console pending authorisation")
 	}
 
 	// Console phase from Pending Authorisation
 	if r.console.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
-		auditLog(r.logger, r.console, nil, ConsoleAuthorised, "Console authorised")
+		logger.Log("event", ConsoleAuthorised, "msg", "Console authorised")
 	}
 
 	// Console phase from Pending to Running
 	if r.console.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
-		auditLog(r.logger, r.console, nil, ConsoleStarted, "Console started")
+		logger.Log("event", ConsoleStarted, "msg", "Console started")
 	}
 
 	// Console phase from Running to Stopped
-	if newStatus.CompletionTime != r.console.Status.CompletionTime && !job.Status.StartTime.IsZero() {
-		duration := job.Status.CompletionTime.Sub(job.Status.StartTime.Time).Seconds()
-		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended")
+	if newStatus.CompletionTime != r.console.Status.CompletionTime && !statusCtx.Job.Status.StartTime.IsZero() {
+		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
+		logger.Log("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
 	}
 
 	// Console phase from Running to Stopped without CompletionTime (expire)
 	if r.console.Running() &&
 		newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
-		duration := r.console.Status.ExpiryTime.Sub(job.Status.StartTime.Time).Seconds()
-		auditLog(r.logger, r.console, &duration, ConsoleEnded, "Console ended after reaching expiration time")
+		duration := r.console.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
+		logger.Log("event", ConsoleEnded, "msg", "Console ended after reaching expiration time", "duration", duration)
 	}
 
 	if !r.console.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
-		auditLog(r.logger, r.console, nil, ConsoleDestroyed, "Console destroyed")
+		logger.Log("event", ConsoleDestroyed, "msg", "Console destroyed")
 	}
 
 	updatedCsl := r.console.DeepCopy()
@@ -498,51 +528,51 @@ func (r *reconciler) generateStatusAndAuditEvents(authorised bool, job *batchv1.
 	return updatedCsl, nil
 }
 
-func calculateStatus(csl *workloadsv1alpha1.Console, authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsoleStatus {
+func calculateStatus(csl *workloadsv1alpha1.Console, statusCtx consoleStatusContext) workloadsv1alpha1.ConsoleStatus {
 	newStatus := csl.DeepCopy().Status
 
-	if job != nil {
+	if statusCtx.Job != nil {
 		// We want to give the console session *at least* the time specified in the
 		// timeout, therefore base the expiry time on the job creation time, rather
 		// than the console creation time, to take into account any delays in
 		// reconciling the console object.
 		// TODO: We may actually want to use a base of when the Pod entered the
 		// Running phase, as image pull time could be significant in some cases.
-		jobCreationTime := job.ObjectMeta.CreationTimestamp.Time
+		jobCreationTime := statusCtx.Job.ObjectMeta.CreationTimestamp.Time
 		expiryTime := metav1.NewTime(
 			jobCreationTime.Add(time.Second * time.Duration(csl.Spec.TimeoutSeconds)),
 		)
 		newStatus.ExpiryTime = &expiryTime
-		newStatus.CompletionTime = job.Status.CompletionTime
+		newStatus.CompletionTime = statusCtx.Job.Status.CompletionTime
 	}
-	if pod != nil {
-		newStatus.PodName = pod.ObjectMeta.Name
+	if statusCtx.Pod != nil {
+		newStatus.PodName = statusCtx.Pod.ObjectMeta.Name
 	}
 
-	newStatus.Phase = calculatePhase(authorised, job, pod)
+	newStatus.Phase = calculatePhase(statusCtx)
 
 	return newStatus
 }
 
-func calculatePhase(authorised bool, job *batchv1.Job, pod *corev1.Pod) workloadsv1alpha1.ConsolePhase {
-	if !authorised {
+func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePhase {
+	if !statusCtx.IsAuthorised {
 		return workloadsv1alpha1.ConsolePendingAuthorisation
 	}
 
-	if job == nil {
+	if statusCtx.Job == nil {
 		return workloadsv1alpha1.ConsoleDestroyed
 	}
 
 	// Currently a job can only have two conditions: Complete and Failed
 	// Both indicate that the console has stopped
-	for _, c := range job.Status.Conditions {
+	for _, c := range statusCtx.Job.Status.Conditions {
 		if c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed {
 			return workloadsv1alpha1.ConsoleStopped
 		}
 	}
 
 	// If the pod exists and is running, then the console is running
-	if pod != nil && pod.Status.Phase == corev1.PodRunning {
+	if statusCtx.Pod != nil && statusCtx.Pod.Status.Phase == corev1.PodRunning {
 		return workloadsv1alpha1.ConsoleRunning
 	}
 
@@ -830,20 +860,54 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 	return operation
 }
 
-// auditLog decorated a logger for for audit purposes
-func auditLog(logger kitlog.Logger, c *workloadsv1alpha1.Console, duration *float64, event string, msg string) {
+// getAuditLogger provides a decorated logger for audit purposes
+func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) kitlog.Logger {
 	loggerCtx := logging.WithNoRecord(logger)
-	loggerCtx = kitlog.With(loggerCtx, "event", event, "kind", Console,
+
+	// Append any label-based keys before doing anything else.
+	// This ensures that if there's duplicate keys (e.g. a `name` label on the
+	// console) then we won't clobber the keys which we explicitly set below with
+	// the values of those in the console labels, when eventually parsing the log
+	// entry.
+	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
+
+	cmdString, _ := json.Marshal(statusCtx.Command)
+	requiresAuth := statusCtx.AuthorisationRule != nil && statusCtx.AuthorisationRule.AuthorisationsRequired > 0
+
+	loggerCtx = kitlog.With(
+		loggerCtx,
+		"kind", Console,
 		"console_name", c.Name,
 		"console_user", c.Spec.User,
-		"reason", c.Spec.Reason)
 
-	if duration != nil {
-		loggerCtx = kitlog.With(loggerCtx, "duration", duration)
+		"console_requires_authorisation", requiresAuth,
+		// Note that a console that does not require authorisation is considered
+		// authorised by default.
+		"console_is_authorised", statusCtx.IsAuthorised,
+		"command", cmdString,
+		"reason", c.Spec.Reason,
+	)
+
+	if statusCtx.Pod != nil {
+		loggerCtx = kitlog.With(loggerCtx, "console_pod_name", statusCtx.Pod.Name)
 	}
 
-	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
-	loggerCtx.Log("msg", msg)
+	if statusCtx.AuthorisationRule != nil {
+		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_rule_name", statusCtx.AuthorisationRule.Name)
+		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired)
+	}
+
+	if statusCtx.Authorisation != nil {
+		var subjectNames []string
+		for _, subject := range statusCtx.Authorisation.Spec.Authorisations {
+			subjectNames = append(subjectNames, subject.Name)
+		}
+
+		authorisers, _ := json.Marshal(subjectNames)
+		loggerCtx = kitlog.With(loggerCtx, "console_authorisers", authorisers)
+	}
+
+	return loggerCtx
 }
 
 // Ensure that the job name (after suffixing with `-console`) does not exceed 63

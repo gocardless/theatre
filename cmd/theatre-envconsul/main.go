@@ -31,7 +31,7 @@ import (
 var logger kitlog.Logger
 
 var (
-	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(Version)
+	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(cmd.VersionStanza())
 
 	commonOpts                     = cmd.NewCommonOptions(app)
 	defaultInstallPath             = "/var/theatre-vault"
@@ -52,9 +52,6 @@ var (
 
 	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
 	base64ExecCommand = base64Exec.Arg("base64-command", "Command to execute").Required().Strings()
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {

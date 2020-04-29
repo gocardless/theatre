@@ -5,6 +5,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"os"
+	"runtime"
 
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
@@ -68,4 +69,19 @@ func (opt *commonOptions) ListenAndServeMetrics(logger kitlog.Logger) {
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(fmt.Sprintf("%s:%v", opt.MetricAddress, opt.MetricPort), nil)
+}
+
+// Set via compiler flags
+var (
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+	GoVersion = runtime.Version()
+)
+
+func VersionStanza() string {
+	return fmt.Sprintf(
+		"Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
+	)
 }

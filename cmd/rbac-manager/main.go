@@ -24,18 +24,15 @@ import (
 )
 
 var (
-	app     = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(Version)
-	refresh = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
+	app = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(cmd.VersionStanza())
 
+	refresh    = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 
 	// All GoogleGroup related settings
 	googleEnabled  = app.Flag("google", "Enable GoogleGroup subject Kind").Default("false").Bool()
 	googleSubject  = app.Flag("google-subject", "Service account subject").Default("robot-admin@gocardless.com").String()
 	googleCacheTTL = app.Flag("google-refresh", "Cache TTL for Google directory operations").Default("5m").Duration()
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {

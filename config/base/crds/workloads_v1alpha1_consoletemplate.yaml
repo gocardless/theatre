@@ -124,17 +124,7 @@ spec:
               maximum: 604800
               minimum: 0
               type: integer
-            maxTimeoutSeconds:
-              description:
-                Maximum time, in seconds, that a Console can be created
-                for. Maximum value of 1 week.
-              format: int64
-              maximum: 604800
-              minimum: 0
-              type: integer
-            template:
-              type: object
-            ttlSecondsBeforeRunning:
+            defaultTtlSecondsBeforeRunning:
               description:
                 Specifies the TTL before running for any Console created
                 with this template. If set, the Console will be eligible for garbage
@@ -145,6 +135,16 @@ spec:
               maximum: 86400
               minimum: 0
               type: integer
+            maxTimeoutSeconds:
+              description:
+                Maximum time, in seconds, that a Console can be created
+                for. Maximum value of 1 week.
+              format: int64
+              maximum: 604800
+              minimum: 0
+              type: integer
+            template:
+              type: object
           required:
             - template
             - defaultTimeoutSeconds

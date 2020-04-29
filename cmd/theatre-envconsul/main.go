@@ -11,6 +11,7 @@ import (
 	"os"
 	execpkg "os/exec"
 	"path"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -30,8 +31,18 @@ import (
 
 var logger kitlog.Logger
 
+// Set by goreleaser
 var (
-	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(Version)
+	// Version is set at compile time
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+	BuiltBy   = "unknown"
+	GoVersion = runtime.Version()
+)
+
+var (
+	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(versionStanza())
 
 	commonOpts                     = cmd.NewCommonOptions(app)
 	defaultInstallPath             = "/var/theatre-vault"
@@ -52,9 +63,6 @@ var (
 
 	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
 	base64ExecCommand = base64Exec.Arg("base64-command", "Command to execute").Required().Strings()
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {
@@ -442,4 +450,11 @@ type envconsulExec struct {
 type envconsulSecret struct {
 	Format string `json:"format"`
 	Path   string `json:"path"`
+}
+
+func versionStanza() string {
+	return fmt.Sprintf(
+		"Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
+	)
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/alecthomas/kingpin"
 
@@ -20,16 +22,23 @@ import (
 	"github.com/gocardless/theatre/pkg/workloads/priority"
 )
 
+// Set by goreleaser
 var (
-	app         = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(Version)
+	// Version is set at compile time
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+	BuiltBy   = "unknown"
+	GoVersion = runtime.Version()
+)
+
+var (
+	app         = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(versionStanza())
 	webhookName = app.Flag("webhook-name", "Kubernetes mutating webhook name").Default("theatre-workloads").String()
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {
@@ -107,4 +116,11 @@ func main() {
 	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
+}
+
+func versionStanza() string {
+	return fmt.Sprintf(
+		"Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
+	)
 }

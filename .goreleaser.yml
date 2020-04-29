@@ -1,0 +1,74 @@
+# View goreleaser docs for configuration settings
+# https://goreleaser.com
+
+---
+project_name: theatre
+
+builds:
+  - binary: theatre-consoles
+    id: "theatre-consoles"
+    main: cmd/theatre-consoles/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X main.Version={{.Version}}
+      -X main.Commit={{.Commit}}
+      -X main.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0
+
+  - binary: theatre-envconsul
+    id: "theatre-envconsul"
+    main: cmd/theatre-envconsul/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X main.Version={{.Version}}
+      -X main.Commit={{.Commit}}
+      -X main.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0
+
+  - binary: vault-manager
+    id: "vault-manager"
+    main: cmd/vault-manager/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X main.Version={{.Version}}
+      -X main.Commit={{.Commit}}
+      -X main.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0
+
+  - binary: workloads-manager
+    id: "workloads-manager"
+    main: cmd/workloads-manager/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X main.Version={{.Version}}
+      -X main.Commit={{.Commit}}
+      -X main.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0

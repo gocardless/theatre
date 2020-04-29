@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/alecthomas/kingpin"
 
@@ -20,8 +22,18 @@ import (
 	"github.com/gocardless/theatre/pkg/vault/envconsul"
 )
 
+// Set by goreleaser
 var (
-	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(Version)
+	// Version is set at compile time
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+	BuiltBy   = "unknown"
+	GoVersion = runtime.Version()
+)
+
+var (
+	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(versionStanza())
 	namespace               = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName             = app.Flag("service-name", "Name of service for webhook").Default("theatre-vault-manager").String()
 	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
@@ -45,9 +57,6 @@ var (
 	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {
@@ -115,4 +124,11 @@ func main() {
 	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
+}
+
+func versionStanza() string {
+	return fmt.Sprintf(
+		"Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
+	)
 }

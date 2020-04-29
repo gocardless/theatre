@@ -5,6 +5,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/alecthomas/kingpin"
@@ -23,8 +24,18 @@ import (
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 )
 
+// Set by goreleaser
 var (
-	cli        = kingpin.New("consoles", "Manages theatre consoles")
+	// Version is set at compile time
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+	BuiltBy   = "unknown"
+	GoVersion = runtime.Version()
+)
+
+var (
+	cli        = kingpin.New("consoles", "Manages theatre consoles").Version(versionStanza())
 	cliContext = cli.Flag("context", "Kubernetes context to target. If not provided defaults to current context").
 			Short('c').
 			Envar("KUBERNETES_CONTEXT").
@@ -237,4 +248,11 @@ func newKubeConfig(kctx string) (*rest.Config, error) {
 	).ClientConfig()
 
 	return config, err
+}
+
+func versionStanza() string {
+	return fmt.Sprintf(
+		"Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
+	)
 }

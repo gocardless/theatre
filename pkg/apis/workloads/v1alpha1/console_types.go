@@ -134,7 +134,7 @@ type ConsoleTemplateSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=86400
-	DefaultTTLSecondsBeforeRunning *int32 `json:"ttlSecondsBeforeRunning,omitempty"`
+	DefaultTTLSecondsBeforeRunning *int32 `json:"defaultTtlSecondsBeforeRunning,omitempty"`
 
 	// Specifies the TTL for any Console created with this template. If set, the
 	// Console will be eligible for garbage collection

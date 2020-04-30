@@ -9,6 +9,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -81,6 +82,9 @@ var _ = Describe("Console", func() {
 			integration.MustWebhook(console.NewTemplateValidationWebhook(logger, mgr)),
 		)
 
+		// Set a high default in case the tests are slow to execute
+		defaultTTLSecondsBeforeRunning := int32(10)
+
 		consoleTemplate = &workloadsv1alpha1.ConsoleTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "console-template-0",
@@ -91,8 +95,9 @@ var _ = Describe("Console", func() {
 				},
 			},
 			Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-				DefaultTimeoutSeconds: 600,
-				MaxTimeoutSeconds:     7200,
+				DefaultTTLSecondsBeforeRunning: &defaultTTLSecondsBeforeRunning,
+				DefaultTimeoutSeconds:          600,
+				MaxTimeoutSeconds:              7200,
 				AdditionalAttachSubjects: []rbacv1.Subject{
 					{Kind: "User", Name: "add-user@example.com"},
 					{Kind: "GoogleGroup", Name: "group@example.com"},
@@ -619,6 +624,23 @@ var _ = Describe("Console", func() {
 				By("Expect directory rolebinding is owned by console")
 				Expect(drb.ObjectMeta.OwnerReferences).To(HaveLen(1))
 				Expect(drb.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
+			})
+
+			Context("When the console requires authorisation", func() {
+				BeforeEach(func() {
+					ttl := int32(1)
+					consoleTemplate.Spec.DefaultTTLSecondsBeforeRunning = &ttl
+				})
+
+				It("Deletes the console if not authorised within TTLSecondsBeforeRunning", func() {
+					cslToDelete := csl.DeepCopy()
+					By("Expect console to be deleted")
+					Eventually(func() metav1.StatusReason {
+						identifier, _ := client.ObjectKeyFromObject(cslToDelete)
+						err := mgr.GetClient().Get(context.TODO(), identifier, &workloadsv1alpha1.Console{})
+						return apierrors.ReasonForError(err)
+					}, 5*time.Second).Should(Equal(metav1.StatusReasonNotFound), "expected not to find console, but did")
+				})
 			})
 		})
 	})

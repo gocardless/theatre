@@ -514,9 +514,11 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 		logger.Log("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
 	}
 
-	// Console phase from Running to Stopped without CompletionTime: the job's
-	// activeDeadlineSeconds was reached, the job was marked as failed and the
-	// pod deleted.
+	// Console phase from Running to Stopped without CompletionTime.
+	// Either:
+	// - The job's activeDeadlineSeconds was reached, and the job was marked as
+	//   failed and the pod deleted.
+	// - The pod ended with a non-zero exit code, and the job was marked as failed.
 	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime == nil {
 		duration := r.console.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()

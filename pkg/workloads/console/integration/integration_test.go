@@ -639,7 +639,7 @@ var _ = Describe("Console", func() {
 						identifier, _ := client.ObjectKeyFromObject(cslToDelete)
 						err := mgr.GetClient().Get(context.TODO(), identifier, &workloadsv1alpha1.Console{})
 						return apierrors.ReasonForError(err)
-					}, 5*time.Second).Should(Equal(metav1.StatusReasonNotFound), "expected not to find console, but did")
+					}, 10*time.Second).Should(Equal(metav1.StatusReasonNotFound), "expected not to find console, but did")
 				})
 			})
 		})

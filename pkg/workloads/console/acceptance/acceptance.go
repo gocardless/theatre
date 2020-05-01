@@ -325,27 +325,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			})
 		})
 
-		Specify("Deleted if not authorised within TTLBeforeRunning", func() {
-			By("Create a console template")
-			var TTLBeforeRunning int32 = 10
-			var TTLAfterFinished int32 = 10
-			template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
-			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
-			Expect(err).NotTo(HaveOccurred(), "could not create console template")
-
-			By("Create a console")
-			console := buildConsole()
-			console.Spec.Command = []string{"sleep", "666"}
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
-			Expect(err).NotTo(HaveOccurred(), "could not create console")
-
-			By("Expect that the console is deleted when stuck pending authorisation, due to its TTL before running")
-			Eventually(func() error {
-				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
-				return err
-			}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
-		})
-
 		Specify("Deleting a console template", func() {
 			By("Create a console template")
 			template := buildConsoleTemplate(nil, nil, false)

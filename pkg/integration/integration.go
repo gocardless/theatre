@@ -11,7 +11,7 @@ import (
 
 	"github.com/gocardless/theatre/pkg/apis"
 	types "github.com/onsi/gomega/types"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,6 +112,7 @@ func CreateNamespace(clientset *kubernetes.Clientset) (string, func()) {
 	// synchronous, but this takes effort that is best applied elsewhere until we know for
 	// sure it's worth it.
 	return name, func() {
+		By("Skipping deletion of namespace: " + name)
 		/* err := clientset.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{}) */
 		/* Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace") */
 	}
@@ -165,7 +166,7 @@ func NewServer(mgr manager.Manager, awhs ...*admission.Webhook) *webhook.Server 
 		BootstrapOptions: &webhook.BootstrapOptions{
 			MutatingWebhookConfigName:   "theatre-integration-webhook",
 			ValidatingWebhookConfigName: "theatre-integration-webhook",
-			Host: &localhost,
+			Host:                        &localhost,
 		},
 	}
 

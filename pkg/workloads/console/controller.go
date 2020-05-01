@@ -298,6 +298,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return res, err
 		}
+
 		res = reconcile.Result{Requeue: false}
 	}
 
@@ -505,19 +506,38 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 		logger.Log("event", ConsoleStarted, "msg", "Console started")
 	}
 
-	// Console phase from Running to Stopped
-	if newStatus.CompletionTime != r.console.Status.CompletionTime && !statusCtx.Job.Status.StartTime.IsZero() {
+	// Console phase from Running to Stopped, with a CompletionTime: the job
+	// completed successfully
+	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
+		newStatus.CompletionTime != nil {
 		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
 		logger.Log("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
 	}
 
-	// Console phase from Running to Stopped without CompletionTime (expire)
-	if r.console.Running() &&
-		newStatus.CompletionTime == nil && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
+	// Console phase from Running to Stopped without CompletionTime.
+	// Either:
+	// - The job's activeDeadlineSeconds was reached, and the job was marked as
+	//   failed and the pod deleted.
+	// - The pod ended with a non-zero exit code, and the job was marked as failed.
+	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
+		newStatus.CompletionTime == nil {
 		duration := r.console.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Log("event", ConsoleEnded, "msg", "Console ended after reaching expiration time", "duration", duration)
+		logger.Log("event", ConsoleEnded, "msg", "Console ended due to expiration", "duration", duration)
 	}
 
+	// Console phase transitioned to Stopped, but wasn't Running or Stopped beforehand.
+	// This could indicate a bug, or the console may have transitioned through
+	// more than one phase in between reconciliation loops.
+	if !r.console.Running() && !r.console.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
+		logger.Log("event", ConsoleEnded, "msg", "Console ended: duration unknown")
+	}
+
+	// Console was in PendingAuthorisation phase, but is about to be deleted.
+	if r.console.PendingAuthorisation() && r.console.EligibleForGC() {
+		logger.Log("event", ConsoleEnded, "msg", "Console expired due to lack of authorisation")
+	}
+
+	// Console phase has changed to destroyed (i.e. the job has been removed)
 	if !r.console.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
 		logger.Log("event", ConsoleDestroyed, "msg", "Console destroyed")
 	}
@@ -898,7 +918,7 @@ func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCt
 	}
 
 	if statusCtx.Authorisation != nil {
-		var subjectNames []string
+		subjectNames := []string{}
 		for _, subject := range statusCtx.Authorisation.Spec.Authorisations {
 			subjectNames = append(subjectNames, subject.Name)
 		}

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gocardless/theatre/pkg/apis"
+	"github.com/google/uuid"
 	types "github.com/onsi/gomega/types"
-	uuid "github.com/satori/go.uuid"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,7 +92,7 @@ func kubeAPIServerFlags() []string {
 // tests. We return the name of the namespace and a closure that can be used to destroy
 // the namespace.
 func CreateNamespace(clientset *kubernetes.Clientset) (string, func()) {
-	name := uuid.NewV4().String()
+	name := uuid.New().String()
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,

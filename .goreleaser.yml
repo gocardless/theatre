@@ -72,3 +72,24 @@ builds:
       -installsuffix cgo
     env:
       - CGO_ENABLED=0
+
+brew:
+  github:
+    owner: gocardless
+    name: homebrew-taps
+  commit_author:
+    name: GoCardless Engineering
+    email: engineering@gocardless.com
+  # This causes downloads of this formula to be authenticated with homebrew
+  # environment tokens.
+  custom_require: ../lib/gc/github_private_release_download_strategy
+  download_strategy: Gc::GithubPrivateReleaseDownloadStrategy
+  folder: Formula
+  homepage: https://github.com/gocardless/theatre
+  description: GoCardless' collection of Kubernetes extensions
+  test: system "#{bin}/theatre-consoles --version"
+  install: |
+    bin.install "theatre-consoles"
+    bin.install "theatre-envconsul"
+    bin.install "vault-manager"
+    bin.install "workloads-manager"

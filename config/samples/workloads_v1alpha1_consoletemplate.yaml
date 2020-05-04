@@ -10,6 +10,17 @@ spec:
   defaultTimeoutSeconds: 300
   maxTimeoutSeconds: 300
   defaultTtlSecondsAfterFinished: 30
+  defaultTtlSecondsBeforeRunning: 120
+  authorisationRules:
+    - name: bad-command
+      matchCommandElements: ["echo", "something-bad", "**"]
+      authorisationsRequired: 1
+      subjects:
+        - kind: User
+          name: bob@example.com
+  defaultAuthorisationRule:
+    subjects: []
+    authorisationsRequired: 0
   template:
     spec:
       containers:

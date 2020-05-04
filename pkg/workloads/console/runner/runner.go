@@ -3,12 +3,12 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
 	"time"
 
-	"github.com/pkg/errors"
 	"gomodules.xyz/jsonpatch/v3"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -182,6 +182,9 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 
 	// Wait for the console to enter a ready state
 	csl, err = c.WaitUntilReady(ctx, *csl, true)
+	if err != nil {
+		return nil, err
+	}
 
 	err = opts.Hook.ConsoleReady(csl)
 	if err != nil {
@@ -260,7 +263,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 
 	pod, err := c.GetAttachablePod(csl)
 	if err != nil {
-		return errors.Wrap(err, "could not find pod to attach to")
+		return fmt.Errorf("could not find pod to attach to: %w", err)
 	}
 
 	err = opts.Hook.AttachingToConsole(csl)
@@ -269,7 +272,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 	}
 
 	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, opts.IO); err != nil {
-		return errors.Wrap(err, "failed to attach to console")
+		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
 	return nil
@@ -308,7 +311,7 @@ func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, streams IOStream
 
 	remoteExecutor, err := remotecommand.NewSPDYExecutor(a.restconfig, "POST", req.URL())
 	if err != nil {
-		return errors.Wrap(err, "failed to create SPDY executor")
+		return fmt.Errorf("failed to create SPDY executor: %w", err)
 	}
 
 	streamOptions, safe := CreateInteractiveStreamOptions(streams)
@@ -435,7 +438,7 @@ func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) 
 		},
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list consoles templates")
+		return nil, fmt.Errorf("failed to list consoles templates: %w", err)
 	}
 
 	if len(templates.Items) != 1 {
@@ -444,7 +447,7 @@ func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) 
 			identifiers = append(identifiers, item.Namespace+"/"+item.Name)
 		}
 
-		return nil, errors.Errorf(
+		return nil, fmt.Errorf(
 			"expected to discover 1 console template, but actually found: %s",
 			identifiers,
 		)
@@ -577,7 +580,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 
 	w, err := client.Watch(listOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "error watching console")
+		return nil, fmt.Errorf("error watching console: %w", err)
 	}
 
 	// Get the console, because watch will only give us an event when something
@@ -585,7 +588,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 	// is set up.
 	csl, err := client.Get(createdCsl.Name, metav1.GetOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, "error retrieving console")
+		return nil, fmt.Errorf("error retrieving console: %w", err)
 	}
 
 	// If the console is already running then there's nothing to do
@@ -623,11 +626,9 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 			}
 		case <-ctx.Done():
 			if csl == nil {
-				return nil, errors.Wrap(ctx.Err(), consoleNotFoundError.Error())
+				return nil, fmt.Errorf("%s: %w", consoleNotFoundError, ctx.Err())
 			}
-			return nil, errors.Wrap(ctx.Err(), fmt.Sprintf(
-				"console's last phase was: '%v'", csl.Status.Phase),
-			)
+			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
 		}
 	}
 }
@@ -636,7 +637,7 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	rbClient := c.kubeClient.RbacV1().RoleBindings(csl.Namespace)
 	watcher, err := rbClient.Watch(metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
 	if err != nil {
-		return errors.Wrap(err, "error watching rolebindings")
+		return fmt.Errorf("error watching rolebindings: %w", err)
 	}
 	defer watcher.Stop()
 
@@ -668,7 +669,7 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 			continue
 
 		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "waiting for rolebinding interrupted")
+			return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
 		}
 	}
 }

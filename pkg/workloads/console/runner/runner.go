@@ -209,6 +209,24 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	return csl, nil
 }
 
+type GetOptions struct {
+	Namespace   string
+	ConsoleName string
+}
+
+// Get provides a standardised method to get a console
+func (c *Runner) Get(ctx context.Context, opts GetOptions) (*workloadsv1alpha1.Console, error) {
+	csl, err := c.theatreClient.
+		WorkloadsV1alpha1().
+		Consoles(opts.Namespace).
+		Get(opts.ConsoleName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return csl, nil
+}
+
 // AttachOptions encapsulates the arguments to attach to a console
 type AttachOptions struct {
 	Namespace  string

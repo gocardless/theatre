@@ -21,15 +21,13 @@ import (
 )
 
 var (
-	app         = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(Version)
+	app = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(cmd.VersionStanza())
+
 	webhookName = app.Flag("webhook-name", "Kubernetes mutating webhook name").Default("theatre-workloads").String()
 	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {

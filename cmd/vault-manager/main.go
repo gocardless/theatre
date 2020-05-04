@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(Version)
+	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(cmd.VersionStanza())
 	namespace               = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName             = app.Flag("service-name", "Name of service for webhook").Default("theatre-vault-manager").String()
 	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
@@ -45,9 +45,6 @@ var (
 	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
-
-	// Version is set at compile time
-	Version = "dev"
 )
 
 func main() {

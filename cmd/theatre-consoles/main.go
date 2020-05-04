@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
+	"github.com/gocardless/theatre/cmd"
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	theatre "github.com/gocardless/theatre/pkg/client/clientset/versioned"
 	"github.com/gocardless/theatre/pkg/logging"
@@ -24,7 +25,8 @@ import (
 )
 
 var (
-	cli        = kingpin.New("consoles", "Manages theatre consoles")
+	cli = kingpin.New("consoles", "Manages theatre consoles").Version(cmd.VersionStanza())
+
 	cliContext = cli.Flag("context", "Kubernetes context to target. If not provided defaults to current context").
 			Short('c').
 			Envar("KUBERNETES_CONTEXT").

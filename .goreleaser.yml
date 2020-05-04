@@ -1,0 +1,35 @@
+# View goreleaser docs for configuration settings
+# https://goreleaser.com
+
+---
+project_name: theatre
+
+builds:
+  - &commonBuildConfig
+    binary: theatre-consoles
+    main: cmd/theatre-consoles/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X github.com/gocardless/theatre/cmd.Version={{.Version}}
+      -X github.com/gocardless/theatre/cmd.Commit={{.Commit}}
+      -X github.com/gocardless/theatre/cmd.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0
+
+  - <<: *commonBuildConfig
+    binary: theatre-envconsul
+    main: cmd/theatre-envconsul/main.go
+
+  - <<: *commonBuildConfig
+    binary: vault-manager
+    main: cmd/vault-manager/main.go
+
+  - <<: *commonBuildConfig
+    binary: workloads-manager
+    main: cmd/workloads-manager/main.go

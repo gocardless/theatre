@@ -320,7 +320,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := runner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err.Error()).To(ContainSubstring("last phase was: 'Pending'"))
+					Expect(err.Error()).To(ContainSubstring("last phase was: Pending"))
 					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
 				})
 

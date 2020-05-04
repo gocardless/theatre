@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -83,7 +84,7 @@ func main() {
 
 	ctx, _ := signals.SetupSignalHandler()
 
-	if err := Run(ctx, logger); err != nil {
+	if err := Run(ctx, logger); !errors.Is(err, context.Canceled) {
 		cli.Fatalf("unexpected error: %s", err)
 	}
 }

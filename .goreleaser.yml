@@ -6,6 +6,7 @@ project_name: theatre
 
 builds:
   - &commonBuildConfig
+    id: theatre-consoles
     binary: theatre-consoles
     main: cmd/theatre-consoles/main.go
     goos:
@@ -23,13 +24,16 @@ builds:
       - CGO_ENABLED=0
 
   - <<: *commonBuildConfig
+    id: theatre-envconsul
     binary: theatre-envconsul
     main: cmd/theatre-envconsul/main.go
 
   - <<: *commonBuildConfig
+    id: vault-manager
     binary: vault-manager
     main: cmd/vault-manager/main.go
 
   - <<: *commonBuildConfig
+    id: workloads-manager
     binary: workloads-manager
     main: cmd/workloads-manager/main.go

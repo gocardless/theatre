@@ -93,7 +93,7 @@ jobs:
           when: on_fail
 
   release:
-    machine: true
+    <<: *docker_golang
     steps:
       - add_ssh_keys:
           fingerprints:

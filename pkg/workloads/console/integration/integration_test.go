@@ -591,7 +591,7 @@ var _ = Describe("Console", func() {
 					Equal(
 						[]rbacv1.PolicyRule{
 							{
-								Verbs:         []string{"update", "get"},
+								Verbs:         []string{"get", "patch", "update"},
 								APIGroups:     []string{"workloads.crd.gocardless.com"},
 								Resources:     []string{"consoleauthorisations"},
 								ResourceNames: []string{csl.Name},

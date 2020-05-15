@@ -769,7 +769,7 @@ func (r *reconciler) createAuthorisationObjects(subjects []rbacv1.Subject) error
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				Verbs:         []string{"update", "get"},
+				Verbs:         []string{"get", "patch", "update"},
 				APIGroups:     []string{"workloads.crd.gocardless.com"},
 				Resources:     []string{"consoleauthorisations"},
 				ResourceNames: []string{r.name.Name},

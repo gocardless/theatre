@@ -53,7 +53,8 @@ func main() {
 	opts := webhook.ServerOptions{
 		CertDir: "/tmp/theatre-workloads",
 		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: *webhookName,
+			MutatingWebhookConfigName:   *webhookName,
+			ValidatingWebhookConfigName: *webhookName,
 			Service: &webhook.Service{
 				Namespace: *namespace,
 				Name:      *serviceName,

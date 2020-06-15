@@ -637,7 +637,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	if numContainers > 1 {
 		r.logger.Log(
 			"event", EventTemplateUnsupported,
-			"error", "Only the first container in the template will be usable as a console",
+			"error", "A console template can only contain a single container",
 		)
 	}
 

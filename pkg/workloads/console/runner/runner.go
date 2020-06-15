@@ -191,11 +191,6 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return csl, err
 	}
 
-	_, err = c.GetAttachablePod(csl)
-	if err != nil {
-		return nil, err
-	}
-
 	if opts.Attach {
 		return csl, c.Attach(
 			ctx,
@@ -261,7 +256,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	pod, err := c.GetAttachablePod(csl)
+	pod, containerName, err := c.GetAttachablePod(csl)
 	if err != nil {
 		return fmt.Errorf("could not find pod to attach to: %w", err)
 	}
@@ -271,7 +266,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, opts.IO); err != nil {
+	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
@@ -291,7 +286,7 @@ type Attacher struct {
 
 // Attach will interactively attach to a containers output, creating a new TTY
 // and hooking this into the current processes file descriptors.
-func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, streams IOStreams) error {
+func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error {
 	req := a.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Namespace(pod.GetNamespace()).
@@ -301,10 +296,11 @@ func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, streams IOStream
 	req.Context(ctx)
 	req.VersionedParams(
 		&corev1.PodAttachOptions{
-			Stdin:  true,
-			Stdout: true,
-			Stderr: true,
-			TTY:    true,
+			Stdin:     true,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       true,
+			Container: containerName,
 		},
 		scheme.ParameterCodec,
 	)
@@ -684,17 +680,17 @@ func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {
 }
 
 // GetAttachablePod returns an attachable pod for the given console
-func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, error) {
+func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, string, error) {
 	pod, err := c.kubeClient.CoreV1().Pods(csl.Namespace).Get(csl.Status.PodName, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	for _, c := range pod.Spec.Containers {
 		if c.TTY {
-			return pod, nil
+			return pod, c.Name, nil
 		}
 	}
 
-	return nil, errors.New("no attachable pod found")
+	return nil, "", errors.New("no attachable pod found")
 }

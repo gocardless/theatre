@@ -588,7 +588,7 @@ var _ = Describe("Runner", func() {
 			})
 
 			It("Returns an error", func() {
-				_, err := runner.GetAttachablePod(csl)
+				_, _, err := runner.GetAttachablePod(csl)
 				Expect(err).To(HaveOccurred())
 			})
 		})
@@ -599,7 +599,7 @@ var _ = Describe("Runner", func() {
 			})
 
 			It("Returns an error", func() {
-				_, err := runner.GetAttachablePod(csl)
+				_, _, err := runner.GetAttachablePod(csl)
 				Expect(err).To(MatchError("no attachable pod found"))
 			})
 		})
@@ -607,16 +607,25 @@ var _ = Describe("Runner", func() {
 		Context("When the pod is attachable", func() {
 			BeforeEach(func() {
 				consolePod.Spec = corev1.PodSpec{
-					Containers: []corev1.Container{{TTY: true}},
+					Containers: []corev1.Container{
+						{
+							Name: "containerWithTTY",
+							TTY:  true,
+						},
+						{
+							Name: "containerWithoutTTY",
+						},
+					},
 				}
 
 				fakeKubeObjects = []runtime.Object{consolePod}
 			})
 
-			It("Returns the pod", func() {
-				returnedPod, err := runner.GetAttachablePod(csl)
+			It("Returns the pod and container name", func() {
+				returnedPod, containerName, err := runner.GetAttachablePod(csl)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(returnedPod).To(Equal(consolePod))
+				Expect(containerName).To(Equal(consolePod.Spec.Containers[0].Name))
 			})
 		})
 	})

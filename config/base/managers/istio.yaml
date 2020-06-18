@@ -1,0 +1,109 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: istio-manager
+  labels:
+    group: istio.crd.gocardless.com
+rules:
+  - apiGroups:
+      - ""
+      - admissionregistration.k8s.io
+    resources:
+      - services
+      - mutatingwebhookconfigurations
+    verbs:
+      - "*"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: istio-manager
+  labels:
+    group: istio.crd.gocardless.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: istio-manager
+  labels:
+    group: istio.crd.gocardless.com
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: istio-manager
+subjects:
+  - kind: ServiceAccount
+    name: istio-manager
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: istio-manager-webhook
+  labels:
+    group: istio.crd.gocardless.com
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - theatre-istio-manager-webhook
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: istio-manager-webhook
+  labels:
+    group: istio.crd.gocardless.com
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: istio-manager-webhook
+subjects:
+  - kind: ServiceAccount
+    name: istio-manager
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: istio-manager
+  labels:
+    group: istio.crd.gocardless.com
+spec:
+  serviceName: istio-manager
+  replicas: 1
+  volumeClaimTemplates: []
+  selector:
+    matchLabels:
+      group: istio.crd.gocardless.com
+  template:
+    metadata:
+      labels:
+        group: istio.crd.gocardless.com
+    spec:
+      serviceAccountName: istio-manager
+      terminationGracePeriodSeconds: 10
+      containers:
+        - command:
+            - /usr/local/bin/istio-manager
+            - --theatre-image
+            - $(THEATRE_IMAGE)
+            - --metrics-address
+            - 0.0.0.0
+          image: eu.gcr.io/gc-containers/gocardless/theatre:latest
+          name: manager
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: metrics
+              containerPort: 9525
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi

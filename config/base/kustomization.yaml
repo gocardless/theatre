@@ -17,6 +17,7 @@ resources:
   - managers/rbac.yaml
   - managers/vault.yaml
   - managers/workloads.yaml
+  - managers/istio.yaml
 
 vars:
   # We want our mutating webhook to ensure it only ever configures pods to use

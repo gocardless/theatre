@@ -84,7 +84,7 @@ func main() {
 
 	ctx, _ := signals.SetupSignalHandler()
 
-	if err := Run(ctx, logger); !errors.Is(err, context.Canceled) {
+	if err := Run(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
 		cli.Fatalf("unexpected error: %s", err)
 	}
 }

@@ -319,10 +319,12 @@ func (i podInjector) buildInitContainer() corev1.Container {
 				ReadOnly:  false,
 			},
 		},
+		// This container is only alive for a brief moment, so make our request very small
+		// while permitting a big burst.
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				corev1.ResourceMemory: resource.MustParse("64Mi"),
-				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceCPU:    resource.MustParse("1"),
 			},
 			Requests: corev1.ResourceList{
 				corev1.ResourceMemory: resource.MustParse("64Mi"),

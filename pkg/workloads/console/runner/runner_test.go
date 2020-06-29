@@ -265,7 +265,7 @@ var _ = Describe("Runner", func() {
 	Describe("WaitUntilReady", func() {
 		addSubjectsToRoleBinding := func(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
 			rb.Subjects = subjects
-			_, err := kubeClient.RbacV1().RoleBindings(rb.Namespace).Update(&rb)
+			_, err := kubeClient.RbacV1().RoleBindings(rb.Namespace).Update(context.TODO(), &rb, metav1.UpdateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 		}
 
@@ -461,7 +461,7 @@ var _ = Describe("Runner", func() {
 						unreadyRb.Subjects = nil
 
 						rbClient := kubeClient.RbacV1().RoleBindings(csl.Namespace)
-						rb, err := rbClient.Create(&unreadyRb)
+						rb, err := rbClient.Create(context.TODO(), &unreadyRb, metav1.CreateOptions{})
 						Expect(err).NotTo(HaveOccurred())
 
 						// Try to exercise code that requires the RoleBinding to contain the

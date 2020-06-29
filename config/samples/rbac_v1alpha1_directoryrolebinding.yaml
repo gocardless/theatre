@@ -1,15 +1,7 @@
----
 apiVersion: rbac.crd.gocardless.com/v1alpha1
 kind: DirectoryRoleBinding
 metadata:
-  name: platform-superuser
+  name: directoryrolebinding-sample
 spec:
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: ClusterRole
-    name: cluster-admin
-  subjects:
-    - kind: GoogleGroup
-      name: platform@gocardless.com
-    - kind: User
-      name: hmac@gocardless.com
+  # Add fields here
+  foo: bar

@@ -19,6 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
@@ -70,7 +71,7 @@ func (c *consoleTemplates) Get(name string, options v1.GetOptions) (result *v1al
 		Resource("consoletemplates").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -87,7 +88,7 @@ func (c *consoleTemplates) List(opts v1.ListOptions) (result *v1alpha1.ConsoleTe
 		Resource("consoletemplates").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -104,7 +105,7 @@ func (c *consoleTemplates) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("consoletemplates").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a consoleTemplate and creates it.  Returns the server's representation of the consoleTemplate, and an error, if there is any.
@@ -114,7 +115,7 @@ func (c *consoleTemplates) Create(consoleTemplate *v1alpha1.ConsoleTemplate) (re
 		Namespace(c.ns).
 		Resource("consoletemplates").
 		Body(consoleTemplate).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -127,7 +128,7 @@ func (c *consoleTemplates) Update(consoleTemplate *v1alpha1.ConsoleTemplate) (re
 		Resource("consoletemplates").
 		Name(consoleTemplate.Name).
 		Body(consoleTemplate).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -139,7 +140,7 @@ func (c *consoleTemplates) Delete(name string, options *v1.DeleteOptions) error 
 		Resource("consoletemplates").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -155,7 +156,7 @@ func (c *consoleTemplates) DeleteCollection(options *v1.DeleteOptions, listOptio
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -168,7 +169,7 @@ func (c *consoleTemplates) Patch(name string, pt types.PatchType, data []byte, s
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

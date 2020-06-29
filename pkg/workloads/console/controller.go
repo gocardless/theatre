@@ -474,10 +474,9 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 	)
 
 	if statusCtx.Job != nil {
-		opts := client.
-			InNamespace(r.name.Namespace).
-			MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
-		if err := r.client.List(r.ctx, opts, &podList); err != nil {
+		inNamespace := client.InNamespace(r.name.Namespace)
+		matchLabels := client.MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
+		if err := r.client.List(r.ctx, &podList, inNamespace, matchLabels); err != nil {
 			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}

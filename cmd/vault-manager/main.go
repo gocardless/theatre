@@ -8,16 +8,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
 	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/apis"
-	"github.com/gocardless/theatre/pkg/signals"
-	"github.com/gocardless/theatre/pkg/vault/envconsul"
 )
 
 var (
@@ -59,57 +51,57 @@ func main() {
 		commonOpts.ListenAndServeMetrics(logger)
 	}()
 
-	ctx, cancel := signals.SetupSignalHandler()
-	defer cancel()
+	// _ctx, cancel := signals.SetupSignalHandler()
+	// defer cancel()
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
-	if err != nil {
-		app.Fatalf("failed to create manager: %v", err)
-	}
+	// mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	// if err != nil {
+	// 	app.Fatalf("failed to create manager: %v", err)
+	// }
 
-	opts := webhook.ServerOptions{
-		CertDir: "/tmp/theatre-vault",
-		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: *webhookName,
-			Service: &webhook.Service{
-				Namespace: *namespace,
-				Name:      *serviceName,
-				Selectors: map[string]string{
-					"app":   "theatre",
-					"group": "vault.crd.gocardless.com",
-				},
-			},
-		},
-	}
+	// opts := webhook.ServerOptions{
+	// 	CertDir: "/tmp/theatre-vault",
+	// 	BootstrapOptions: &webhook.BootstrapOptions{
+	// 		MutatingWebhookConfigName: *webhookName,
+	// 		Service: &webhook.Service{
+	// 			Namespace: *namespace,
+	// 			Name:      *serviceName,
+	// 			Selectors: map[string]string{
+	// 				"app":   "theatre",
+	// 				"group": "vault.crd.gocardless.com",
+	// 			},
+	// 		},
+	// 	},
+	// }
 
-	svr, err := webhook.NewServer("vault", mgr, opts)
-	if err != nil {
-		app.Fatalf("failed to create admission server: %v", err)
-	}
+	// svr, err := webhook.NewServer("vault", mgr, opts)
+	// if err != nil {
+	// 	app.Fatalf("failed to create admission server: %v", err)
+	// }
 
-	injectorOpts := envconsul.InjectorOptions{
-		Image:          *theatreImage,
-		InstallPath:    *installPath,
-		NamespaceLabel: *namespaceLabel,
-		VaultConfigMapKey: client.ObjectKey{
-			Namespace: *vaultConfigMapNamespace,
-			Name:      *vaultConfigMapName,
-		},
-		ServiceAccountTokenFile:     *serviceAccountTokenFile,
-		ServiceAccountTokenExpiry:   *serviceAccountTokenExpiry,
-		ServiceAccountTokenAudience: *serviceAccountTokenAudience,
-	}
+	// injectorOpts := envconsul.InjectorOptions{
+	// 	Image:          *theatreImage,
+	// 	InstallPath:    *installPath,
+	// 	NamespaceLabel: *namespaceLabel,
+	// 	VaultConfigMapKey: client.ObjectKey{
+	// 		Namespace: *vaultConfigMapNamespace,
+	// 		Name:      *vaultConfigMapName,
+	// 	},
+	// 	ServiceAccountTokenFile:     *serviceAccountTokenFile,
+	// 	ServiceAccountTokenExpiry:   *serviceAccountTokenExpiry,
+	// 	ServiceAccountTokenAudience: *serviceAccountTokenAudience,
+	// }
 
-	var wh *admission.Webhook
-	if wh, err = envconsul.NewWebhook(logger, mgr, injectorOpts); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// var wh *admission.Webhook
+	// if wh, err = envconsul.NewWebhook(logger, mgr, injectorOpts); err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	if err := svr.Register(wh); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// if err := svr.Register(wh); err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	if err := mgr.Start(ctx.Done()); err != nil {
-		app.Fatalf("failed to run manager: %v", err)
-	}
+	// if err := mgr.Start(ctx.Done()); err != nil {
+	// 	app.Fatalf("failed to run manager: %v", err)
+	// }
 }

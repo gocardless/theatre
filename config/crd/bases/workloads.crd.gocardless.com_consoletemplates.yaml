@@ -1,0 +1,31 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.5
+  creationTimestamp: null
+  name: consoletemplates.workloads.crd.gocardless.com
+spec:
+  group: workloads.crd.gocardless.com
+  names:
+    kind: ConsoleTemplate
+    listKind: ConsoleTemplateList
+    plural: consoletemplates
+    singular: consoletemplate
+  scope: Namespaced
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: false
+  - name: v1alpha1
+    served: true
+    storage: false
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

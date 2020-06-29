@@ -1,0 +1,48 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - rbac.crd.gocardless.com
+  resources:
+  - directoryrolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.crd.gocardless.com
+  resources:
+  - directoryrolebindings/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoles/status
+  verbs:
+  - get
+  - patch
+  - update

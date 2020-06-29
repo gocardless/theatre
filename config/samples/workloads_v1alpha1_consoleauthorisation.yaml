@@ -1,11 +1,7 @@
----
-kind: ConsoleAuthorisation
 apiVersion: workloads.crd.gocardless.com/v1alpha1
+kind: ConsoleAuthorisation
 metadata:
-  name: console-0
+  name: consoleauthorisation-sample
 spec:
-  authorisations:
-    - kind: User
-      name: me@example.com
-  consoleRef:
-    name: console-0
+  # Add fields here
+  foo: bar

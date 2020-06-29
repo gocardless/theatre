@@ -7,14 +7,11 @@ import (
 	"time"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 
 	kitlog "github.com/go-kit/kit/log"
 )
@@ -31,14 +28,16 @@ func NewTemplateValidationWebhook(logger kitlog.Logger, mgr manager.Manager, opt
 		opt(&handler)
 	}
 
-	return builder.NewWebhookBuilder().
-		Name("console-template-validation.crd.gocardless.com").
-		Validating().
-		Operations(admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update).
-		ForType(&workloadsv1alpha1.ConsoleTemplate{}).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
+	return nil, nil
+
+	// return builder.NewWebhookBuilder().
+	// 	Name("console-template-validation.crd.gocardless.com").
+	// 	Validating().
+	// 	Operations(admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update).
+	// 	ForType(&workloadsv1alpha1.ConsoleTemplate{}).
+	// 	Handlers(handler).
+	// 	WithManager(mgr).
+	// 	Build()
 }
 
 type templateValidation struct {
@@ -46,7 +45,7 @@ type templateValidation struct {
 	decoder runtime.Decoder
 }
 
-func (c *templateValidation) Handle(ctx context.Context, req types.Request) types.Response {
+func (c *templateValidation) Handle(ctx context.Context, req admission.Request) admission.Response {
 	logger := kitlog.With(c.logger, "uuid", string(req.AdmissionRequest.UID))
 	logger.Log("event", "request.start")
 
@@ -56,7 +55,7 @@ func (c *templateValidation) Handle(ctx context.Context, req types.Request) type
 
 	template := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := runtime.DecodeInto(c.decoder, req.AdmissionRequest.Object.Raw, template); err != nil {
-		admission.ErrorResponse(http.StatusBadRequest, err)
+		admission.Errored(http.StatusBadRequest, err)
 	}
 
 	if err := template.Validate(); err != nil {

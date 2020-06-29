@@ -19,6 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
@@ -70,7 +71,7 @@ func (c *directoryRoleBindings) Get(name string, options v1.GetOptions) (result 
 		Resource("directoryrolebindings").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -87,7 +88,7 @@ func (c *directoryRoleBindings) List(opts v1.ListOptions) (result *v1alpha1.Dire
 		Resource("directoryrolebindings").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -104,7 +105,7 @@ func (c *directoryRoleBindings) Watch(opts v1.ListOptions) (watch.Interface, err
 		Resource("directoryrolebindings").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a directoryRoleBinding and creates it.  Returns the server's representation of the directoryRoleBinding, and an error, if there is any.
@@ -114,7 +115,7 @@ func (c *directoryRoleBindings) Create(directoryRoleBinding *v1alpha1.DirectoryR
 		Namespace(c.ns).
 		Resource("directoryrolebindings").
 		Body(directoryRoleBinding).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -127,7 +128,7 @@ func (c *directoryRoleBindings) Update(directoryRoleBinding *v1alpha1.DirectoryR
 		Resource("directoryrolebindings").
 		Name(directoryRoleBinding.Name).
 		Body(directoryRoleBinding).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -139,7 +140,7 @@ func (c *directoryRoleBindings) Delete(name string, options *v1.DeleteOptions) e
 		Resource("directoryrolebindings").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -155,7 +156,7 @@ func (c *directoryRoleBindings) DeleteCollection(options *v1.DeleteOptions, list
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -168,7 +169,7 @@ func (c *directoryRoleBindings) Patch(name string, pt types.PatchType, data []by
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

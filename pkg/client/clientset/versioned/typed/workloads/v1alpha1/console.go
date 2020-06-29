@@ -19,6 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
@@ -71,7 +72,7 @@ func (c *consoles) Get(name string, options v1.GetOptions) (result *v1alpha1.Con
 		Resource("consoles").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -88,7 +89,7 @@ func (c *consoles) List(opts v1.ListOptions) (result *v1alpha1.ConsoleList, err 
 		Resource("consoles").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -105,7 +106,7 @@ func (c *consoles) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("consoles").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a console and creates it.  Returns the server's representation of the console, and an error, if there is any.
@@ -115,7 +116,7 @@ func (c *consoles) Create(console *v1alpha1.Console) (result *v1alpha1.Console, 
 		Namespace(c.ns).
 		Resource("consoles").
 		Body(console).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -128,7 +129,7 @@ func (c *consoles) Update(console *v1alpha1.Console) (result *v1alpha1.Console, 
 		Resource("consoles").
 		Name(console.Name).
 		Body(console).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -144,7 +145,7 @@ func (c *consoles) UpdateStatus(console *v1alpha1.Console) (result *v1alpha1.Con
 		Name(console.Name).
 		SubResource("status").
 		Body(console).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -156,7 +157,7 @@ func (c *consoles) Delete(name string, options *v1.DeleteOptions) error {
 		Resource("consoles").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -172,7 +173,7 @@ func (c *consoles) DeleteCollection(options *v1.DeleteOptions, listOptions v1.Li
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -185,7 +186,7 @@ func (c *consoles) Patch(name string, pt types.PatchType, data []byte, subresour
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

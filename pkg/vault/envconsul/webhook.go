@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,8 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 )
 
 const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
@@ -30,17 +27,17 @@ const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
 func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
 	handler = &injector{
-		logger:  kitlog.With(logger, "component", "EnvconsulInjector"),
-		decoder: mgr.GetAdmissionDecoder(),
-		client:  mgr.GetClient(),
-		opts:    injectorOpts,
+		logger: kitlog.With(logger, "component", "EnvconsulInjector"),
+		// decoder: mgr.Decoder(),
+		client: mgr.GetClient(),
+		opts:   injectorOpts,
 	}
 
 	for _, opt := range opts {
 		opt(&handler)
 	}
 
-	namespaceSelectors := &metav1.LabelSelector{
+	_ = &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			metav1.LabelSelectorRequirement{
 				Key:      injectorOpts.NamespaceLabel,
@@ -50,21 +47,22 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		},
 	}
 
-	return builder.NewWebhookBuilder().
-		Name(EnvconsulInjectorFQDN).
-		Mutating().
-		Operations(admissionregistrationv1beta1.Create).
-		ForType(&corev1.Pod{}).
-		FailurePolicy(admissionregistrationv1beta1.Fail).
-		NamespaceSelector(namespaceSelectors).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
+	return nil, nil
+	// return builder.NewWebhookBuilder().
+	// 	Name(EnvconsulInjectorFQDN).
+	// 	Mutating().
+	// 	Operations(admissionregistrationv1beta1.Create).
+	// 	ForType(&corev1.Pod{}).
+	// 	FailurePolicy(admissionregistrationv1beta1.Fail).
+	// 	NamespaceSelector(namespaceSelectors).
+	// 	Handlers(handler).
+	// 	WithManager(mgr).
+	// 	Build()
 }
 
 type injector struct {
 	logger  kitlog.Logger
-	decoder types.Decoder
+	decoder admission.Decoder
 	client  client.Client
 	opts    InjectorOptions
 }
@@ -111,9 +109,9 @@ var (
 	)
 )
 
-func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
-	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
-	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
+func (i *injector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
+	labels := prometheus.Labels{"pod_namespace": req.Namespace}
+	logger := kitlog.With(i.logger, "uuid", string(req.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {
 		logger.Log("event", "request.end", "duration", time.Since(start).Seconds())
@@ -126,14 +124,14 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		}
 
 		// Catch any Allowed=false responses, as this means we've failed to accept this pod
-		if !resp.Response.Allowed {
+		if !resp.Allowed {
 			errorsTotal.With(labels).Inc()
 		}
 	}(time.Now())
 
 	pod := &corev1.Pod{}
 	if err := i.decoder.Decode(req, pod); err != nil {
-		return admission.ErrorResponse(http.StatusBadRequest, err)
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// This webhook receives requests on all pod creation and so is in the critical
@@ -143,7 +141,7 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]; !ok {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found")
 		skipTotal.With(labels).Inc()
-		return admission.PatchResponse(pod, pod)
+		return admission.Allowed("no annotation found")
 	}
 
 	// ensure the pod has a namespace if it has one as we use it in the secretMountPathPrefix
@@ -163,21 +161,21 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 
 	vaultConfigMap := &corev1.ConfigMap{}
 	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {
-		return admission.ErrorResponse(http.StatusInternalServerError, err)
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	vaultConfig, err := newVaultConfig(vaultConfigMap)
 	if err != nil {
 		logger.Log("event", "vault.config", "error", err)
-		return admission.ErrorResponse(http.StatusInternalServerError, err)
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	mutatedPod := podInjector{InjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
 		logger.Log("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")
-		return admission.PatchResponse(pod, pod)
+		return admission.Allowed("no annotation found")
 	}
 
-	return admission.PatchResponse(pod, mutatedPod)
+	return admission.Patched("TODO")
 }
 
 // vaultConfig specifies the structure we expect to find in a cluster-global namespace,

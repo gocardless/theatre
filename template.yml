@@ -1,0 +1,30 @@
+apiVersion: workloads.crd.gocardless.com/v1alpha1
+kind: ConsoleTemplate
+metadata:
+  name: bashful
+  labels:
+    app: bash
+spec:
+  defaultTimeoutSeconds: 3600
+  maxTimeoutSeconds: 604800
+  authorisationRules:
+    - name: sh
+      matchCommandElements: ["sh"]
+      authorisationsRequired: 1
+      subjects:
+        - kind: User
+          name: kubernetes-admin
+    - name: ls
+      matchCommandElements: ["ls"]
+      authorisationsRequired: 0
+      subjects: []
+  defaultAuthorisationRule:
+    authorisationsRequired: 1
+    subjects:
+      - kind: User
+        name: kubernetes-admin
+  template:
+    spec:
+      containers:
+        - image: alpine
+          name: app

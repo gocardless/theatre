@@ -1,0 +1,24 @@
+# permissions for end users to edit consoletemplates.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: consoletemplate-editor-role
+rules:
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoletemplates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoletemplates/status
+  verbs:
+  - get

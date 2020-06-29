@@ -1,0 +1,20 @@
+# permissions for end users to view directoryrolebindings.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: directoryrolebinding-viewer-role
+rules:
+- apiGroups:
+  - rbac.crd.gocardless.com
+  resources:
+  - directoryrolebindings
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.crd.gocardless.com
+  resources:
+  - directoryrolebindings/status
+  verbs:
+  - get

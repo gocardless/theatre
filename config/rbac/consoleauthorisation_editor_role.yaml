@@ -1,0 +1,24 @@
+# permissions for end users to edit consoleauthorisations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: consoleauthorisation-editor-role
+rules:
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoleauthorisations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workloads.crd.gocardless.com
+  resources:
+  - consoleauthorisations/status
+  verbs:
+  - get

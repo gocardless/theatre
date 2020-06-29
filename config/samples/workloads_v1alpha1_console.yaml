@@ -1,12 +1,7 @@
----
-kind: Console
 apiVersion: workloads.crd.gocardless.com/v1alpha1
-spec:
-  user: user@example.com
-  reason: some-reason
-  command: ["/bin/sh"]
-  timeoutSeconds: 300
-  consoleTemplateRef:
-    name: console-template-0
+kind: Console
 metadata:
-  name: console-0
+  name: console-sample
+spec:
+  # Add fields here
+  foo: bar

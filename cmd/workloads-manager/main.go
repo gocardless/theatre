@@ -8,16 +8,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
 	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/apis"
-	"github.com/gocardless/theatre/pkg/apis/workloads"
-	"github.com/gocardless/theatre/pkg/signals"
-	"github.com/gocardless/theatre/pkg/workloads/console"
-	"github.com/gocardless/theatre/pkg/workloads/priority"
 )
 
 var (
@@ -42,68 +34,68 @@ func main() {
 		commonOpts.ListenAndServeMetrics(logger)
 	}()
 
-	ctx, cancel := signals.SetupSignalHandler()
-	defer cancel()
+	// ctx, cancel := signals.SetupSignalHandler()
+	// defer cancel()
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
-	if err != nil {
-		app.Fatalf("failed to create manager: %v", err)
-	}
+	// mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	// if err != nil {
+	// 	app.Fatalf("failed to create manager: %v", err)
+	// }
 
-	opts := webhook.ServerOptions{
-		CertDir: "/tmp/theatre-workloads",
-		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName:   *webhookName,
-			ValidatingWebhookConfigName: *webhookName,
-			Service: &webhook.Service{
-				Namespace: *namespace,
-				Name:      *serviceName,
-				Selectors: map[string]string{
-					"app":   "theatre",
-					"group": workloads.GroupName,
-				},
-			},
-		},
-	}
+	// opts := webhook.ServerOptions{
+	// 	CertDir: "/tmp/theatre-workloads",
+	// 	BootstrapOptions: &webhook.BootstrapOptions{
+	// 		MutatingWebhookConfigName:   *webhookName,
+	// 		ValidatingWebhookConfigName: *webhookName,
+	// 		Service: &webhook.Service{
+	// 			Namespace: *namespace,
+	// 			Name:      *serviceName,
+	// 			Selectors: map[string]string{
+	// 				"app":   "theatre",
+	// 				"group": workloads.GroupName,
+	// 			},
+	// 		},
+	// 	},
+	// }
 
-	svr, err := webhook.NewServer("workloads", mgr, opts)
-	if err != nil {
-		app.Fatalf("failed to create admission server: %v", err)
-	}
+	// svr, err := webhook.NewServer("workloads", mgr, opts)
+	// if err != nil {
+	// 	app.Fatalf("failed to create admission server: %v", err)
+	// }
 
-	// Console controller
-	if _, err = console.Add(ctx, logger, mgr); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// // Console controller
+	// if _, err = console.Add(ctx, logger, mgr); err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	// Console authenticator webhook
-	consoleAuthenticatorWh, err := console.NewAuthenticatorWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
+	// // Console authenticator webhook
+	// consoleAuthenticatorWh, err := console.NewAuthenticatorWebhook(logger, mgr)
+	// if err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	// Console authorisation webhook
-	consoleAuthorisationWh, err := console.NewAuthorisationWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
+	// // Console authorisation webhook
+	// consoleAuthorisationWh, err := console.NewAuthorisationWebhook(logger, mgr)
+	// if err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	// Console template webhook
-	consoleTemplateWh, err := console.NewTemplateValidationWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
+	// // Console template webhook
+	// consoleTemplateWh, err := console.NewTemplateValidationWebhook(logger, mgr)
+	// if err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	priorityWh, err := priority.NewWebhook(logger, mgr, priority.InjectorOptions{})
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
+	// priorityWh, err := priority.NewWebhook(logger, mgr, priority.InjectorOptions{})
+	// if err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	if err := svr.Register(consoleAuthenticatorWh, consoleAuthorisationWh, consoleTemplateWh, priorityWh); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// if err := svr.Register(consoleAuthenticatorWh, consoleAuthorisationWh, consoleTemplateWh, priorityWh); err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
 
-	if err := mgr.Start(ctx.Done()); err != nil {
-		app.Fatalf("failed to run manager: %v", err)
-	}
+	// if err := mgr.Start(ctx.Done()); err != nil {
+	// 	app.Fatalf("failed to run manager: %v", err)
+	// }
 }

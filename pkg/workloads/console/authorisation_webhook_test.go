@@ -19,7 +19,7 @@ func mustConsoleAuthorisationFixture(path string) *workloadsv1alpha1.ConsoleAuth
 
 	decoder := serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 	if err := runtime.DecodeInto(decoder, consoleAuthorisationFixtureYAML, consoleAuthorisation); err != nil {
-		admission.ErrorResponse(http.StatusBadRequest, err)
+		admission.Errored(http.StatusBadRequest, err)
 	}
 
 	return consoleAuthorisation

@@ -21,8 +21,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
-	"k8s.io/kubernetes/pkg/kubectl/util/term"
+	"k8s.io/kubectl/pkg/cmd/get"
+	"k8s.io/kubectl/pkg/util/term"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
@@ -293,7 +293,6 @@ func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName st
 		Name(pod.GetName()).
 		SubResource("attach")
 
-	req.Context(ctx)
 	req.VersionedParams(
 		&corev1.PodAttachOptions{
 			Stdin:     true,
@@ -631,7 +630,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
 	rbClient := c.kubeClient.RbacV1().RoleBindings(csl.Namespace)
-	watcher, err := rbClient.Watch(metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
+	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
 	if err != nil {
 		return fmt.Errorf("error watching rolebindings: %w", err)
 	}
@@ -644,7 +643,7 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	// subsequent loop would block forever.
 	// If the associated RoleBinding exists and has the console user in its
 	// subject list, return early.
-	rb, err := rbClient.Get(csl.Name, metav1.GetOptions{})
+	rb, err := rbClient.Get(context.TODO(), csl.Name, metav1.GetOptions{})
 	if err == nil && rbHasSubject(rb, csl.Spec.User) {
 		return nil
 	}
@@ -681,7 +680,7 @@ func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {
 
 // GetAttachablePod returns an attachable pod for the given console
 func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, string, error) {
-	pod, err := c.kubeClient.CoreV1().Pods(csl.Namespace).Get(csl.Status.PodName, metav1.GetOptions{})
+	pod, err := c.kubeClient.CoreV1().Pods(csl.Namespace).Get(context.TODO(), csl.Status.PodName, metav1.GetOptions{})
 	if err != nil {
 		return nil, "", err
 	}

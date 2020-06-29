@@ -8,7 +8,6 @@ import (
 	"time"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apiTypes "k8s.io/apimachinery/pkg/types"
@@ -16,8 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 
 	kitlog "github.com/go-kit/kit/log"
 	multierror "github.com/hashicorp/go-multierror"
@@ -39,14 +36,16 @@ func NewAuthorisationWebhook(logger kitlog.Logger, mgr manager.Manager, opts ...
 		opt(&handler)
 	}
 
-	return builder.NewWebhookBuilder().
-		Name("console-authorisation.crd.gocardless.com").
-		Validating().
-		Operations(admissionregistrationv1beta1.Update).
-		ForType(&workloadsv1alpha1.ConsoleAuthorisation{}).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
+	return nil, nil
+
+	// return builder.NewWebhookBuilder().
+	// 	Name("console-authorisation.crd.gocardless.com").
+	// 	Validating().
+	// 	Operations(admissionregistrationv1beta1.Update).
+	// 	ForType(&workloadsv1alpha1.ConsoleAuthorisation{}).
+	// 	Handlers(handler).
+	// 	WithManager(mgr).
+	// 	Build()
 }
 
 type consoleAuthorisation struct {
@@ -55,8 +54,8 @@ type consoleAuthorisation struct {
 	decoder runtime.Decoder
 }
 
-func (c *consoleAuthorisation) Handle(ctx context.Context, req types.Request) types.Response {
-	logger := kitlog.With(c.logger, "uuid", string(req.AdmissionRequest.UID))
+func (c *consoleAuthorisation) Handle(ctx context.Context, req admission.Request) admission.Response {
+	logger := kitlog.With(c.logger, "uuid", string(req.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {
 		logger.Log("event", "request.end", "duration", time.Now().Sub(start).Seconds())
@@ -64,14 +63,14 @@ func (c *consoleAuthorisation) Handle(ctx context.Context, req types.Request) ty
 
 	// request console authorisation object
 	updatedAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
-	if err := runtime.DecodeInto(c.decoder, req.AdmissionRequest.Object.Raw, updatedAuth); err != nil {
-		admission.ErrorResponse(http.StatusBadRequest, err)
+	if err := runtime.DecodeInto(c.decoder, req.Object.Raw, updatedAuth); err != nil {
+		admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// existing console authorisation object
 	existingAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
-	if err := runtime.DecodeInto(c.decoder, req.AdmissionRequest.OldObject.Raw, existingAuth); err != nil {
-		admission.ErrorResponse(http.StatusBadRequest, err)
+	if err := runtime.DecodeInto(c.decoder, req.OldObject.Raw, existingAuth); err != nil {
+		admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// user making the request

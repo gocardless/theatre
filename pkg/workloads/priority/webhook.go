@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -16,8 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 )
 
 const (
@@ -28,17 +25,17 @@ const (
 func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
 	var handler admission.Handler
 	handler = &injector{
-		logger:  kitlog.With(logger, "component", "PriorityInjector"),
-		decoder: mgr.GetAdmissionDecoder(),
-		client:  mgr.GetClient(),
-		opts:    injectorOpts,
+		logger: kitlog.With(logger, "component", "PriorityInjector"),
+		// decoder: mgr.GetDecoder(),
+		client: mgr.GetClient(),
+		opts:   injectorOpts,
 	}
 
 	for _, opt := range opts {
 		opt(&handler)
 	}
 
-	namespaceSelectors := &metav1.LabelSelector{
+	_ = &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			metav1.LabelSelectorRequirement{
 				Key:      NamespaceLabel,
@@ -47,21 +44,23 @@ func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts Injector
 		},
 	}
 
-	return builder.NewWebhookBuilder().
-		Name(PriorityInjectorFQDN).
-		Mutating().
-		Operations(admissionregistrationv1beta1.Create).
-		ForType(&corev1.Pod{}).
-		FailurePolicy(admissionregistrationv1beta1.Fail).
-		NamespaceSelector(namespaceSelectors).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
+	return nil, nil
+
+	// return builder.NewWebhookBuilder().
+	// 	Name(PriorityInjectorFQDN).
+	// 	Mutating().
+	// 	Operations(admissionregistrationv1beta1.Create).
+	// 	ForType(&corev1.Pod{}).
+	// 	FailurePolicy(admissionregistrationv1beta1.Fail).
+	// 	NamespaceSelector(namespaceSelectors).
+	// 	Handlers(handler).
+	// 	WithManager(mgr).
+	// 	Build()
 }
 
 type injector struct {
 	logger  kitlog.Logger
-	decoder types.Decoder
+	decoder admission.Decoder
 	client  client.Client
 	opts    InjectorOptions
 }
@@ -100,9 +99,9 @@ var (
 	)
 )
 
-func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
-	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
-	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
+func (i *injector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
+	labels := prometheus.Labels{"pod_namespace": req.Namespace}
+	logger := kitlog.With(i.logger, "uuid", string(req.UID))
 	logger.Log("event", "request.start")
 	defer func(start time.Time) {
 		logger.Log("event", "request.end", "duration", time.Since(start).Seconds())
@@ -115,31 +114,31 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		}
 
 		// Catch any Allowed=false responses, as this means we've failed to accept this pod
-		if !resp.Response.Allowed {
+		if !resp.Allowed {
 			errorsTotal.With(labels).Inc()
 		}
 	}(time.Now())
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: req.AdmissionRequest.Namespace,
+			Name: req.Namespace,
 		},
 	}
 	nsName, _ := client.ObjectKeyFromObject(ns)
 	if err := i.client.Get(ctx, nsName, ns); err != nil {
-		return admission.ErrorResponse(http.StatusBadRequest, err)
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	pod := &corev1.Pod{}
 	if err := i.decoder.Decode(req, pod); err != nil {
-		return admission.ErrorResponse(http.StatusBadRequest, err)
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	priorityClassName, ok := ns.ObjectMeta.Labels[NamespaceLabel]
 	if !ok {
 		logger.Log("event", "pod.skipped", "msg", "no priority label found")
 		skipTotal.With(labels).Inc()
-		return admission.PatchResponse(pod, pod)
+		return admission.Patched("no priority label found")
 	}
 
 	mutateTotal.With(labels).Inc() // we are committed to mutating this pod now
@@ -149,5 +148,6 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 	copy.Spec.PriorityClassName = priorityClassName
 	copy.Spec.Priority = nil
 
-	return admission.PatchResponse(pod, copy)
+	return admission.Patched("TODO")
+	// return admission.Patched(pod, copy)
 }

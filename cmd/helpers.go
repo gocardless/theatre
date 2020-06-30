@@ -2,20 +2,17 @@ package cmd
 
 import (
 	"fmt"
-	stdlog "log"
 	"net/http"
 	"os"
 	"runtime"
 
 	"github.com/alecthomas/kingpin"
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-
-	"k8s.io/klog"
-
-	"github.com/gocardless/theatre/pkg/logging"
-
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	zaplogfmt "github.com/sykesm/zap-logfmt"
+	"go.uber.org/zap/zapcore"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 type commonOptions struct {
@@ -39,33 +36,31 @@ func (opt *commonOptions) WithMetrics(cmd *kingpin.Application) *commonOptions {
 	return opt
 }
 
-func (opt *commonOptions) Logger() kitlog.Logger {
-	// Output logs to STDERR
-	logger := kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
-
+func (opt *commonOptions) Logger() logr.Logger {
 	// While debugging, it may be useful to provide debug log lines that
 	// include sensitive or large payloads.
+	logLevel := zapcore.InfoLevel
 	if opt.Debug {
-		logger = level.NewFilter(logger, level.AllowDebug())
-	} else {
-		logger = level.NewFilter(logger, level.AllowInfo())
+		logLevel = zapcore.DebugLevel
 	}
+
+	logger := zap.New(
+		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{})),
+		zap.WriteTo(os.Stderr),
+		zap.Level(logLevel),
+	)
+	ctrl.SetLogger(logger)
 
 	// @template: caller is optional, but can be useful to highlight where the log-line is
 	// originating from. This configuration has to happen after we've leveled the logger, to
 	// avoid the caller being set to level.go:63 all the time.
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
-
-	// Connect the Go standard library logger into our kitlog instance so other
-	// dependencies output via kitlog.
-	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
-	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
+	// logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
 
 	return logger
 }
 
-func (opt *commonOptions) ListenAndServeMetrics(logger kitlog.Logger) {
-	logger.Log("event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
+func (opt *commonOptions) ListenAndServeMetrics(logger logr.Logger) {
+	logger.Info("event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(fmt.Sprintf("%s:%v", opt.MetricAddress, opt.MetricPort), nil)

@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/alecthomas/kingpin"
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
 
@@ -28,7 +28,7 @@ import (
 	"github.com/gocardless/theatre/pkg/signals"
 )
 
-var logger kitlog.Logger
+var logger logr.Logger
 
 var (
 	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(cmd.VersionStanza())
@@ -62,7 +62,7 @@ func main() {
 	defer cancel()
 
 	if err := mainError(ctx, command); err != nil {
-		logger.Log("error", err, "msg", "exiting with error")
+		logger.Info("error", err, "msg", "exiting with error")
 		os.Exit(1)
 	}
 }
@@ -78,7 +78,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			*installTheatreEnvconsulBinary: "theatre-envconsul",
 		}
 
-		logger.Log("msg", "copying files into install path", "file_path", *installPath)
+		logger.Info("msg", "copying files into install path", "file_path", *installPath)
 		for src, dstName := range files {
 			if err := copyExecutable(src, path.Join(*installPath, dstName)); err != nil {
 				return errors.Wrap(err, "error copying file")
@@ -97,7 +97,7 @@ func mainError(ctx context.Context, command string) (err error) {
 				return errors.Wrap(err, "failed to authenticate within kubernetes")
 			}
 
-			execVaultOptions.Decorate(logger).Log("event", "vault.login")
+			execVaultOptions.Decorate(logger).Info("event", "vault.login")
 			vaultToken, err = execVaultOptions.Login(serviceAccountToken)
 			if err != nil {
 				return errors.Wrap(err, "failed to login to vault")
@@ -113,7 +113,7 @@ func mainError(ctx context.Context, command string) (err error) {
 		}
 
 		if *execConfigFile != "" {
-			logger.Log("event", "config.load", "file_path", *execConfigFile)
+			logger.Info("event", "config.load", "file_path", *execConfigFile)
 			config, err := loadConfigFromFile(*execConfigFile)
 			if err != nil {
 				return err
@@ -148,7 +148,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			return errors.Wrap(err, "failed to create temporary file for envconsul")
 		}
 
-		logger.Log("event", "envconsul_config_file.create", "path", tempConfigFile.Name())
+		logger.Info("event", "envconsul_config_file.create", "path", tempConfigFile.Name())
 		if err := ioutil.WriteFile(tempConfigFile.Name(), configJSONContents, 0444); err != nil {
 			return errors.Wrap(err, "failed to write temporary file for envconsul")
 		}
@@ -161,7 +161,7 @@ func mainError(ctx context.Context, command string) (err error) {
 		envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
 		envconsulArgs := []string{envconsulBinaryPath, "-once", "-config", tempConfigFile.Name()}
 
-		logger.Log("event", "envconsul.exec", "binary", envconsulBinaryPath, "path", tempConfigFile.Name())
+		logger.Info("event", "envconsul.exec", "binary", envconsulBinaryPath, "path", tempConfigFile.Name())
 		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute envconsul")
 		}
@@ -301,8 +301,8 @@ func (o *vaultOptions) Client() (*api.Client, error) {
 	return client, err
 }
 
-func (o *vaultOptions) Decorate(logger kitlog.Logger) kitlog.Logger {
-	return kitlog.With(logger, "address", o.Address, "backend", o.AuthBackendMountPoint, "role", o.AuthBackendRole)
+func (o *vaultOptions) Decorate(logger logr.Logger) logr.Logger {
+	return logger.WithValues("address", o.Address, "backend", o.AuthBackendMountPoint, "role", o.AuthBackendRole)
 }
 
 // Login uses the kubernetes service account token to authenticate against the Vault

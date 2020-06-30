@@ -1,4 +1,4 @@
-package directoryrolebinding
+package controllers
 
 import (
 	"context"

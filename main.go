@@ -19,17 +19,20 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	rbaccontroller "github.com/gocardless/theatre/controllers/rbac"
 	workloadscontroller "github.com/gocardless/theatre/controllers/workloads"
+	"github.com/gocardless/theatre/pkg/signals"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -69,11 +72,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, _ := signals.SetupSignalHandler()
+
 	if err = (&rbaccontroller.DirectoryRoleBindingReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
+
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(ctx, mgr, nil, time.Hour); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DirectoryRoleBinding")
 		os.Exit(1)
 	}
@@ -81,11 +87,19 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Console"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Console")
 		os.Exit(1)
 	}
+
 	// +kubebuilder:scaffold:builder
+
+	mgr.GetWebhookServer().Register("/mutate-v1-pod-priority", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewPriorityInjector(
+			mgr.GetClient(),
+			ctrl.Log.WithName("webhooks").WithName("priority-injector"),
+		),
+	})
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

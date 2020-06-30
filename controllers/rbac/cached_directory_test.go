@@ -1,4 +1,4 @@
-package directoryrolebinding
+package controllers
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	directoryv1 "google.golang.org/api/admin/directory/v1"
 	gock "gopkg.in/h2non/gock.v1"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kitlog "github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -23,7 +23,7 @@ var _ = Describe("NewCachedDirectory", func() {
 
 	JustBeforeEach(func() {
 		directory = NewCachedDirectory(
-			kitlog.NewLogfmtLogger(GinkgoWriter),
+			zap.New(),
 			NewFakeDirectory(groups),
 			ttl,
 		)
@@ -35,7 +35,7 @@ var _ = Describe("NewCachedDirectory", func() {
 		ttl = time.Second
 		now = time.Now()
 		groups = map[string][]string{
-			"fellowship@lo.tr": []string{
+			"fellowship@lo.tr": {
 				"frodo@lo.tr",
 				"sam@lo.tr",
 				"boromir@lo.tr",

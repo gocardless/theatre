@@ -4,26 +4,32 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kingpin"
 
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
 
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/runtime"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/apis"
-	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
+	directoryrolebinding "github.com/gocardless/theatre/controllers/rbac"
+	rbaccontroller "github.com/gocardless/theatre/controllers/rbac"
 	"github.com/gocardless/theatre/pkg/signals"
 )
 
 var (
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
+
 	app = kingpin.New("rbac-manager", "Manages rbac.crd.gocardless.com resources").Version(cmd.VersionStanza())
 
 	refresh    = app.Flag("refresh", "Refresh interval checking directory sources").Default("1m").Duration()
@@ -35,13 +41,14 @@ var (
 	googleCacheTTL = app.Flag("google-refresh", "Cache TTL for Google directory operations").Default("5m").Duration()
 )
 
+func init() {
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = rbacv1alpha1.AddToScheme(scheme)
+}
+
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	logger := commonOpts.Logger()
-
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		app.Fatalf("failed to add schemes: %v", err)
-	}
 
 	go func() {
 		commonOpts.ListenAndServeMetrics(logger)
@@ -58,7 +65,7 @@ func main() {
 			app.Fatalf("failed to create Google Admin client: %v", err)
 		}
 
-		logger.Log("event", "provider.register", "kind", rbacv1alpha1.GoogleGroupKind)
+		logger.Info("event", "provider.register", "kind", rbacv1alpha1.GoogleGroupKind)
 		provider.Register(
 			rbacv1alpha1.GoogleGroupKind,
 			directoryrolebinding.NewCachedDirectory(
@@ -72,9 +79,19 @@ func main() {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	// DirectoryRoleBinding controller
-	if _, err = directoryrolebinding.Add(ctx, logger, mgr, provider, *refresh); err != nil {
-		app.Fatalf(err.Error())
+	// // DirectoryRoleBinding controller
+	// if _, err = directoryrolebinding.Add(ctx, logger, mgr, provider, *refresh); err != nil {
+	// 	app.Fatalf(err.Error())
+	// }
+
+	if err = (&rbaccontroller.DirectoryRoleBindingReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
+
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(ctx, mgr, nil, time.Hour); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DirectoryRoleBinding")
+		os.Exit(1)
 	}
 
 	if err := mgr.Start(ctx.Done()); err != nil {

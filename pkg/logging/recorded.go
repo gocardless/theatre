@@ -76,7 +76,6 @@ func RecorderAwareCaller() kitlog.Valuer {
 		skipSuffixes := []string{
 			// As logger.Log is called within recorded.go, these frames must be
 			// skipped over also.
-			"vendor/github.com/go-kit/kit/log/log.go",
 			"github.com/gocardless/theatre/pkg/logging/recorded.go",
 		}
 

@@ -2,7 +2,7 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+CRD_OPTIONS ?= "crd"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -11,7 +11,10 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: manager
+all: manager manifests bin/theatre-envconsul bin/theatre-consoles bin/rbac-manager bin/vault-manager bin/workloads-manager
+
+bin/%: generate fmt vet
+	go build -o bin/$@ cmd/$(@F)/*.go
 
 # Run tests
 test: generate fmt vet manifests

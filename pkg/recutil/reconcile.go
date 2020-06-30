@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/gocardless/theatre/pkg/logging"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -48,15 +47,15 @@ func init() {
 // ObjectReconcileFunc defines the expected interface for the reconciliation of a single
 // object type- it can be used to avoid boilerplate for finding and initializing objects
 // at the start of traditional reconciliation loops.
-type ObjectReconcileFunc func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error)
+type ObjectReconcileFunc func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error)
 
 // ResolveAndReconcile helps avoid boilerplate where you would normally attempt to fetch
 // your modified object at the start of a reconciliation loop, and instead calls an inner
 // reconciliation function with the already resolved object.
-func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
+func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
 	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
-		logger := kitlog.With(logger, "request", request)
-		logger.Log("event", EventRequestStart, "msg", "Reconcile request start")
+		logger := logger.WithValues("request", request)
+		logger.Info("event", EventRequestStart, "msg", "Reconcile request start")
 
 		// Prepare a new object for this request
 		rawObj := objType.DeepCopyObject()
@@ -76,27 +75,28 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 				// want to pollute the object's events with transient errors which have
 				// no means of avoiding.
 				if apierrors.IsConflict(errors.Cause(err)) {
-					logging.WithNoRecord(logger).Log("event", EventError, "error", err)
+					logger.Info("event", EventError, "error", err)
 				} else {
-					logger.Log("event", EventError, "error", err)
+					logger.Info("event", EventError, "error", err)
 					reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
 				}
 			} else {
-				logger.Log("event", EventComplete, "msg", "Completed reconciliation")
+				logger.Info("event", EventComplete, "msg", "Completed reconciliation")
 			}
 
 		}()
 
 		if err := mgr.GetClient().Get(ctx, request.NamespacedName, obj); err != nil {
 			if apierrors.IsNotFound(err) {
-				return res, logger.Log("event", EventNotFound)
+				logger.Info("event", EventNotFound)
+				return res, fmt.Errorf("event not found: %w", err)
 			}
 
 			return res, err
 		}
 
-		logger = logging.WithRecorder(logger, mgr.GetRecorder("theatre"), obj)
-		logger.Log("event", EventStart, "msg", "Starting reconciliation")
+		// logger = logging.WithRecorder(logger, mgr.GetEventRecorderFor("theatre"), obj)
+		logger.Info("event", EventStart, "msg", "Starting reconciliation")
 
 		// If the object is being deleted then don't attempt any further
 		// reconciliation, as this can lead to recreating child resources (which
@@ -106,7 +106,7 @@ func ResolveAndReconcile(ctx context.Context, logger kitlog.Logger, mgr manager.
 		// If we need to support finalizers in the future then this will need to be
 		// extended to call a function that performs the finalizer actions.
 		if !obj.GetDeletionTimestamp().IsZero() {
-			logger.Log("event", EventSkipped, "msg", "Skipping reconciliation due to deletion")
+			logger.Info("event", EventSkipped, "msg", "Skipping reconciliation due to deletion")
 			res = reconcile.Result{Requeue: false}
 			return res, nil
 		}

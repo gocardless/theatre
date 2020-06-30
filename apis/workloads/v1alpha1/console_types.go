@@ -72,6 +72,8 @@ type ConsoleStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // Console declares an instance of a console environment to be created by a specific user
 // +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.user"

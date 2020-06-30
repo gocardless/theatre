@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +33,6 @@ import (
 	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
-	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/recutil"
 )
 
@@ -78,12 +77,12 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 	return false
 }
 
-func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
-	logger = kitlog.With(logger, "component", "Console")
+func Add(ctx context.Context, logger logr.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
+	logger = logger.WithValues("component", "Console")
 	ctrlOptions := controller.Options{
 		Reconciler: recutil.ResolveAndReconcile(
 			ctx, logger, mgr, &workloadsv1alpha1.Console{},
-			func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
+			func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
 				reconciler := &reconciler{
 					ctx:     ctx,
 					logger:  logger,
@@ -146,7 +145,7 @@ func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ..
 
 type reconciler struct {
 	ctx     context.Context
-	logger  kitlog.Logger
+	logger  logr.Logger
 	client  client.Client
 	name    types.NamespacedName
 	console *workloadsv1alpha1.Console
@@ -294,7 +293,7 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	}
 
 	if r.console.EligibleForGC() {
-		r.logger.Log("event", EventDelete, "kind", Console, "msg", "Deleting expired console")
+		r.logger.Info("event", EventDelete, "kind", Console, "msg", "Deleting expired console")
 		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return res, err
 		}
@@ -397,17 +396,18 @@ func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, d
 
 	switch outcome {
 	case recutil.Create:
-		r.logger.Log("event", EventSuccessfulCreate, "msg", "Created "+objDesc)
+		r.logger.Info("event", EventSuccessfulCreate, "msg", "Created "+objDesc)
 	case recutil.Update:
-		r.logger.Log("event", EventSuccessfulUpdate, "msg", "Updated "+objDesc)
+		r.logger.Info("event", EventSuccessfulUpdate, "msg", "Updated "+objDesc)
 	case recutil.None:
-		logging.WithNoRecord(r.logger).Log(
-			"event", EventNoCreateOrUpdate, "msg", "Nothing to do for "+objDesc,
-		)
+		// TODO
+		// logging.WithNoRecord(r.logger).Log(
+		// 	"event", EventNoCreateOrUpdate, "msg", "Nothing to do for "+objDesc,
+		// )
 	default:
 		// This is only possible in case we implement new outcomes and forget to
 		// add a case here; in which case we should log a warning.
-		r.logger.Log(
+		r.logger.Info(
 			"event", EventUnknownOutcome,
 			"error", fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc),
 		)
@@ -425,7 +425,7 @@ func (r *reconciler) setConsoleTimeout(console *workloadsv1alpha1.Console, templ
 	case console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
 	case console.Spec.TimeoutSeconds > max:
-		r.logger.Log(
+		r.logger.Info(
 			"event", EventInvalidSpecification,
 			"error", fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max),
 		)
@@ -492,17 +492,17 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 	newStatus := calculateStatus(r.console, statusCtx)
 
 	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Log("event", ConsolePendingAuthorisation, "msg", "Console pending authorisation")
+		logger.Info("event", ConsolePendingAuthorisation, "msg", "Console pending authorisation")
 	}
 
 	// Console phase from Pending Authorisation
 	if r.console.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Log("event", ConsoleAuthorised, "msg", "Console authorised")
+		logger.Info("event", ConsoleAuthorised, "msg", "Console authorised")
 	}
 
 	// Console phase from Pending to Running
 	if r.console.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
-		logger.Log("event", ConsoleStarted, "msg", "Console started")
+		logger.Info("event", ConsoleStarted, "msg", "Console started")
 	}
 
 	// Console phase from Running to Stopped, with a CompletionTime: the job
@@ -510,7 +510,7 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime != nil {
 		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Log("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
+		logger.Info("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
 	}
 
 	// Console phase from Running to Stopped without CompletionTime.
@@ -521,24 +521,24 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime == nil {
 		duration := r.console.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Log("event", ConsoleEnded, "msg", "Console ended due to expiration", "duration", duration)
+		logger.Info("event", ConsoleEnded, "msg", "Console ended due to expiration", "duration", duration)
 	}
 
 	// Console phase transitioned to Stopped, but wasn't Running or Stopped beforehand.
 	// This could indicate a bug, or the console may have transitioned through
 	// more than one phase in between reconciliation loops.
 	if !r.console.Running() && !r.console.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
-		logger.Log("event", ConsoleEnded, "msg", "Console ended: duration unknown")
+		logger.Info("event", ConsoleEnded, "msg", "Console ended: duration unknown")
 	}
 
 	// Console was in PendingAuthorisation phase, but is about to be deleted.
 	if r.console.PendingAuthorisation() && r.console.EligibleForGC() {
-		logger.Log("event", ConsoleEnded, "msg", "Console expired due to lack of authorisation")
+		logger.Info("event", ConsoleEnded, "msg", "Console expired due to lack of authorisation")
 	}
 
 	// Console phase has changed to destroyed (i.e. the job has been removed)
 	if !r.console.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
-		logger.Log("event", ConsoleDestroyed, "msg", "Console destroyed")
+		logger.Info("event", ConsoleDestroyed, "msg", "Console destroyed")
 	}
 
 	updatedCsl := r.console.DeepCopy()
@@ -599,8 +599,9 @@ func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePha
 	return workloadsv1alpha1.ConsolePending
 }
 
-func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcile.Result {
-	logging.WithNoRecord(logger).Log(
+func requeueAfterInterval(logger logr.Logger, interval time.Duration) reconcile.Result {
+	// logging.WithNoRecord(logger)
+	logger.Info(
 		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
 	)
 	return reconcile.Result{Requeue: true, RequeueAfter: interval}
@@ -634,7 +635,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	}
 
 	if numContainers > 1 {
-		r.logger.Log(
+		r.logger.Info(
 			"event", EventTemplateUnsupported,
 			"error", "A console template can only contain a single container",
 		)
@@ -880,21 +881,20 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 }
 
 // getAuditLogger provides a decorated logger for audit purposes
-func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) kitlog.Logger {
-	loggerCtx := logging.WithNoRecord(logger)
+func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) logr.Logger {
+	// loggerCtx := logging.WithNoRecord(logger)
 
 	// Append any label-based keys before doing anything else.
 	// This ensures that if there's duplicate keys (e.g. a `name` label on the
 	// console) then we won't clobber the keys which we explicitly set below with
 	// the values of those in the console labels, when eventually parsing the log
 	// entry.
-	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
+	// loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
 
 	cmdString, _ := json.Marshal(statusCtx.Command)
 	requiresAuth := statusCtx.AuthorisationRule != nil && statusCtx.AuthorisationRule.AuthorisationsRequired > 0
 
-	loggerCtx = kitlog.With(
-		loggerCtx,
+	logger = logger.WithValues(
 		"kind", Console,
 		"console_name", c.Name,
 		"console_user", c.Spec.User,
@@ -908,12 +908,12 @@ func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCt
 	)
 
 	if statusCtx.Pod != nil {
-		loggerCtx = kitlog.With(loggerCtx, "console_pod_name", statusCtx.Pod.Name)
+		logger = logger.WithValues("console_pod_name", statusCtx.Pod.Name)
 	}
 
 	if statusCtx.AuthorisationRule != nil {
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_rule_name", statusCtx.AuthorisationRule.Name)
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired)
+		logger = logger.WithValues("console_authorisation_rule_name", statusCtx.AuthorisationRule.Name)
+		logger = logger.WithValues("console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired)
 	}
 
 	if statusCtx.Authorisation != nil {
@@ -923,10 +923,10 @@ func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCt
 		}
 
 		authorisers, _ := json.Marshal(subjectNames)
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisers", authorisers)
+		logger = logger.WithValues("console_authorisers", authorisers)
 	}
 
-	return loggerCtx
+	return logger
 }
 
 // Ensure that the job name (after suffixing with `-console`) does not exceed 63

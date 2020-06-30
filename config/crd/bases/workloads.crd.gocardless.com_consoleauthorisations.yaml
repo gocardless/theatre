@@ -18,9 +18,153 @@ spec:
   version: v1alpha1
   versions:
   - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ConsoleAuthorisation is the Schema for the consoleauthorisations
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConsoleAuthorisationSpec defines the desired state of ConsoleAuthorisation
+            properties:
+              authorisations:
+                description: List of authorisations that have been given to the referenced
+                  console.
+                items:
+                  description: Subject contains a reference to the object or user
+                    identities a role binding applies to.  This can either hold a
+                    direct API object reference, or a value for non-objects such as
+                    user and group names.
+                  properties:
+                    apiGroup:
+                      description: APIGroup holds the API group of the referenced
+                        subject. Defaults to "" for ServiceAccount subjects. Defaults
+                        to "rbac.authorization.k8s.io" for User and Group subjects.
+                      type: string
+                    kind:
+                      description: Kind of object being referenced. Values defined
+                        by this API group are "User", "Group", and "ServiceAccount".
+                        If the Authorizer does not recognized the kind value, the
+                        Authorizer should report an error.
+                      type: string
+                    name:
+                      description: Name of the object being referenced.
+                      type: string
+                    namespace:
+                      description: Namespace of the referenced object.  If the object
+                        kind is non-namespace, such as "User" or "Group", and this
+                        value is not empty the Authorizer should report an error.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              consoleRef:
+                description: The reference to the console by name that this console
+                  authorisation belongs to.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
+                type: object
+            required:
+            - authorisations
+            - consoleRef
+            type: object
+          status:
+            description: ConsoleAuthorisationStatus defines the observed state of
+              ConsoleAuthorisation
+            type: object
+        type: object
     served: true
-    storage: false
+    storage: true
+    subresources:
+      status: {}
   - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ConsoleAuthorisation declares a console authorisation that is
+          instantiated when a console that requires authoristion is created. It is
+          used to store authorisations for the associated console.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConsoleAuthorisationSpec defines the specification for a
+              console authorisation
+            properties:
+              authorisations:
+                description: List of authorisations that have been given to the referenced
+                  console.
+                items:
+                  description: Subject contains a reference to the object or user
+                    identities a role binding applies to.  This can either hold a
+                    direct API object reference, or a value for non-objects such as
+                    user and group names.
+                  properties:
+                    apiGroup:
+                      description: APIGroup holds the API group of the referenced
+                        subject. Defaults to "" for ServiceAccount subjects. Defaults
+                        to "rbac.authorization.k8s.io" for User and Group subjects.
+                      type: string
+                    kind:
+                      description: Kind of object being referenced. Values defined
+                        by this API group are "User", "Group", and "ServiceAccount".
+                        If the Authorizer does not recognized the kind value, the
+                        Authorizer should report an error.
+                      type: string
+                    name:
+                      description: Name of the object being referenced.
+                      type: string
+                    namespace:
+                      description: Namespace of the referenced object.  If the object
+                        kind is non-namespace, such as "User" or "Group", and this
+                        value is not empty the Authorizer should report an error.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              consoleRef:
+                description: The reference to the console by name that this console
+                  authorisation belongs to.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
+                type: object
+            required:
+            - authorisations
+            - consoleRef
+            type: object
+        required:
+        - spec
+        type: object
     served: true
     storage: false
 status:

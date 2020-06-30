@@ -1,16 +1,16 @@
-package directoryrolebinding
+package controllers
 
 import (
 	"context"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-logr/logr"
 )
 
 // NewCachedDirectory wraps the given directory so that we cache member lists for the
 // given TTL. This is useful when we want to reason about the maximum number of calls to a
 // directory API our controllers might make, which helps us avoid API rate limits.
-func NewCachedDirectory(logger kitlog.Logger, directory Directory, ttl time.Duration) *cachedDirectory {
+func NewCachedDirectory(logger logr.Logger, directory Directory, ttl time.Duration) *cachedDirectory {
 	return &cachedDirectory{
 		logger:    logger,
 		directory: directory,
@@ -21,7 +21,7 @@ func NewCachedDirectory(logger kitlog.Logger, directory Directory, ttl time.Dura
 }
 
 type cachedDirectory struct {
-	logger    kitlog.Logger
+	logger    logr.Logger
 	directory Directory
 	ttl       time.Duration
 	cache     map[string]cacheEntry
@@ -39,13 +39,13 @@ func (d *cachedDirectory) MembersOf(ctx context.Context, group string) (members 
 			return entry.members, nil
 		}
 
-		d.logger.Log("event", "cache.expire", "group", group)
+		d.logger.Info("event", "cache.expire", "group", group)
 		delete(d.cache, group) // expired
 	}
 
 	members, err = d.directory.MembersOf(ctx, group)
 	if err == nil {
-		d.logger.Log("event", "cache.add", "group", group)
+		d.logger.Info("event", "cache.add", "group", group)
 		d.cache[group] = cacheEntry{members: members, cachedAt: d.now()}
 	}
 

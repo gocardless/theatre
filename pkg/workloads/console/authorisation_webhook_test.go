@@ -4,7 +4,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"

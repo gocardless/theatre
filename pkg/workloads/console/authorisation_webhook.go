@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apiTypes "k8s.io/apimachinery/pkg/types"

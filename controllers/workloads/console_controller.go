@@ -46,7 +46,6 @@ import (
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
 	"github.com/gocardless/theatre/pkg/recutil"
 )
 
@@ -112,7 +111,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	csl, err = setConsoleOwner(csl, tpl)
+	csl, err = setConsoleOwner(csl, tpl, r.Scheme)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to set controller reference on console object")
 	}
@@ -309,9 +308,9 @@ func (r *ConsoleReconciler) getJob(ctx context.Context, name types.NamespacedNam
 	return job, r.Get(ctx, jobName, job)
 }
 
-func setConsoleOwner(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate) (*workloadsv1alpha1.Console, error) {
+func setConsoleOwner(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate, scheme *runtime.Scheme) (*workloadsv1alpha1.Console, error) {
 	updatedCsl := console.DeepCopy()
-	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme); err != nil {
 		return nil, errors.Wrap(err, "failed to set controller reference")
 	}
 
@@ -347,7 +346,7 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 	// If operating on the console itself, don't attempt to set the controller
 	// reference, as this isn't valid.
 	if kind != Console {
-		if err := controllerutil.SetControllerReference(csl, expected, scheme.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(csl, expected, r.Scheme); err != nil {
 			return err
 		}
 	}

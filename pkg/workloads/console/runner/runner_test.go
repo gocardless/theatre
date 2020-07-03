@@ -4,8 +4,7 @@ import (
 	"context"
 	"time"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	theatreFake "github.com/gocardless/theatre/pkg/client/clientset/versioned/fake"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

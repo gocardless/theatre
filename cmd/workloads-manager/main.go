@@ -1,15 +1,11 @@
 package main
 
 import (
-	"os"
-
 	"github.com/alecthomas/kingpin"
 
-	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 
 	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/apis"
 )
 
 var (
@@ -23,16 +19,16 @@ var (
 )
 
 func main() {
-	kingpin.MustParse(app.Parse(os.Args[1:]))
-	logger := commonOpts.Logger()
+	// kingpin.MustParse(app.Parse(os.Args[1:]))
+	// logger := commonOpts.Logger()
 
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		app.Fatalf("failed to add schemes: %v", err)
-	}
+	// if err := apis.AddToScheme(scheme.Scheme); err != nil {
+	// 	app.Fatalf("failed to add schemes: %v", err)
+	// }
 
-	go func() {
-		commonOpts.ListenAndServeMetrics(logger)
-	}()
+	// go func() {
+	// 	commonOpts.ListenAndServeMetrics(logger)
+	// }()
 
 	// ctx, cancel := signals.SetupSignalHandler()
 	// defer cancel()

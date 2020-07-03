@@ -23,9 +23,9 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/cmd/get"
 	"k8s.io/kubectl/pkg/util/term"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 )
 
 // Alias genericclioptions.IOStreams to avoid additional imports
@@ -34,7 +34,7 @@ type IOStreams genericclioptions.IOStreams
 // Runner is responsible for managing the lifecycle of a console
 type Runner struct {
 	kubeClient    kubernetes.Interface
-	theatreClient versioned.Interface
+	theatreClient client.Client
 }
 
 // Options defines the parameters that can be set upon a new console
@@ -54,7 +54,7 @@ type Options struct {
 }
 
 // New builds a runner
-func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner {
+func New(client kubernetes.Interface, theatreClient client.Client) *Runner {
 	return &Runner{
 		kubeClient:    client,
 		theatreClient: theatreClient,
@@ -214,10 +214,14 @@ type GetOptions struct {
 
 // Get provides a standardised method to get a console
 func (c *Runner) Get(ctx context.Context, opts GetOptions) (*workloadsv1alpha1.Console, error) {
-	csl, err := c.theatreClient.
-		WorkloadsV1alpha1().
-		Consoles(opts.Namespace).
-		Get(opts.ConsoleName, metav1.GetOptions{})
+	csl, err := c.theatreClient.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      opts.ConsoleName,
+			Namespace: opts.Namespace,
+		},
+		&csl,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +291,7 @@ type Attacher struct {
 // Attach will interactively attach to a containers output, creating a new TTY
 // and hooking this into the current processes file descriptors.
 func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error {
+
 	req := a.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Namespace(pod.GetNamespace()).
@@ -367,7 +372,8 @@ func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
 		return err
 	}
 
-	_, err = c.theatreClient.
+	// WIP(jackatbancast) switch to new patch method
+	_, err = c.theatreClient.Patch(ctx, obj runtime.Object, patch client.Patch, opts ...client.PatchOption)
 		Workloads().
 		ConsoleAuthorisations(opts.Namespace).
 		Patch(

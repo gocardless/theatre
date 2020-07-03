@@ -20,6 +20,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0
 	github.com/sykesm/zap-logfmt v0.0.3
+	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738
 	go.uber.org/zap v1.12.0
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	gomodules.xyz/jsonpatch/v3 v3.0.1
@@ -32,5 +33,6 @@ require (
 	k8s.io/client-go v0.18.5
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.18.5
+	k8s.io/metrics v0.18.5
 	sigs.k8s.io/controller-runtime v0.6.0
 )

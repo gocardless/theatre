@@ -29,6 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	// vaultv1alpha1 "github.com/gocardless/theatre/apis/vault/v1alpha1"
+	vaultv1alpha1 "github.com/gocardless/theatre/apis/vault/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	rbaccontroller "github.com/gocardless/theatre/controllers/rbac"
 	workloadscontroller "github.com/gocardless/theatre/controllers/workloads"
@@ -92,12 +94,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&workloadsv1alpha1.ConsoleTemplate{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ConsoleTemplate")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	mgr.GetWebhookServer().Register("/mutate-v1-pod-priority", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewPriorityInjector(
 			mgr.GetClient(),
 			ctrl.Log.WithName("webhooks").WithName("priority-injector"),
+		),
+	})
+	mgr.GetWebhookServer().Register("/mutate-workloads-crd-gocardless-com-v1alpha1-console", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthenticator(
+			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
+		),
+	})
+	mgr.GetWebhookServer().Register("/mutate-vault-crd-gocardless-com-v1alpha1-envconsulinjector", &admission.Webhook{
+		Handler: vaultv1alpha1.NewEnvconsulInjector(
+			mgr.GetClient(),
+			ctrl.Log.WithName("webhooks").WithName("envconsul-injector"),
+			vaultv1alpha1.EnvconsulInjectorOptions{},
 		),
 	})
 

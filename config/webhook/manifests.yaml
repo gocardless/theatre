@@ -11,15 +11,41 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-v1-pod
+      path: /mutate-workloads-crd-gocardless-com-v1alpha1-console
   failurePolicy: Fail
-  name: priority-injector.workloads.crd.gocardless.com
+  name: console-authenticator.crd.gocardless.com
   rules:
   - apiGroups:
-    - ""
+    - workloads.crd.gocardless.com
     apiVersions:
-    - v1
+    - v1alpha1
     operations:
     - CREATE
     resources:
-    - pods
+    - consoles
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-workloads-crd-gocardless-com-v1alpha1-consoletemplate
+  failurePolicy: Fail
+  name: console-template-validation.crd.gocardless.com
+  rules:
+  - apiGroups:
+    - workloads.crd.gocardless.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - consoletemplates

@@ -4,6 +4,7 @@ package v1alpha1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -81,9 +82,9 @@ func (i *PriorityInjector) Handle(ctx context.Context, req admission.Request) (r
 		"component", "PriorityInjector",
 		"uuid", string(req.UID),
 	)
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Since(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Since(start).Seconds())
 
 		handleTotal.With(labels).Inc()
 		{ // add 0 to initialise the metrics
@@ -115,14 +116,14 @@ func (i *PriorityInjector) Handle(ctx context.Context, req admission.Request) (r
 
 	priorityClassName, ok := ns.ObjectMeta.Labels[NamespaceLabel]
 	if !ok {
-		logger.Info("event", "pod.skipped", "msg", "no priority label found")
+		logger.Info("skipping pod without priority label", "event", "pod.skipped", "msg", "no priority label found")
 		skipTotal.With(labels).Inc()
 		return admission.Allowed("no priority label found")
 	}
 
 	mutateTotal.With(labels).Inc() // we are committed to mutating this pod now
 
-	logger.Info("event", "pod.assign_priority_class", "class", priorityClassName)
+	logger.Info(fmt.Sprintf("pod assigned priority class %s", priorityClassName), "event", "pod.assign_priority_class", "class", priorityClassName)
 	copy := pod.DeepCopy()
 	copy.Spec.PriorityClassName = priorityClassName
 	copy.Spec.Priority = nil

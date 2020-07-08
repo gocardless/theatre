@@ -53,9 +53,9 @@ func NewConsoleAuthorisationWebhook(client client.Client, logger logr.Logger) *C
 
 func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
 	logger := c.logger.WithValues("uuid", string(req.UID))
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
 	}(time.Now())
 
 	// request console authorisation object
@@ -86,11 +86,11 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	}
 
 	if err := update.Validate(); err != nil {
-		logger.Info("event", "authorisation.failure", "error", err)
+		logger.Error(err, "authorisation failed", "event", "authorisation.failure", "error", err)
 		return admission.ValidationResponse(false, fmt.Sprintf("the console authorisation spec is invalid: %v", err))
 	}
 
-	logger.Info("event", "authorisation.success")
+	logger.Info("authorisation successful", "event", "authorisation.success")
 	return admission.ValidationResponse(true, "")
 }
 

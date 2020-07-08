@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -46,9 +47,9 @@ func (c *consoleAuthenticator) InjectDecoder(d *admission.Decoder) error {
 
 func (c *consoleAuthenticator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	logger := c.logger.WithValues(c.logger, "uuid", string(req.UID))
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
 	}(time.Now())
 
 	csl := &Console{}
@@ -65,7 +66,7 @@ func (c *consoleAuthenticator) Handle(ctx context.Context, req admission.Request
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	logger.Info("event", "authentication.success", "user", user)
+	logger.Info(fmt.Sprintf("authentication successful for user %s", user), "event", "authentication.success", "user", user)
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, copyBytes)
 }

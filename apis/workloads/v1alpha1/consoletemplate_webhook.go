@@ -42,36 +42,36 @@ var _ webhook.Validator = &ConsoleTemplate{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *ConsoleTemplate) ValidateCreate() error {
 	logger := consoletemplatelog.WithValues("uuid", r.UID, "name", r.Name)
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
 	}(time.Now())
 
 	if err := r.Validate(); err != nil {
-		consoletemplatelog.Info("event", "validation.failure")
+		consoletemplatelog.Info("vailidation failed", "event", "validation.failure")
 		return fmt.Errorf("the console template spec is invalid: %w", err)
 	}
 
-	logger.Info("event", "validation.success")
+	logger.Info("validation successful", "event", "validation.success")
 	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *ConsoleTemplate) ValidateUpdate(old runtime.Object) error {
 	logger := consoletemplatelog.WithValues("uuid", r.UID, "name", r.Name)
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
 	}(time.Now())
 
 	if err := r.Validate(); err != nil {
-		consoletemplatelog.Info("event", "validation.failure")
+		consoletemplatelog.Info("validation failure", "event", "validation.failure")
 		return fmt.Errorf("the console template spec is invalid: %w", err)
 	}
 
-	logger.Info("event", "validation.success")
+	logger.Info("validation successful", "event", "validation.success")
 	return nil
 }
 

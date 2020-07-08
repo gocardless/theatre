@@ -46,6 +46,7 @@ import (
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/recutil"
 )
 
@@ -239,7 +240,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 	}
 
 	if csl.EligibleForGC() {
-		logger.Info("event", EventDelete, "kind", Console, "msg", "Deleting expired console")
+		logger.Info("Deleting expired console", "event", EventDelete, "kind", Console)
 		if err = r.Delete(ctx, csl, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -362,9 +363,9 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 
 	switch outcome {
 	case recutil.Create:
-		logger.Info("event", EventSuccessfulCreate, "msg", "Created "+objDesc)
+		logger.Info("Created "+objDesc, "event", EventSuccessfulCreate)
 	case recutil.Update:
-		logger.Info("event", EventSuccessfulUpdate, "msg", "Updated "+objDesc)
+		logger.Info("Updated "+objDesc, "event", EventSuccessfulUpdate)
 	case recutil.None:
 		// TODO
 		// logging.WithNoRecord(r.logger).Log(
@@ -373,7 +374,9 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 	default:
 		// This is only possible in case we implement new outcomes and forget to
 		// add a case here; in which case we should log a warning.
-		logger.Info(
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventUnknownOutcome,
 			"error", fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc),
 		)
@@ -391,9 +394,12 @@ func (r *ConsoleReconciler) setConsoleTimeout(logger logr.Logger, console *workl
 	case console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
 	case console.Spec.TimeoutSeconds > max:
-		logger.Info(
+		err := fmt.Errorf("Specified timeout exceeded the template maximum; reduced to %ds", max)
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventInvalidSpecification,
-			"error", fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max),
+			"error", err.Error(),
 		)
 		timeout = max
 	default:
@@ -458,17 +464,17 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	newStatus := calculateStatus(csl, statusCtx)
 
 	if csl.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Info("event", ConsolePendingAuthorisation, "msg", "Console pending authorisation")
+		logger.Info("Console pending authorisation", "event", ConsolePendingAuthorisation)
 	}
 
 	// Console phase from Pending Authorisation
 	if csl.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Info("event", ConsoleAuthorised, "msg", "Console authorised")
+		logger.Info("Console authorised", "event", ConsoleAuthorised)
 	}
 
 	// Console phase from Pending to Running
 	if csl.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
-		logger.Info("event", ConsoleStarted, "msg", "Console started")
+		logger.Info("Console started", "event", ConsoleStarted)
 	}
 
 	// Console phase from Running to Stopped, with a CompletionTime: the job
@@ -476,7 +482,7 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	if csl.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime != nil {
 		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Info("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
+		logger.Info("Console ended", "event", ConsoleEnded, "duration", duration)
 	}
 
 	// Console phase from Running to Stopped without CompletionTime.
@@ -487,24 +493,24 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	if csl.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime == nil {
 		duration := csl.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Info("event", ConsoleEnded, "msg", "Console ended due to expiration", "duration", duration)
+		logger.Info("Console ended due to expiration", "event", ConsoleEnded, "duration", duration)
 	}
 
 	// Console phase transitioned to Stopped, but wasn't Running or Stopped beforehand.
 	// This could indicate a bug, or the console may have transitioned through
 	// more than one phase in between reconciliation loops.
 	if !csl.Running() && !csl.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
-		logger.Info("event", ConsoleEnded, "msg", "Console ended: duration unknown")
+		logger.Info("Console ended: duration unknown", "event", ConsoleEnded)
 	}
 
 	// Console was in PendingAuthorisation phase, but is about to be deleted.
 	if csl.PendingAuthorisation() && csl.EligibleForGC() {
-		logger.Info("event", ConsoleEnded, "msg", "Console expired due to lack of authorisation")
+		logger.Info("Console expired due to lack of authorisation", "event", ConsoleEnded)
 	}
 
 	// Console phase has changed to destroyed (i.e. the job has been removed)
 	if !csl.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
-		logger.Info("event", ConsoleDestroyed, "msg", "Console destroyed")
+		logger.Info("Console destroyed", "event", ConsoleDestroyed)
 	}
 
 	updatedCsl := csl.DeepCopy()
@@ -566,9 +572,11 @@ func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePha
 }
 
 func requeueAfterInterval(logger logr.Logger, interval time.Duration) reconcile.Result {
-	// logging.WithNoRecord(logger)
+	logger = logging.WithNoRecord(logger)
 	logger.Info(
-		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
+		"Reconciliation requeued",
+		"event", recutil.EventRequeued,
+		"reconcile_after", interval,
 	)
 	return reconcile.Result{Requeue: true, RequeueAfter: interval}
 }
@@ -599,9 +607,12 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 	}
 
 	if numContainers > 1 {
-		logger.Info(
+		err := errors.New("A console template can only contain a single container")
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventTemplateUnsupported,
-			"error", "A console template can only contain a single container",
+			"error", err.Error(),
 		)
 	}
 

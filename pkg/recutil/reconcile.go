@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	"github.com/gocardless/theatre/pkg/logging"
 )
 
 const (
@@ -95,7 +96,7 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 			return res, err
 		}
 
-		// logger = logging.WithRecorder(logger, mgr.GetEventRecorderFor("theatre"), obj)
+		logger = logging.WithEventRecorder(logger, mgr.GetEventRecorderFor("theatre"), obj)
 		logger.Info("event", EventStart, "msg", "Starting reconciliation")
 
 		// If the object is being deleted then don't attempt any further

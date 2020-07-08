@@ -1,10 +1,9 @@
-package console
+package v1alpha1
 
 import (
 	"io/ioutil"
 	"net/http"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-func mustConsoleAuthorisationFixture(path string) *workloadsv1alpha1.ConsoleAuthorisation {
-	consoleAuthorisation := &workloadsv1alpha1.ConsoleAuthorisation{}
+func mustConsoleAuthorisationFixture(path string) *ConsoleAuthorisation {
+	consoleAuthorisation := &ConsoleAuthorisation{}
 
 	consoleAuthorisationFixtureYAML, _ := ioutil.ReadFile(path)
 
@@ -29,7 +28,7 @@ var _ = Describe("Authorisation webhook", func() {
 	Describe("Validate", func() {
 		var (
 			updateFixture string
-			update        *consoleAuthorisationUpdate
+			update        *ConsoleAuthorisationUpdate
 			err           error
 		)
 
@@ -37,7 +36,7 @@ var _ = Describe("Authorisation webhook", func() {
 
 		JustBeforeEach(func() {
 			updatedAuth := mustConsoleAuthorisationFixture(updateFixture)
-			update = &consoleAuthorisationUpdate{
+			update = &ConsoleAuthorisationUpdate{
 				existingAuth: existingAuth,
 				updatedAuth:  updatedAuth,
 				user:         "current-user",

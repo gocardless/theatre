@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/kingpin"
 
@@ -79,17 +78,14 @@ func main() {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	// // DirectoryRoleBinding controller
-	// if _, err = directoryrolebinding.Add(ctx, logger, mgr, provider, *refresh); err != nil {
-	// 	app.Fatalf(err.Error())
-	// }
-
 	if err = (&rbaccontroller.DirectoryRoleBindingReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
-
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(ctx, mgr, nil, time.Hour); err != nil {
+		Client:          mgr.GetClient(),
+		Ctx:             ctx,
+		Log:             ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
+		Provider:        provider,
+		RefreshInterval: *refresh,
+		Scheme:          mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DirectoryRoleBinding")
 		os.Exit(1)
 	}

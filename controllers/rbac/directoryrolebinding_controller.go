@@ -52,12 +52,11 @@ const (
 // DirectoryRoleBindingReconciler reconciles a DirectoryRoleBinding object
 type DirectoryRoleBindingReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-
-	ctx             context.Context
-	provider        DirectoryProvider
-	refreshInterval time.Duration
+	Ctx             context.Context
+	Log             logr.Logger
+	Provider        DirectoryProvider
+	RefreshInterval time.Duration
+	Scheme          *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=rbac.crd.gocardless.com,resources=directoryrolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -67,7 +66,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 	var err error
 	rb := &rbacv1.RoleBinding{}
 	identifier := types.NamespacedName{Name: drb.Name, Namespace: drb.Namespace}
-	err = r.Get(r.ctx, identifier, rb)
+	err = r.Get(r.Ctx, identifier, rb)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, fmt.Errorf("failed to get DirectoryRoleBinding: %w", err)
@@ -87,7 +86,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 			return reconcile.Result{}, fmt.Errorf("failed to set controller reference: %w", err)
 		}
 
-		if err = r.Create(r.ctx, rb); err != nil {
+		if err = r.Create(r.Ctx, rb); err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to create RoleBinding: %w", err)
 		}
 
@@ -116,15 +115,15 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 		}
 
 		rb.Subjects = subjects
-		if err := r.Update(r.ctx, rb); err != nil {
+		if err := r.Update(r.Ctx, rb); err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to update RoleBinding: %w", err)
 		}
 	}
 
-	return reconcile.Result{RequeueAfter: r.refreshInterval}, nil
+	return reconcile.Result{RequeueAfter: r.RefreshInterval}, nil
 }
 
-func (r *DirectoryRoleBindingReconciler) SetupWithManager(ctx context.Context, mgr manager.Manager, provider DirectoryProvider, refreshInterval time.Duration) error {
+func (r *DirectoryRoleBindingReconciler) SetupWithManager(mgr manager.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&rbacv1alpha1.DirectoryRoleBinding{}).
 		Watches(
@@ -136,7 +135,7 @@ func (r *DirectoryRoleBindingReconciler) SetupWithManager(ctx context.Context, m
 		).
 		Complete(
 			recutil.ResolveAndReconcile(
-				ctx, r.Log, mgr, &rbacv1alpha1.DirectoryRoleBinding{},
+				r.Ctx, r.Log, mgr, &rbacv1alpha1.DirectoryRoleBinding{},
 				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
 					return r.ReconcileObject(logger, request, obj.(*rbacv1alpha1.DirectoryRoleBinding))
 				},
@@ -150,7 +149,7 @@ func (r *DirectoryRoleBindingReconciler) SetupWithManager(ctx context.Context, m
 func (r *DirectoryRoleBindingReconciler) resolve(in []rbacv1.Subject) ([]rbacv1.Subject, error) {
 	out := make([]rbacv1.Subject, 0)
 	for _, subject := range in {
-		directory := r.provider.Get(subject.Kind)
+		directory := r.Provider.Get(subject.Kind)
 		if directory == nil {
 			out = append(out, subject)
 			continue // move onto the next subject
@@ -174,7 +173,7 @@ func (r *DirectoryRoleBindingReconciler) resolve(in []rbacv1.Subject) ([]rbacv1.
 
 func (r *DirectoryRoleBindingReconciler) membersOf(directory Directory, group string) ([]rbacv1.Subject, error) {
 	subjects := make([]rbacv1.Subject, 0)
-	members, err := directory.MembersOf(r.ctx, group)
+	members, err := directory.MembersOf(r.Ctx, group)
 
 	if err == nil {
 		for _, member := range members {

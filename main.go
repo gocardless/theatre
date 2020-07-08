@@ -19,7 +19,6 @@ package main
 import (
 	"flag"
 	"os"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,7 +31,6 @@ import (
 	// vaultv1alpha1 "github.com/gocardless/theatre/apis/vault/v1alpha1"
 	vaultv1alpha1 "github.com/gocardless/theatre/apis/vault/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
-	rbaccontroller "github.com/gocardless/theatre/controllers/rbac"
 	workloadscontroller "github.com/gocardless/theatre/controllers/workloads"
 	"github.com/gocardless/theatre/pkg/signals"
 	// +kubebuilder:scaffold:imports
@@ -76,15 +74,16 @@ func main() {
 
 	ctx, _ := signals.SetupSignalHandler()
 
-	if err = (&rbaccontroller.DirectoryRoleBindingReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
+	// if err = (&rbaccontroller.DirectoryRoleBindingReconciler{
+	// 	Client: mgr.GetClient(),
+	// 	Log:    ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
 
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(ctx, mgr, nil, time.Hour); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DirectoryRoleBinding")
-		os.Exit(1)
-	}
+	// 	Scheme: mgr.GetScheme(),
+	// }).SetupWithManager(ctx, mgr, nil, time.Hour); err != nil {
+	// 	setupLog.Error(err, "unable to create controller", "controller", "DirectoryRoleBinding")
+	// 	os.Exit(1)
+	// }
+
 	if err = (&workloadscontroller.ConsoleReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Console"),

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -39,13 +40,13 @@ func (d *cachedDirectory) MembersOf(ctx context.Context, group string) (members 
 			return entry.members, nil
 		}
 
-		d.logger.Info("event", "cache.expire", "group", group)
+		d.logger.Info(fmt.Sprintf("Cache expired for group %s", group), "event", "cache.expire", "group", group)
 		delete(d.cache, group) // expired
 	}
 
 	members, err = d.directory.MembersOf(ctx, group)
 	if err == nil {
-		d.logger.Info("event", "cache.add", "group", group)
+		d.logger.Info(fmt.Sprintf("Cache added for group %s", group), "event", "cache.add", "group", group)
 		d.cache[group] = cacheEntry{members: members, cachedAt: d.now()}
 	}
 

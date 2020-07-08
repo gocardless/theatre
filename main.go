@@ -119,6 +119,12 @@ func main() {
 			vaultv1alpha1.EnvconsulInjectorOptions{},
 		),
 	})
+	mgr.GetWebhookServer().Register("/mutate-workloads-crd-gocardless-com-v1alpha1-consoleauthorisation", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
+			mgr.GetClient(),
+			ctrl.Log.WithName("webhooks").WithName("console-authorisations"),
+		),
+	})
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

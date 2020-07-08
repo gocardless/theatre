@@ -22,7 +22,6 @@ import (
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/signals"
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 )
@@ -80,7 +79,7 @@ func main() {
 	// Set up logging
 	logger := kitlog.NewLogfmtLogger(os.Stderr)
 	logger = level.NewFilter(logger, level.AllowInfo())
-	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
+	// logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 	klog.SetOutput(kitlog.NewStdlibAdapter(logger))
 

@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+  namespace: staging
+  annotations: {
+    "envconsul-injector.vault.crd.gocardless.com/configs": "app"
+  }
+spec:
+  serviceAccountName: secret-reader
+  containers:
+    - name: app
+      command:
+        - echo
+        - inject
+        - only
+      volumeMounts:
+        - name: app-volume
+          mountPath: /app/path

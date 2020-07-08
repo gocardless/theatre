@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple
+  namespace: staging
+spec:
+  serviceAccountName: secret-reader
+  containers:
+    - name: app
+      command:
+        - echo
+        - dont
+        - touch
+        - me

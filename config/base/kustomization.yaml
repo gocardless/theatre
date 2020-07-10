@@ -1,0 +1,37 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: theatre-system
+namePrefix: theatre-
+
+commonLabels:
+  app: theatre
+
+resources:
+  - crds/rbac.crd.gocardless.com_directoryrolebindings.yaml
+  - crds/workloads.crd.gocardless.com_consoles.yaml
+  - crds/workloads.crd.gocardless.com_consoletemplates.yaml
+  - crds/workloads.crd.gocardless.com_consoleauthorisations.yaml
+  - managers/namespace.yaml
+  - managers/rbac.yaml
+  - managers/vault.yaml
+  - managers/workloads.yaml
+  - webhooks/vault.yaml
+  - webhooks/workloads.yaml
+  - rbac/leader-election.yaml
+  - cert-manager/certificate.yaml
+
+vars:
+  # We want our mutating webhook to ensure it only ever configures pods to use
+  # the same image as it is running itself. If we ensure this, we don't need to
+  # worry about maintaining compatibility between versions of the webhook and
+  # theatre-envconsul, as both will use the same version and be deployed
+  # atomically.
+  - name: THEATRE_IMAGE
+    objref:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: vault-manager
+    fieldref:
+      fieldpath: spec.template.spec.containers[0].image

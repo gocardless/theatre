@@ -1,0 +1,21 @@
+# For the purposes of our acceptance testing, it is useful to configure a
+# staging namespace and associated resources that may be used to roll-play a
+# standard deployed app.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    theatre-envconsul-injector: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secret-reader
+  namespace: staging
+  annotations:
+    description: used in vault tests to read secrets
+# Don't automount the token, as we want to verify our acceptance tests are
+# correctly leveraging the projected volume mounts.
+automountServiceAccountToken: false

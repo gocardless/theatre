@@ -1,19 +1,3 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package v1alpha1
 
 import (
@@ -37,8 +21,6 @@ import (
 
 const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
 
-// +kubebuilder:webhook:path=/mutate-vault-crd-gocardless-com-v1alpha1-envconsulinjector,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create,versions=v1,name=envconsul-injector.vault.crd.gocardless.com
-// +kubebuilder:object:generate=false
 type EnvconsulInjector struct {
 	client  client.Client
 	logger  logr.Logger
@@ -50,6 +32,7 @@ func NewEnvconsulInjector(c client.Client, logger logr.Logger, opts EnvconsulInj
 	return &EnvconsulInjector{
 		client: c,
 		logger: logger,
+		opts:   opts,
 	}
 }
 
@@ -103,9 +86,9 @@ var (
 func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
 	labels := prometheus.Labels{"pod_namespace": req.Namespace}
 	logger := i.logger.WithValues("uuid", string(req.UID))
-	logger.Info("event", "request.start")
+	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Info("event", "request.end", "duration", time.Since(start).Seconds())
+		logger.Info("request completed", "event", "request.end", "duration", time.Since(start).Seconds())
 
 		handleTotal.With(labels).Inc()
 		{ // add 0 to initialise the metrics
@@ -127,10 +110,10 @@ func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (
 
 	// This webhook receives requests on all pod creation and so is in the critical
 	// path for all pod creation. We need to exit for pods that don't have the
-	// annotation on them here so they cant start uninterrupted in the event
+	// annotation on them here so they can start uninterrupted in the event
 	// code futher along returns an error.
 	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]; !ok {
-		logger.Info("event", "pod.skipped", "msg", "no annotation found")
+		logger.Info("skipping pod with no annotation", "event", "pod.skipped", "msg", "no annotation found")
 		skipTotal.With(labels).Inc()
 		return admission.Allowed("no annotation found")
 	}
@@ -152,17 +135,18 @@ func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (
 
 	vaultConfigMap := &corev1.ConfigMap{}
 	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {
+		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	vaultConfig, err := newVaultConfig(vaultConfigMap)
 	if err != nil {
-		logger.Info("event", "vault.config", "error", err)
+		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	mutatedPod := podInjector{EnvconsulInjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
-		logger.Info("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")
+		logger.Info("no annotation found during inject - this should never occur", "event", "pod.skipped", "msg")
 		return admission.Allowed("no annotation found")
 	}
 

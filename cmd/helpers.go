@@ -16,14 +16,18 @@ import (
 )
 
 type commonOptions struct {
-	MetricAddress string
-	MetricPort    uint16
-	Debug         bool
+	MetricAddress         string
+	MetricPort            uint16
+	ManagerMetricAddress  string
+	ManagerMetricPort     uint16
+	ManagerLeaderElection bool
+	Debug                 bool
 }
 
 func NewCommonOptions(cmd *kingpin.Application) *commonOptions {
 	opt := &commonOptions{}
 
+	cmd.Flag("manager-leader-election", "Enable manager leader election").Default("false").BoolVar(&opt.ManagerLeaderElection)
 	cmd.Flag("debug", "Enable debug logging").Default("false").BoolVar(&opt.Debug)
 
 	return opt
@@ -32,6 +36,9 @@ func NewCommonOptions(cmd *kingpin.Application) *commonOptions {
 func (opt *commonOptions) WithMetrics(cmd *kingpin.Application) *commonOptions {
 	cmd.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").StringVar(&opt.MetricAddress)
 	cmd.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16Var(&opt.MetricPort)
+
+	cmd.Flag("manager-metrics-address", "Address to bind manager HTTP metrics listener").Default("127.0.0.1").StringVar(&opt.ManagerMetricAddress)
+	cmd.Flag("manager-metrics-port", "Port to bind manager HTTP metrics listener").Default("9526").Uint16Var(&opt.ManagerMetricPort)
 
 	return opt
 }
@@ -63,7 +70,7 @@ func (opt *commonOptions) ListenAndServeMetrics(logger logr.Logger) {
 	logger.Info("event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
 
 	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(fmt.Sprintf("%s:%v", opt.MetricAddress, opt.MetricPort), nil)
+	http.ListenAndServe(fmt.Sprintf("%s:%d", opt.MetricAddress, opt.MetricPort), nil)
 }
 
 // Set via compiler flags

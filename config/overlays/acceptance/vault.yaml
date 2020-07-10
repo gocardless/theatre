@@ -1,0 +1,82 @@
+# All service accounts should be permitted to make token reviews, in order to
+# enable Vault authentication.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: Group
+    name: system:serviceaccounts
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8200
+      nodePort: 32000
+  selector:
+    app: vault
+    role: backend
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+      role: backend
+  serviceName: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+        role: backend
+    spec:
+      containers:
+        - name: app
+          image: vault:1.3.0
+          args:
+            - server
+            - -dev
+            - -dev-root-token-id=vault-token
+          ports:
+            - containerPort: 8200
+              name: http
+              protocol: TCP
+# We place configuration inside the vault-system namespace, in the same fashion
+# as our terraform modules will.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault-system
+data:
+  address: http://vault.vault.svc.cluster.local:8200
+  auth_mount_path: kubernetes
+  auth_role: default
+  secret_mount_path_prefix: secret/data/kubernetes

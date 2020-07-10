@@ -1,8 +1,7 @@
-
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd"
+PROG=bin/theatre-envconsul bin/theatre-consoles bin/rbac-manager bin/vault-manager bin/workloads-manager
+IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
+VERSION=$(shell git rev-parse --short HEAD)-dev
+BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -11,59 +10,52 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: manager manifests bin/theatre-envconsul bin/theatre-consoles bin/rbac-manager bin/vault-manager bin/workloads-manager
+.PHONY: build build-darwin build-linux build-all test generate manifests controller-gen deploy clean docker-build docker-pull docker-push docker-tag
+
+build: $(PROG)
+build-darwin: $(PROG:=.darwin_amd64)
+build-linux: $(PROG:=.linux_amd64)
+build-all: build-darwin build-linux
+
+# Specific linux build target, making it easy to work with the docker acceptance
+# tests on OSX
+bin/%.linux_amd64: generate fmt vet
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
+
+bin/%.darwin_amd64: generate fmt vet
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
 bin/%: generate fmt vet
-	go build -o bin/$@ cmd/$(@F)/*.go
+	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
-# Run tests
-test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+# go get -u github.com/onsi/ginkgo/ginkgo
+test:
+	ginkgo -v -r
 
-# Build manager binary
-manager: generate fmt vet
-	go build -o bin/manager main.go
-
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
-	go run ./main.go
-
-# Install CRDs into a cluster
-install: manifests
-	kustomize build config/crd | kubectl apply -f -
-
-# Uninstall CRDs from a cluster
-uninstall: manifests
-	kustomize build config/crd | kubectl delete -f -
-
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
-	kustomize build config/default | kubectl apply -f -
-
-# Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
-# Run go fmt against code
 fmt:
 	go fmt ./...
 
-# Run go vet against code
 vet:
 	go vet ./...
 
 # Generate code
 generate: controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object paths="./apis/..."
 
-# Build the docker image
-docker-build: test
-	docker build . -t ${IMG}
+manifests: controller-gen
+	$(CONTROLLER_GEN) crd paths="./apis/..." output:crd:artifacts:config=config/base/crds
 
-# Push the docker image
+docker-build:
+	docker build -t $(IMAGE):latest .
+
+docker-pull:
+	docker pull $(IMAGE):$$(git rev-parse HEAD)
+
 docker-push:
-	docker push ${IMG}
+	docker push $(IMAGE):latest
+
+docker-tag:
+	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
 
 # find or download controller-gen
 # download controller-gen if necessary
@@ -81,3 +73,6 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+clean:
+	rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)

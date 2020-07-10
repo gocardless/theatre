@@ -33,7 +33,8 @@ var logger logr.Logger
 var (
 	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(cmd.VersionStanza())
 
-	commonOpts                     = cmd.NewCommonOptions(app)
+	commonOpts = cmd.NewCommonOptions(app)
+
 	defaultInstallPath             = "/var/theatre-vault"
 	defaultTheatreEnvconsulPath, _ = os.Executable()
 

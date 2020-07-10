@@ -1,19 +1,3 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controllers
 
 import (
@@ -91,15 +75,38 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 	return false
 }
 
-// ConsoleReconciler reconciles a Console object
 type ConsoleReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=workloads.crd.gocardless.com,resources=consoles,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workloads.crd.gocardless.com,resources=consoles/status,verbs=get;update;patch
+func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&workloadsv1alpha1.Console{}).
+		Watches(
+			&source.Kind{Type: &workloadsv1alpha1.Console{}},
+			&handler.EnqueueRequestForObject{},
+		).
+		Watches(
+			&source.Kind{Type: &workloadsv1alpha1.ConsoleAuthorisation{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: true,
+				OwnerType:    &workloadsv1alpha1.Console{},
+			},
+			// Don't unnecessarily reconcile when the controller initially creates the
+			// authorisation object.
+			builder.WithPredicates(IgnoreCreatePredicate{}),
+		).
+		Complete(
+			recutil.ResolveAndReconcile(
+				ctx, r.Log, mgr, &workloadsv1alpha1.Console{},
+				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
+					return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
+				},
+			),
+		)
+}
 
 func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
 	logger = logger.WithValues("console", req.NamespacedName)
@@ -249,32 +256,6 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 	}
 
 	return res, err
-}
-
-func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&workloadsv1alpha1.Console{}).
-		Watches(
-			&source.Kind{Type: &workloadsv1alpha1.Console{}},
-			&handler.EnqueueRequestForObject{},
-		).
-		Watches(
-			&source.Kind{Type: &workloadsv1alpha1.ConsoleAuthorisation{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: true,
-				OwnerType:    &workloadsv1alpha1.Console{},
-			},
-			// Don't unnecessarily reconcile when the controller initially creates the
-			// authorisation object.
-			builder.WithPredicates(IgnoreCreatePredicate{}),
-		).
-		Complete(recutil.ResolveAndReconcile(
-			ctx, r.Log, mgr, &workloadsv1alpha1.Console{},
-			func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
-				return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
-			},
-		),
-		)
 }
 
 func (r *ConsoleReconciler) getConsoleTemplate(ctx context.Context, csl *workloadsv1alpha1.Console, name types.NamespacedName) (*workloadsv1alpha1.ConsoleTemplate, error) {

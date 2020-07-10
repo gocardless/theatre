@@ -2,21 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/alecthomas/kingpin"
-
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
-
 	"k8s.io/apimachinery/pkg/runtime"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
-
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
@@ -73,7 +69,13 @@ func main() {
 		)
 	}
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:             scheme,
+		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.ManagerMetricAddress, commonOpts.ManagerMetricPort),
+		Port:               9443,
+		LeaderElection:     commonOpts.ManagerLeaderElection,
+		LeaderElectionID:   "vault.crds.gocardless.com",
+	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
 	}

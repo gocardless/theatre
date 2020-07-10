@@ -1,0 +1,14 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workloads-manager
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: theatre:latest
+          imagePullPolicy: Never
+          args: []

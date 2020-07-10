@@ -1,19 +1,3 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package v1alpha1
 
 import (
@@ -31,24 +15,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// +kubebuilder:webhook:path=/mutate-workloads-crd-gocardless-com-v1alpha1-consoleauthorisation,mutating=true,failurePolicy=fail,groups=workloads.crd.gocardless.com,resources=consoleauthorisations,verbs=update,versions=v1alpha1,name=console-authorisation.crd.gocardless.com
 // +kubebuilder:object:generate=false
 type ConsoleAuthorisationWebhook struct {
-	client.Client
+	client  client.Client
 	logger  logr.Logger
 	decoder *admission.Decoder
+}
+
+func NewConsoleAuthorisationWebhook(c client.Client, logger logr.Logger) *ConsoleAuthorisationWebhook {
+	return &ConsoleAuthorisationWebhook{
+		client: c,
+		logger: logger,
+	}
 }
 
 func (c *ConsoleAuthorisationWebhook) InjectDecoder(d *admission.Decoder) error {
 	c.decoder = d
 	return nil
-}
-
-func NewConsoleAuthorisationWebhook(client client.Client, logger logr.Logger) *ConsoleAuthorisationWebhook {
-	return &ConsoleAuthorisationWebhook{
-		Client: client,
-		logger: logger,
-	}
 }
 
 func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -101,7 +84,8 @@ func (c *ConsoleAuthorisationWebhook) getConsole(ctx context.Context, name, name
 	}
 
 	csl := &Console{}
-	return csl, c.Get(ctx, namespacedName, csl)
+
+	return csl, c.client.Get(ctx, namespacedName, csl)
 }
 
 type ConsoleAuthorisationUpdate struct {

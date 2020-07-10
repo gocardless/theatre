@@ -12,6 +12,7 @@ RUN set -x \
       && mv pkg/linux_amd64/envconsul ../bin
 
 COPY . /go/src/github.com/gocardless/theatre
+
 RUN make VERSION=$(cat VERSION) build
 
 # Use ubuntu as our base package to enable generic system tools

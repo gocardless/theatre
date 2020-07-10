@@ -1,19 +1,3 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controllers
 
 import (
@@ -27,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -59,9 +42,6 @@ type DirectoryRoleBindingReconciler struct {
 	Scheme          *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=rbac.crd.gocardless.com,resources=directoryrolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.crd.gocardless.com,resources=directoryrolebindings/status,verbs=get;update;patch
-
 func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req ctrl.Request, drb *rbacv1alpha1.DirectoryRoleBinding) (ctrl.Result, error) {
 	var err error
 	rb := &rbacv1.RoleBinding{}
@@ -82,7 +62,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 			Subjects: []rbacv1.Subject{},
 		}
 
-		if err := controllerutil.SetControllerReference(drb, rb, scheme.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(drb, rb, r.Scheme); err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to set controller reference: %w", err)
 		}
 

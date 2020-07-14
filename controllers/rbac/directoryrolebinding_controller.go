@@ -70,7 +70,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 			return reconcile.Result{}, fmt.Errorf("failed to create RoleBinding: %w", err)
 		}
 
-		r.Log.Info("event", EventRoleBindingCreated, "msg", fmt.Sprintf(
+		r.Log.Info("TODO", "event", EventRoleBindingCreated, "msg", fmt.Sprintf(
 			"Created RoleBinding: %s", identifier,
 		))
 	}
@@ -82,16 +82,16 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 
 	add, remove := rbacutils.Diff(subjects, rb.Subjects), rbacutils.Diff(rb.Subjects, subjects)
 	if len(add) > 0 || len(remove) > 0 {
-		r.Log.Info("event", EventSubjectsModified, "add", len(add), "remove", len(remove), "msg", fmt.Sprintf(
+		r.Log.Info("TODO", "event", EventSubjectsModified, "add", len(add), "remove", len(remove), "msg", fmt.Sprintf(
 			"Modifying subject list, adding %d and removing %d", len(add), len(remove),
 		))
 
 		for _, member := range add {
-			r.Log.Info("event", EventSubjectAdd, "subject", member.Name)
+			r.Log.Info("TODO", "event", EventSubjectAdd, "subject", member.Name)
 		}
 
 		for _, member := range remove {
-			r.Log.Info("event", EventSubjectRemove, "subject", member.Name)
+			r.Log.Info("TODO", "event", EventSubjectRemove, "subject", member.Name)
 		}
 
 		rb.Subjects = subjects

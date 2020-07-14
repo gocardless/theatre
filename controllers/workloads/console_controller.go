@@ -348,10 +348,10 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 	case recutil.Update:
 		logger.Info("Updated "+objDesc, "event", EventSuccessfulUpdate)
 	case recutil.None:
-		// TODO
-		// logging.WithNoRecord(r.logger).Log(
-		// 	"event", EventNoCreateOrUpdate, "msg", "Nothing to do for "+objDesc,
-		// )
+		logging.WithNoRecord(logger).Info(
+			"Nothing to do for "+objDesc,
+			"event", EventNoCreateOrUpdate,
+		)
 	default:
 		// This is only possible in case we implement new outcomes and forget to
 		// add a case here; in which case we should log a warning.

@@ -67,7 +67,7 @@ func (opt *commonOptions) Logger() logr.Logger {
 }
 
 func (opt *commonOptions) ListenAndServeMetrics(logger logr.Logger) {
-	logger.Info("event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
+	logger.Info("listening on metrics", "event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(fmt.Sprintf("%s:%d", opt.MetricAddress, opt.MetricPort), nil)

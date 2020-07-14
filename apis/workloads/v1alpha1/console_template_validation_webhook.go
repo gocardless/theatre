@@ -29,8 +29,8 @@ func (c *ConsoleTemplateValidationWebhook) InjectDecoder(d *admission.Decoder) e
 }
 
 func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
-	logger := c.logger.WithValues(c.logger, "uuid", string(req.UID))
-	logger.Info("request starting", "event", "request.start")
+	logger := c.logger.WithValues("uuid", string(req.UID))
+	logger.Info("starting request", "event", "request.start")
 
 	defer func(start time.Time) {
 		logger.Info("request completed", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
@@ -42,10 +42,10 @@ func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admis
 	}
 
 	if err := template.Validate(); err != nil {
-		logger.Info("event", "validation.failure")
+		logger.Info("validation failure", "event", "validation.failure")
 		return admission.ValidationResponse(false, fmt.Sprintf("the console template spec is invalid: %v", err))
 	}
 
-	logger.Info("event", "validation.success")
+	logger.Info("completed validation", "event", "validation.success")
 	return admission.ValidationResponse(true, "")
 }

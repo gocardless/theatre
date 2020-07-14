@@ -60,7 +60,9 @@ func main() {
 			app.Fatalf("failed to create Google Admin client: %v", err)
 		}
 
-		logger.Info("event", "provider.register", "kind", rbacv1alpha1.GoogleGroupKind)
+		logger.Info(
+			"registering provider",
+			"event", "provider.register", "kind", rbacv1alpha1.GoogleGroupKind)
 		provider.Register(
 			rbacv1alpha1.GoogleGroupKind,
 			directoryrolebinding.NewCachedDirectory(

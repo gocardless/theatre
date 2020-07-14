@@ -12,7 +12,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,9 +75,9 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 				// want to pollute the object's events with transient errors which have
 				// no means of avoiding.
 				if apierrors.IsConflict(errors.Cause(err)) {
-					logger.Error(err, "event", EventError, "error", err)
+					logger.Error(err, err.Error(), "event", EventError, "error", err)
 				} else {
-					logger.Error(err, "event", EventError, "error", err)
+					logging.WithNoRecord(logger).Error(err, err.Error(), "event", EventError, "error", err)
 					reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
 				}
 			} else {
@@ -147,7 +146,7 @@ type ObjWithMeta interface {
 // function to determine any differences between the cluster state and the local state and
 // use that to decide how to update it.
 func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, diffFunc DiffFunc) (Outcome, error) {
-	name := types.NamespacedName{
+	name := client.ObjectKey{
 		Namespace: existing.GetNamespace(),
 		Name:      existing.GetName(),
 	}
@@ -155,6 +154,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	err := c.Get(ctx, name, existing)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
+			print("TODO:", err.Error())
 			return Error, err
 		}
 		if err := c.Create(ctx, existing); err != nil {

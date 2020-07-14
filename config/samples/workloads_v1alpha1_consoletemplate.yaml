@@ -1,7 +1,24 @@
 apiVersion: workloads.crd.gocardless.com/v1alpha1
 kind: ConsoleTemplate
 metadata:
-  name: consoletemplate-sample
+  name: sample
+  labels:
+    name: sample
 spec:
-  # Add fields here
-  foo: bar
+  defaultTimeoutSeconds: 3600
+  maxTimeoutSeconds: 604800
+  authorisationRules:
+    - name: shell
+      matchCommandElements: ["sh"]
+      authorisationsRequired: 0
+      subjects: []
+  defaultAuthorisationRule:
+    authorisationsRequired: 1
+    subjects:
+      - kind: GoogleGroup
+        name: team@example.com
+  template:
+    spec:
+      containers:
+        - name: app
+          image: alpine

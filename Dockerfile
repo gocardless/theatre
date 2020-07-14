@@ -1,6 +1,8 @@
 # Build Go binary without cgo dependencies
 FROM golang:1.14.3 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
+COPY go.mod go.sum /go/src/github.com/gocardless/theatre/
+RUN go mod download -x
 
 # Clone our fork of envconsul and build it
 RUN set -x \
@@ -13,7 +15,7 @@ RUN set -x \
 
 COPY . /go/src/github.com/gocardless/theatre
 
-RUN make VERSION=$(cat VERSION) build
+RUN make -j 3 VERSION=$(cat VERSION) build
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:bionic-20200403

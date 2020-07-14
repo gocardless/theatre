@@ -29,7 +29,7 @@ func (c *ConsoleAuthenticatorWebhook) InjectDecoder(d *admission.Decoder) error 
 }
 
 func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
-	logger := c.logger.WithValues(c.logger, "uuid", string(req.UID))
+	logger := c.logger.WithValues("uuid", string(req.UID))
 	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
 		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())

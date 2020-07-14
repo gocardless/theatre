@@ -123,13 +123,13 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			var TTLBeforeRunning int32 = 60
 			var TTLAfterFinished int32 = 10
 			template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
-			err := kubeClient.Create(context.TODO(), template, &client.CreateOptions{})
+			err := kubeClient.Create(context.TODO(), template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 			By("Create a console")
 			console := buildConsole()
 			console.Spec.Command = []string{"sleep", "666"}
-			err = kubeClient.Create(context.TODO(), console, &client.CreateOptions{})
+			err = kubeClient.Create(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
 			By("Expect an authorisation has been created")
@@ -144,6 +144,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
 				console := &workloadsv1alpha1.Console{}
 				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: consoleName}, console)
+				// fmt.Printf("%#v\n", console.Status.Phase)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
 				return console.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsolePendingAuthorisation))
@@ -158,12 +159,12 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			// Change the console user to another user as a user cannot authorise their own console
 			By("Update the console user")
 			console.Spec.User = "another-user@example.com"
-			err = kubeClient.Update(context.TODO(), console, &client.UpdateOptions{})
+			err = kubeClient.Update(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not update console user")
 
 			By("Authorise a console")
 			consoleAuthorisation.Spec.Authorisations = []rbacv1.Subject{{Kind: "User", Name: user}}
-			err = kubeClient.Update(context.TODO(), consoleAuthorisation, &client.UpdateOptions{})
+			err = kubeClient.Update(context.TODO(), consoleAuthorisation)
 			Expect(err).NotTo(HaveOccurred(), "could not authorise console")
 
 			By("Expect a job has been created")
@@ -500,7 +501,7 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 			MaxTimeoutSeconds:              60,
 			DefaultTTLSecondsBeforeRunning: TTLBeforeRunning,
 			DefaultTTLSecondsAfterFinished: TTLAfterFinished,
-			AdditionalAttachSubjects:       []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
+			AdditionalAttachSubjects:       []rbacv1.Subject{{Kind: "User", Name: "add-user@example.com"}},
 			AuthorisationRules:             authorisationRules,
 			DefaultAuthorisationRule:       defaultAuthorisation,
 			Template: corev1.PodTemplateSpec{
@@ -508,7 +509,7 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 					// Set the grace period to 0, to ensure quick cleanup.
 					TerminationGracePeriodSeconds: new(int64),
 					Containers: []corev1.Container{
-						corev1.Container{
+						{
 							Image:   "alpine:latest",
 							Name:    "console-container-0",
 							Command: []string{"false", "false", "false"},

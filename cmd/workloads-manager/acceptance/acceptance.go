@@ -35,8 +35,7 @@ const (
 )
 
 var (
-	scheme            = runtime.NewScheme()
-	clientConsoleName = client.ObjectKey{Namespace: namespace, Name: consoleName}
+	scheme = runtime.NewScheme()
 )
 
 func init() {
@@ -213,7 +212,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			By("Expect that the console is deleted shortly after stopping, due to its TTL after running")
 			Eventually(func() error {
 				console := &workloadsv1alpha1.Console{}
-				err := kubeClient.Get(context.TODO(), clientConsoleName, console)
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				return err
 			}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
 
@@ -299,11 +298,10 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				By("Expect that the job has not been created")
 				Eventually(func() error {
 					job := &batchv1.Job{}
-					err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, job)
+					err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name + "-console"}, job)
 					return err
 				}).Should(HaveOccurred(), "expected not to find job, but did")
 
-				// time.Sleep(10 * time.Second)
 				// Change the console user to another user as a user cannot authorise their own console
 				By("Update the console user")
 				Eventually(func() error {
@@ -335,16 +333,14 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Expect the console phase is Running")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
-					csl := &workloadsv1alpha1.Console{}
-					err = kubeClient.Get(context.TODO(), clientConsoleName, csl)
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
 
 				By("Expect the console phase eventually changes to Stopped")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
-					console := &workloadsv1alpha1.Console{}
-					err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleStopped))
@@ -353,8 +349,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Expect that the console is deleted shortly after stopping, due to its TTL")
 				Eventually(func() error {
-					console := &workloadsv1alpha1.Console{}
-					err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					return err
 				}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
 
@@ -369,7 +364,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					kubeClient.List(context.TODO(), podList, opts)
 					return podList.Items, err
 				}).Should(HaveLen(0), "pod did not get deleted")
-
 			})
 		})
 
@@ -385,9 +379,15 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
 			By("Expect a console has been created")
-			console = &workloadsv1alpha1.Console{}
-			err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+			err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 			Expect(err).NotTo(HaveOccurred(), "could not find console")
+
+			By("Expect consoleTemplate becomes console owner")
+			Eventually(func() []metav1.OwnerReference {
+				kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
+				return console.OwnerReferences
+			}).Should(HaveLen(1), "console has no owners")
+			Expect(console.OwnerReferences[0].Name).To(Equal(template.Name), "consoleTemplate is not set as console owner")
 
 			// Leave this assertion rather than using the deleteConsoleTemplate
 			// function, as it's useful to assert on any errors that are returned
@@ -401,15 +401,13 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			Expect(err).NotTo(HaveOccurred(), "could not delete console template")
 
 			Eventually(func() error {
-				console := &workloadsv1alpha1.Console{}
-				err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: template.Name}, template)
 				return err
 			}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
 
 			By("Expect that the console no longer exists")
 			Eventually(func() error {
-				console := &workloadsv1alpha1.Console{}
-				err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				return err
 			}).Should(HaveOccurred(), "expected not to find console, but did")
 		})
@@ -443,14 +441,13 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			By("Expect that the job no longer exists")
 			Eventually(func() error {
 				job := &batchv1.Job{}
-				err := kubeClient.Get(context.TODO(), clientConsoleName, job)
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, job)
 				return err
 			}).Should(HaveOccurred(), "expected not to find job, but did")
 
 			By("Expect the console phase is Destroyed")
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
-				console := &workloadsv1alpha1.Console{}
-				err = kubeClient.Get(context.TODO(), clientConsoleName, console)
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
 				return console.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsoleDestroyed))
@@ -535,7 +532,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			Command:            []string{"sleep", "30"},
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
-			TimeoutSeconds:     6,
+			TimeoutSeconds:     10,
 		},
 	}
 }

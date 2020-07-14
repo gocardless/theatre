@@ -98,6 +98,13 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 			// authorisation object.
 			builder.WithPredicates(IgnoreCreatePredicate{}),
 		).
+		Watches(
+			&source.Kind{Type: &batchv1.Job{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: true,
+				OwnerType:    &workloadsv1alpha1.Console{},
+			},
+		).
 		Complete(
 			recutil.ResolveAndReconcile(
 				ctx, r.Log, mgr, &workloadsv1alpha1.Console{},

@@ -587,118 +587,75 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleStopped
 	}
 
-	listOptions := metav1.SingleObject(createdCsl.ObjectMeta)
-	listOptions.Watch = true
-
-	var csls workloadsv1alpha1.ConsoleList
-	c.kubeClient.List(
-		ctx,
-		&csls,
-		client.InNamespace(createdCsl.Namespace),
-		&client.ListOptions{
-			Raw: &listOptions,
-		},
-	)
-
-	// client := c.theatreClient.WorkloadsV1alpha1().Consoles(createdCsl.Namespace)
-
-	// w, err := client.Watch(listOptions)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error watching console: %w", err)
-	// }
-
-	// Get the console, because watch will only give us an event when something
-	// is changed, and the phase could have already stabilised before the watch
-	// is set up.
 	var csl workloadsv1alpha1.Console
-	err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, &csl)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("error retrieving console: %w", err)
+	for {
+		select {
+		case <-(ctx).Done():
+			if &csl == nil {
+				return nil, fmt.Errorf("%s: %w", consoleNotFoundError, ctx.Err())
+			}
+			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
+		default:
+			err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, &csl)
+			if err != nil && !apierrors.IsNotFound(err) {
+				return nil, fmt.Errorf("error retrieving console: %w", err)
+			}
+
+			// If the console is already running then there's nothing to do
+			if isRunning(&csl) {
+				return &csl, nil
+			}
+			if isPendingAuthorisation(&csl) {
+				return &csl, consolePendingAuthorisationError
+			}
+			if isStopped(&csl) {
+				return nil, consoleStoppedError
+			}
+			time.Sleep(time.Second)
+		}
 	}
 
-	// If the console is already running then there's nothing to do
-	if isRunning(&csl) {
-		return &csl, nil
-	}
-	if isPendingAuthorisation(&csl) {
-		return &csl, consolePendingAuthorisationError
-	}
-	if isStopped(&csl) {
-		return nil, consoleStoppedError
-	}
-
-	// status := w.ResultChan()
-	// defer w.Stop()
-
-	// for {
-	// 	select {
-	// 	case event, ok := <-status:
-	// 		// If our channel is closed, exit with error, as we'll otherwise assume
-	// 		// we were successful when we never reached this state.
-	// 		if !ok {
-	// 			return nil, errors.New("watch channel closed")
-	// 		}
-
-	// 		csl = event.Object.(*workloadsv1alpha1.Console)
-	// 		if isRunning(csl) {
-	// 			return csl, nil
-	// 		}
-	// 		if isPendingAuthorisation(csl) {
-	// 			return csl, consolePendingAuthorisationError
-	// 		}
-	// 		if isStopped(csl) {
-	// 			return nil, consoleStoppedError
-	// 		}
-	// 	case <-ctx.Done():
-	// 		if csl == nil {
-	// 			return nil, fmt.Errorf("%s: %w", consoleNotFoundError, ctx.Err())
-	// 		}
-	// 		return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
-	// 	}
-	// }
-	return nil, errors.New("TODO")
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	// rbClient := c.client.RbacV1().RoleBindings(csl.Namespace)
-	// watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
-	// if err != nil {
-	// 	return fmt.Errorf("error watching rolebindings: %w", err)
-	// }
-	// defer watcher.Stop()
+	rbClient := c.clientSet.RbacV1().RoleBindings(csl.Namespace)
+	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
+	if err != nil {
+		return fmt.Errorf("error watching rolebindings: %w", err)
+	}
+	defer watcher.Stop()
 
-	// // The Console controller might have already created a DirectoryRoleBinding
-	// // and the DirectoryRoleBinding controller might have created the RoleBinding
-	// // and updated its subject list by this point. If so, we are already done, and
-	// // might never receive another event from our RoleBinding Watcher, causing the
-	// // subsequent loop would block forever.
-	// // If the associated RoleBinding exists and has the console user in its
-	// // subject list, return early.
-	// rb, err := rbClient.Get(context.TODO(), csl.Name, metav1.GetOptions{})
-	// if err == nil && rbHasSubject(rb, csl.Spec.User) {
-	// 	return nil
-	// }
+	// The Console controller might have already created a DirectoryRoleBinding
+	// and the DirectoryRoleBinding controller might have created the RoleBinding
+	// and updated its subject list by this point. If so, we are already done, and
+	// might never receive another event from our RoleBinding Watcher, causing the
+	// subsequent loop would block forever.
+	// If the associated RoleBinding exists and has the console user in its
+	// subject list, return early.
+	rb, err := rbClient.Get(context.TODO(), csl.Name, metav1.GetOptions{})
+	if err == nil && rbHasSubject(rb, csl.Spec.User) {
+		return nil
+	}
 
-	// rbEvents := watcher.ResultChan()
-	// for {
-	// 	select {
-	// 	case rbEvent, ok := <-rbEvents:
-	// 		if !ok {
-	// 			return errors.New("rolebinding event watcher channel closed")
-	// 		}
+	rbEvents := watcher.ResultChan()
+	for {
+		select {
+		case rbEvent, ok := <-rbEvents:
+			if !ok {
+				return errors.New("rolebinding event watcher channel closed")
+			}
 
-	// 		rb := rbEvent.Object.(*rbacv1.RoleBinding)
-	// 		if rbHasSubject(rb, csl.Spec.User) {
-	// 			return nil
-	// 		}
+			rb := rbEvent.Object.(*rbacv1.RoleBinding)
+			if rbHasSubject(rb, csl.Spec.User) {
+				return nil
+			}
 
-	// 		continue
+			continue
 
-	// 	case <-ctx.Done():
-	// 		return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
-	// 	}
-	// }
-	return nil
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
+		}
+	}
 }
 
 func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {

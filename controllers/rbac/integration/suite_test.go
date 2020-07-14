@@ -22,15 +22,12 @@ import (
 )
 
 var (
-	cfg     *rest.Config
 	mgr     ctrl.Manager
 	testEnv *envtest.Environment
-
-	scheme = runtime.NewScheme()
 )
 
 func TestSuite(t *testing.T) {
-	SetDefaultEventuallyTimeout(2 * time.Second)
+	SetDefaultEventuallyTimeout(3 * time.Second)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "controllers/rbac/integration")
 }
@@ -50,6 +47,8 @@ var _ = BeforeSuite(func(done Done) {
 	cfg.Impersonate = rest.ImpersonationConfig{
 		UserName: "user@example.com",
 	}
+
+	scheme := runtime.NewScheme()
 
 	err = clientgoscheme.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())

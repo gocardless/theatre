@@ -28,8 +28,7 @@ spec:
     plural: consoles
     singular: console
   scope: Namespaced
-  subresources:
-    status: {}
+  subresources: {}
   validation:
     openAPIV3Schema:
       description: Console declares an instance of a console environment to be created

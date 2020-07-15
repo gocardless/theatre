@@ -497,6 +497,8 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	updatedCsl := csl.DeepCopy()
 	updatedCsl.Status = newStatus
 
+	logger.Info("new console status", "status", fmt.Sprintf("%#v", newStatus))
+
 	return updatedCsl, nil
 }
 

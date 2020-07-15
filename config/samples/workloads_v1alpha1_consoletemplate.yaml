@@ -15,7 +15,7 @@ spec:
   defaultAuthorisationRule:
     authorisationsRequired: 1
     subjects:
-      - kind: GoogleGroup
+      - kind: Group
         name: team@example.com
   template:
     spec:

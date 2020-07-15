@@ -88,7 +88,6 @@ type ConsoleTemplateSpec struct {
 type ConsoleTemplateStatus struct{}
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 
 // ConsoleTemplate is the Schema for the consoletemplates API

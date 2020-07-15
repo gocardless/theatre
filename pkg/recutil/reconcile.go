@@ -154,7 +154,6 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	err := c.Get(ctx, name, existing)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			print("TODO:", err.Error())
 			return Error, err
 		}
 		if err := c.Create(ctx, existing); err != nil {
@@ -167,7 +166,6 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	// expected contains the state we're trying to reconcile towards.
 	// If an update is required, DiffFunc will set the relevant fields on existing such that we
 	// can just resubmit it to the cluster to achieve our desired state.
-
 	op := diffFunc(expected, existing)
 	switch op {
 	case Update:

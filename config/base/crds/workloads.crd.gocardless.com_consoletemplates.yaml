@@ -15,8 +15,6 @@ spec:
     plural: consoletemplates
     singular: consoletemplate
   scope: Namespaced
-  subresources:
-    status: {}
   validation:
     openAPIV3Schema:
       description: ConsoleTemplate is the Schema for the consoletemplates API

@@ -15,8 +15,6 @@ spec:
     plural: consoleauthorisations
     singular: consoleauthorisation
   scope: Namespaced
-  subresources:
-    status: {}
   validation:
     openAPIV3Schema:
       description: ConsoleAuthorisation is the Schema for the consoleauthorisations

@@ -19,7 +19,6 @@ type ConsoleAuthorisationSpec struct {
 type ConsoleAuthorisationStatus struct{}
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 
 // ConsoleAuthorisation is the Schema for the consoleauthorisations API

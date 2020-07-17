@@ -25,6 +25,8 @@ import (
 var (
 	mgr     ctrl.Manager
 	testEnv *envtest.Environment
+
+	finished = make(chan struct{})
 )
 
 func TestSuite(t *testing.T) {
@@ -70,17 +72,22 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
+		<-ctrl.SetupSignalHandler()
+		close(finished)
+	}()
+
+	go func() {
 		defer GinkgoRecover()
-		err = mgr.Start(ctrl.SetupSignalHandler())
+		err = mgr.Start(finished)
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+		gexec.KillAndWait(4 * time.Second)
+		err := testEnv.Stop()
+		Expect(err).ToNot(HaveOccurred())
 	}()
 
 	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {
-	By("tearing down the test environment")
-	gexec.KillAndWait(5 * time.Second)
-	err := testEnv.Stop()
-	Expect(err).ToNot(HaveOccurred())
+	close(finished)
 })

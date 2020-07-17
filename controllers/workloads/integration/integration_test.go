@@ -410,7 +410,12 @@ var _ = Describe("Console", func() {
 			}).ShouldNot(BeNil(),
 				"the console status should be defined")
 
-			Expect(updatedCsl.Status.ExpiryTime).NotTo(BeNil(), "the console expiry time should be set")
+			Eventually(func() *metav1.Time {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Status.ExpiryTime
+			}).ShouldNot(BeNil(),
+				"the console expiry time should be defined")
+
 			Expect(
 				updatedCsl.Status.ExpiryTime.Time.After(time.Now())).To(BeTrue(),
 				"the console expiry time should be after now()",
@@ -462,7 +467,10 @@ var _ = Describe("Console", func() {
 			}).ShouldNot(BeNil(),
 				"the console status should be defined")
 
-			Expect(updatedCsl.Stopped()).To(BeTrue())
+			Eventually(func() bool {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Stopped()
+			}).Should(BeTrue())
 			Expect(
 				updatedCsl.Status.CompletionTime.Time.Before(time.Now())).To(BeTrue(),
 				"the console completion time should be before now()",

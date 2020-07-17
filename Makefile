@@ -30,7 +30,7 @@ bin/%: generate fmt vet
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -v -r
+	ginkgo -r
 
 fmt:
 	go fmt ./...

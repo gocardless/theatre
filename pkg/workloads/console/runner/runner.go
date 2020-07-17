@@ -14,17 +14,22 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/cmd/get"
 	"k8s.io/kubectl/pkg/util/term"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 )
 
@@ -33,8 +38,9 @@ type IOStreams genericclioptions.IOStreams
 
 // Runner is responsible for managing the lifecycle of a console
 type Runner struct {
-	clientSet  kubernetes.Interface
-	kubeClient client.Client
+	clientset     kubernetes.Interface
+	consoleClient dynamic.NamespaceableResourceInterface
+	kubeClient    client.Client
 }
 
 // Options defines the parameters that can be set upon a new console
@@ -54,11 +60,35 @@ type Options struct {
 }
 
 // New builds a runner
-func New(clientSet kubernetes.Interface, kubeClient client.Client) *Runner {
-	return &Runner{
-		clientSet:  clientSet,
-		kubeClient: kubeClient,
+func New(cfg *rest.Config) (*Runner, error) {
+	// create a client that can be used to attach to consoles pod
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	// create a client that can be used to watch a console CRD
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	consoleClient := dynClient.Resource(workloadsv1alpha1.GroupVersion.WithResource("consoles"))
+
+	// create a client that can be used for everything else
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = workloadsv1alpha1.AddToScheme(scheme)
+	_ = rbacv1alpha1.AddToScheme(scheme)
+	kubeClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Runner{
+		clientset:     clientset,
+		consoleClient: consoleClient,
+		kubeClient:    kubeClient,
+	}, nil
 }
 
 // LifecycleHook provides a communication to react to console lifecycle changes
@@ -271,7 +301,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	if err := NewAttacher(c.clientSet, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
+	if err := NewAttacher(c.clientset, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
@@ -587,38 +617,68 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleStopped
 	}
 
-	var csl workloadsv1alpha1.Console
+	listOptions := metav1.SingleObject(createdCsl.ObjectMeta)
+	w, err := c.consoleClient.Watch(ctx, listOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error watching console: %w", err)
+	}
+
+	// Get the console, because watch will only give us an event when something
+	// is changed, and the phase could have already stabilised before the watch
+	// is set up.
+	csl := &workloadsv1alpha1.Console{}
+
+	err = c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("error retrieving console: %w", err)
+	}
+
+	// If the console is already running then there's nothing to do
+	if isRunning(csl) {
+		return csl, nil
+	}
+	if isPendingAuthorisation(csl) {
+		return csl, consolePendingAuthorisationError
+	}
+	if isStopped(csl) {
+		return nil, consoleStoppedError
+	}
+
+	status := w.ResultChan()
+	defer w.Stop()
+
 	for {
 		select {
-		case <-(ctx).Done():
-			if &csl == nil {
+		case event, ok := <-status:
+			// If our channel is closed, exit with error, as we'll otherwise assume
+			// we were successful when we never reached this state.
+			if !ok {
+				return nil, errors.New("watch channel closed")
+			}
+
+			obj := event.Object.(*unstructured.Unstructured)
+			runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+
+			if isRunning(csl) {
+				return csl, nil
+			}
+			if isPendingAuthorisation(csl) {
+				return csl, consolePendingAuthorisationError
+			}
+			if isStopped(csl) {
+				return nil, consoleStoppedError
+			}
+		case <-ctx.Done():
+			if csl == nil {
 				return nil, fmt.Errorf("%s: %w", consoleNotFoundError, ctx.Err())
 			}
 			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
-		default:
-			err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, &csl)
-			if err != nil && !apierrors.IsNotFound(err) {
-				return nil, fmt.Errorf("error retrieving console: %w", err)
-			}
-
-			// If the console is already running then there's nothing to do
-			if isRunning(&csl) {
-				return &csl, nil
-			}
-			if isPendingAuthorisation(&csl) {
-				return &csl, consolePendingAuthorisationError
-			}
-			if isStopped(&csl) {
-				return nil, consoleStoppedError
-			}
-			time.Sleep(time.Second)
 		}
 	}
-
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	rbClient := c.clientSet.RbacV1().RoleBindings(csl.Namespace)
+	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
 	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
 	if err != nil {
 		return fmt.Errorf("error watching rolebindings: %w", err)

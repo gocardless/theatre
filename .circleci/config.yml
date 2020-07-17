@@ -8,19 +8,23 @@ references:
     working_directory: /go/src/github.com/gocardless/theatre
 
 jobs:
+  check-code-formatting:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run:
+          name: Ensure code is formatted
+          command: make fmt && git diff --exit-code
+
   check-generated-resources:
     <<: *docker_golang
     steps:
       - checkout
       - run:
-          name: Install prettier
-          command: |
-            curl -sL https://deb.nodesource.com/setup_10.x > setup-node_10.x
-            chmod +x setup-node_10.x && ./setup-node_10.x
-            apt install nodejs
-            npm install -g prettier
+          name: Ensure CRD generated code is up to date
+          command: make generate && git diff --exit-code apis/
       - run:
-          name: Ensure generated CRDs and RBAC are up to date
+          name: Ensure CRD generated manifests are up to date
           command: make manifests && git diff --exit-code config/
 
   unit-integration:
@@ -34,11 +38,11 @@ jobs:
           name: Install Kubebuilder test helpers
           command: |
             mkdir /usr/local/kubebuilder
-            curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz \
+            curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.1/kubebuilder_2.3.1_linux_amd64.tar.gz \
               | tar -xvz --strip=1 -C /usr/local/kubebuilder
       - run:
           name: Run tests
-          command: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v
+          command: ginkgo -r -v
 
   build:
     <<: *docker_golang
@@ -66,7 +70,7 @@ jobs:
             curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz \
               | tar xfz -
             mv -v kustomize /usr/local/bin/kustomize
-            curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.13.12/bin/linux/amd64/kubectl
+            curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.18.5/bin/linux/amd64/kubectl
 
             chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
             EOF
@@ -122,6 +126,7 @@ workflows:
   version: 2
   build-integration:
     jobs:
+      - check-code-formatting
       - check-generated-resources
       - unit-integration
       - build

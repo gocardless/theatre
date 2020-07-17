@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,13 +41,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = workloadsv1alpha1.AddToScheme(scheme)
 	_ = rbacv1alpha1.AddToScheme(scheme)
-}
-
-func newClientset(config *rest.Config) *kubernetes.Clientset {
-	clientset, err := kubernetes.NewForConfig(config)
-	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
-
-	return clientset
 }
 
 func newClient(config *rest.Config) client.Client {
@@ -87,14 +79,12 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	Describe("Consoles", func() {
 		var (
-			clientset  *kubernetes.Clientset
 			kubeClient client.Client
 		)
 
 		BeforeEach(func() {
 			logger.Log("msg", "starting test")
 
-			clientset = newClientset(config)
 			kubeClient = newClient(config)
 
 			// Wait for MutatingWebhookConfig to be created
@@ -237,7 +227,9 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			)
 
 			BeforeEach(func() {
-				consoleRunner = runner.New(clientset, kubeClient)
+				var err error
+				consoleRunner, err = runner.New(config)
+				Expect(err).NotTo(HaveOccurred(), "could not create runner")
 			})
 
 			Specify("Happy path", func() {

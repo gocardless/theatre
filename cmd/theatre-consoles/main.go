@@ -11,15 +11,11 @@ import (
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
 	"github.com/gocardless/theatre/pkg/signals"
@@ -102,21 +98,10 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 		return err
 	}
 
-	scheme := runtime.NewScheme()
-	_ = rbacv1alpha1.AddToScheme(scheme)
-	_ = workloadsv1alpha1.AddToScheme(scheme)
-
-	kclient, err := kubernetes.NewForConfig(config)
+	consoleRunner, err := runner.New(config)
 	if err != nil {
 		return err
 	}
-
-	theatreClient, err := client.New(config, client.Options{Scheme: scheme})
-	if err != nil {
-		return err
-	}
-
-	consoleRunner := runner.New(kclient, theatreClient)
 
 	// Match on the kingpin command and enter the main command
 	switch cmd {

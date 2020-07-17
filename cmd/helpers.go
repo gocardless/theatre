@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"runtime"
 
 	"github.com/alecthomas/kingpin"
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	zaplogfmt "github.com/sykesm/zap-logfmt"
 	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,8 +16,6 @@ import (
 type commonOptions struct {
 	MetricAddress         string
 	MetricPort            uint16
-	ManagerMetricAddress  string
-	ManagerMetricPort     uint16
 	ManagerLeaderElection bool
 	Debug                 bool
 }
@@ -37,9 +33,6 @@ func (opt *commonOptions) WithMetrics(cmd *kingpin.Application) *commonOptions {
 	cmd.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").StringVar(&opt.MetricAddress)
 	cmd.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16Var(&opt.MetricPort)
 
-	cmd.Flag("manager-metrics-address", "Address to bind manager HTTP metrics listener").Default("127.0.0.1").StringVar(&opt.ManagerMetricAddress)
-	cmd.Flag("manager-metrics-port", "Port to bind manager HTTP metrics listener").Default("9526").Uint16Var(&opt.ManagerMetricPort)
-
 	return opt
 }
 
@@ -52,7 +45,13 @@ func (opt *commonOptions) Logger() logr.Logger {
 	}
 
 	logger := zap.New(
-		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{})),
+		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{
+			CallerKey:     "caller",
+			StacktraceKey: "stacktrace",
+			TimeKey:       "ts",
+			EncodeCaller:  zapcore.ShortCallerEncoder,
+			EncodeTime:    zapcore.RFC3339TimeEncoder,
+		})),
 		zap.WriteTo(os.Stderr),
 		zap.Level(logLevel),
 	)
@@ -64,13 +63,6 @@ func (opt *commonOptions) Logger() logr.Logger {
 	// logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", logging.RecorderAwareCaller())
 
 	return logger
-}
-
-func (opt *commonOptions) ListenAndServeMetrics(logger logr.Logger) {
-	logger.Info("listening on metrics", "event", "metrics_listen", "address", opt.MetricAddress, "port", opt.MetricPort)
-
-	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(fmt.Sprintf("%s:%d", opt.MetricAddress, opt.MetricPort), nil)
 }
 
 // Set via compiler flags

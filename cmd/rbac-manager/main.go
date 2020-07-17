@@ -45,17 +45,13 @@ func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	logger := commonOpts.Logger()
 
-	go func() {
-		commonOpts.ListenAndServeMetrics(logger)
-	}()
-
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
 	provider := directoryrolebinding.DirectoryProvider{}
 
 	if *googleEnabled {
-		googleDirectoryService, err := createGoogleDirectory(context.TODO(), *googleSubject)
+		googleDirectoryService, err := createGoogleDirectory(ctx, *googleSubject)
 		if err != nil {
 			app.Fatalf("failed to create Google Admin client: %v", err)
 		}
@@ -73,7 +69,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.ManagerMetricAddress, commonOpts.ManagerMetricPort),
+		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
 		Port:               9443,
 		LeaderElection:     commonOpts.ManagerLeaderElection,
 		LeaderElectionID:   "vault.crds.gocardless.com",

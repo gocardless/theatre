@@ -19,13 +19,13 @@ build-all: build-darwin build-linux
 
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX
-bin/%.linux_amd64: generate fmt vet
+bin/%.linux_amd64: vet
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
-bin/%.darwin_amd64: generate fmt vet
+bin/%.darwin_amd64: vet
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
-bin/%: generate fmt vet
+bin/%: vet
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 # go get -u github.com/onsi/ginkgo/ginkgo
@@ -42,7 +42,7 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/..."
 
-manifests: controller-gen
+manifests: generate
 	$(CONTROLLER_GEN) crd paths="./apis/..." output:crd:artifacts:config=config/base/crds
 
 docker-build:

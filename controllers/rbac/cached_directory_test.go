@@ -23,7 +23,7 @@ var _ = Describe("NewCachedDirectory", func() {
 
 	JustBeforeEach(func() {
 		directory = NewCachedDirectory(
-			zap.New(),
+			zap.LoggerTo(GinkgoWriter, true),
 			NewFakeDirectory(groups),
 			ttl,
 		)

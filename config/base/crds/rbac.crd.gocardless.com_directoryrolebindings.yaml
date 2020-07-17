@@ -15,8 +15,6 @@ spec:
     plural: directoryrolebindings
     singular: directoryrolebinding
   scope: Namespaced
-  subresources:
-    status: {}
   validation:
     openAPIV3Schema:
       description: DirectoryRoleBinding is the Schema for the directoryrolebindings

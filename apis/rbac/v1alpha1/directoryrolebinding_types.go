@@ -15,7 +15,6 @@ type DirectoryRoleBindingSpec struct {
 type DirectoryRoleBindingStatus struct{}
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 
 // DirectoryRoleBinding is the Schema for the directoryrolebindings API

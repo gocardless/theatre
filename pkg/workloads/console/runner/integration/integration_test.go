@@ -10,19 +10,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 )
-
-func newClientset() *kubernetes.Clientset {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
-
-	return clientset
-}
 
 func newNamespace(name string) *corev1.Namespace {
 	if name == "" {
@@ -103,7 +95,9 @@ var _ = Describe("Runner", func() {
 	)
 
 	JustBeforeEach(func() {
-		consoleRunner = runner.New(newClientset(), kubeClient)
+		var err error
+		consoleRunner, err = runner.New(cfg)
+		Expect(err).To(BeNil(), "failed to create console runner")
 
 		mustCreateNamespace = func(namespace *corev1.Namespace) {
 			By("Creating test namespace: " + namespace.Name)
@@ -172,7 +166,7 @@ var _ = Describe("Runner", func() {
 				Expect(console.Spec.Reason).To(Equal(reason))
 			})
 
-			It("Creates the console via the clientset", func() {
+			It("Creates the console", func() {
 				Eventually(func() []workloadsv1alpha1.Console {
 					opts := &client.ListOptions{Namespace: namespace.Name}
 					consoleList := &workloadsv1alpha1.ConsoleList{}
@@ -249,7 +243,7 @@ var _ = Describe("Runner", func() {
 			roleBinding     *rbacv1.RoleBinding
 		)
 
-		timeout := 3 * time.Second
+		timeout := 200 * time.Millisecond
 
 		updateConsolePhase := func(in *workloadsv1alpha1.Console, phase workloadsv1alpha1.ConsolePhase) {
 			csl := &workloadsv1alpha1.Console{}

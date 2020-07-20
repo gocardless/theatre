@@ -1,8 +1,0 @@
-apiVersion: workloads.crd.gocardless.com/v1alpha1
-kind: ConsoleAuthorisation
-metadata:
-  name: console-container
-spec:
-  consoleRef:
-    name: console-container
-  authorisations: []

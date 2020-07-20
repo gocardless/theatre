@@ -1,10 +1,16 @@
-PROG=bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
-PROJECT=github.com/gocardless/theatre
+PROG=bin/rbac-manager
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 
-.PHONY: build build-darwin build-linux build-all test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+.PHONY: build build-darwin build-linux build-all test generate manifests controller-gen deploy clean docker-build
 
 build: $(PROG)
 build-darwin: $(PROG:=.darwin_amd64)
@@ -13,53 +19,48 @@ build-all: build-darwin build-linux
 
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX
-bin/%.linux_amd64:
+bin/%.linux_amd64: vet
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
-bin/%.darwin_amd64:
+bin/%.darwin_amd64: vet
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
-bin/%:
+bin/%: vet
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -v -r
+	ginkgo -r
 
-codegen:
-	vendor/k8s.io/code-generator/generate-groups.sh all \
-		$(PROJECT)/pkg/client \
-		$(PROJECT)/pkg/apis \
-		"rbac:v1alpha1 workloads:v1alpha1"
+fmt:
+	go fmt ./...
 
-deploy:
-	kustomize build config/base | kubectl apply -f -
+vet:
+	go vet ./...
 
-deploy-production:
-	kustomize build config/overlays/production | kubectl apply -f -
+# Generate code
+generate: controller-gen
+	$(CONTROLLER_GEN) object paths="./apis/..."
+
+manifests: generate
+	$(CONTROLLER_GEN) crd paths="./apis/..." output:crd:artifacts:config=config/base/crds
+
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
 
 clean:
 	rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
-
-docker-build:
-	docker build -t $(IMAGE):latest .
-
-docker-pull:
-	docker pull $(IMAGE):$$(git rev-parse HEAD)
-
-docker-push:
-	docker push $(IMAGE):latest
-
-docker-tag:
-	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
-
-# We place manifests in a non-standard location, config/base/crds, rather than
-# config/crds. This means we can provide a more idiomatic kustomize structure,
-# but requires us to move the files after generation.
-#
-# npm install -g prettier
-manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \
-		&& rm -rfv config/base/crds \
-		&& mv -v config/crds config/base/crds \
-		&& prettier --parser yaml --write config/base/crds/*

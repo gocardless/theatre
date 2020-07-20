@@ -1,18 +1,12 @@
 # Build Go binary without cgo dependencies
 FROM golang:1.14.3 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
-
-# Clone our fork of envconsul and build it
-RUN set -x \
-      && git clone https://github.com/gocardless/envconsul.git \
-      && cd envconsul \
-      && git checkout 2eb7fdc4dd1a13464e9a529e324ffd9b8d12ce25 \
-      && make linux/amd64 \
-      && mkdir ../bin \
-      && mv pkg/linux_amd64/envconsul ../bin
+COPY go.mod go.sum /go/src/github.com/gocardless/theatre/
+RUN go mod download -x
 
 COPY . /go/src/github.com/gocardless/theatre
-RUN make VERSION=$(cat VERSION) build
+
+RUN make -j 3 VERSION=$(cat VERSION) build
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:bionic-20200403

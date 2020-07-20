@@ -4,17 +4,14 @@ import (
 	"context"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/pkg/integration"
-	"github.com/gocardless/theatre/pkg/rbac/directoryrolebinding"
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	"github.com/google/uuid"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -42,7 +39,7 @@ func newAdminRole(namespace string) *rbacv1.Role {
 
 func newGoogleGroup(name string) rbacv1.Subject {
 	return rbacv1.Subject{
-		APIGroup: rbacv1alpha1.GroupName,
+		APIGroup: rbacv1alpha1.GroupVersion.Group,
 		Kind:     rbacv1alpha1.GoogleGroupKind,
 		Name:     name,
 	}
@@ -58,73 +55,42 @@ func newUser(name string) rbacv1.Subject {
 
 var _ = Describe("Reconciler", func() {
 	var (
-		ctx       context.Context
-		cancel    func()
-		namespace string
-		labels    map[string]string
-		teardown  func()
-		mgr       manager.Manager
-		calls     chan integration.ReconcileCall
-		groups    map[string][]string
+		namespaceName string
+		labels        map[string]string
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
-		namespace, teardown = integration.CreateNamespace(clientset)
+		namespaceName = uuid.New().String()
+
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespaceName,
+			},
+		}
+
 		labels = map[string]string{
 			"repo":        "foo-repo",
 			"environment": "foo-env",
 		}
-		mgr = integration.StartTestManager(ctx, cfg)
-		groups = map[string][]string{}
 
-		// Create a fake provider that recognises GoogleGroup kinds for testing purposes
-		provider := directoryrolebinding.DirectoryProvider{}
-		provider.Register(rbacv1alpha1.GoogleGroupKind, directoryrolebinding.NewFakeDirectory(groups))
-
-		integration.MustController(
-			directoryrolebinding.Add(
-				ctx,
-				kitlog.NewLogfmtLogger(GinkgoWriter),
-				mgr,
-				provider,
-				time.Duration(0), // don't test our caching/re-enqueue here
-				func(opt *controller.Options) {
-					opt.Reconciler, calls = integration.CaptureReconcile(
-						opt.Reconciler,
-					)
-				},
-			),
+		By("Creating test namespace: " + namespaceName)
+		Expect(mgr.GetClient().Create(context.TODO(), namespace)).NotTo(
+			HaveOccurred(), "failed to create test namespace",
 		)
 
 		By("Creating fixture 'admin' role")
-		Expect(mgr.GetClient().Create(ctx, newAdminRole(namespace))).NotTo(
+		Expect(mgr.GetClient().Create(context.TODO(), newAdminRole(namespaceName))).NotTo(
 			HaveOccurred(), "failed to create test 'admin' Role",
 		)
 	})
 
-	AfterEach(func() {
-		cancel()
-		teardown()
-	})
-
 	Context("With all@ and platform@", func() {
-		BeforeEach(func() {
-			groups["all@gocardless.com"] = []string{
-				"lawrence@gocardless.com",
-			}
-			groups["platform@gocardless.com"] = []string{
-				"lawrence@gocardless.com",
-				"chris@gocardless.com",
-			}
-		})
-
 		It("Manages DirectoryRoleBindings", func() {
 			By("Creating DirectoryRoleBinding with empty subject list")
 			drb := &rbacv1alpha1.DirectoryRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "foo",
-					Namespace: namespace,
+					Namespace: namespaceName,
 					Labels:    labels,
 				},
 				Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
@@ -140,15 +106,6 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr.GetClient().Create(context.TODO(), drb)).NotTo(
 				HaveOccurred(), "failed to create 'foo' DirectoryRoleBinding",
 			)
-
-			By("Verifying reconcile has been triggered successfully")
-			for i := 0; i < 2; i++ { // twice for the follow-up watch of the RoleBinding
-				Eventually(calls, timeout).Should(
-					Receive(
-						integration.ReconcileResourceSuccess(namespace, "foo"),
-					),
-				)
-			}
 
 			By("Validate associated RoleBinding exists")
 			rb := &rbacv1.RoleBinding{}
@@ -171,17 +128,14 @@ var _ = Describe("Reconciler", func() {
 			err = mgr.GetClient().Update(context.TODO(), drb)
 			Expect(err).NotTo(HaveOccurred(), "failed to update DirectoryRoleBinding")
 
-			By("Wait for successful reconciliation")
-			Eventually(calls, timeout).Should(
-				Receive(
-					integration.ReconcileResourceSuccess(namespace, "foo"),
-				),
-				"expected to successfully reconcile",
-			)
-
 			By("Refresh RoleBinding")
 			err = mgr.GetClient().Get(context.TODO(), identifier, rb)
 			Expect(err).NotTo(HaveOccurred(), "failed to get RoleBinding")
+
+			Eventually(func() []rbacv1.Subject {
+				mgr.GetClient().Get(context.TODO(), identifier, rb)
+				return rb.Subjects
+			}).Should(HaveLen(3))
 
 			By("Verify RoleBinding subjects have been updated with group members")
 			Expect(rb.Subjects).To(

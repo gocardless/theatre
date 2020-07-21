@@ -45,7 +45,13 @@ func (opt *commonOptions) Logger() logr.Logger {
 	}
 
 	logger := zap.New(
-		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{})),
+		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{
+			CallerKey:     "caller",
+			StacktraceKey: "stacktrace",
+			TimeKey:       "ts",
+			EncodeCaller:  zapcore.ShortCallerEncoder,
+			EncodeTime:    zapcore.RFC3339TimeEncoder,
+		})),
 		zap.WriteTo(os.Stderr),
 		zap.Level(logLevel),
 	)

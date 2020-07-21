@@ -4,7 +4,14 @@ IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 
-.PHONY: build build-darwin build-linux build-all test codegen deploy clean docker-build docker-pull docker-push docker-tag manifests
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+.PHONY: build build-darwin build-linux build-all test generate manifests deploy clean docker-build docker-pull docker-push docker-tag controller-gen
 
 build: $(PROG)
 build-darwin: $(PROG:=.darwin_amd64)
@@ -26,11 +33,11 @@ bin/%:
 test:
 	#ginkgo -v -r
 
-codegen:
-	# vendor/k8s.io/code-generator/generate-groups.sh all \
-	# 	$(PROJECT)/pkg/client \
-	# 	$(PROJECT)/pkg/apis \
-	# 	"rbac:v1alpha1 workloads:v1alpha1"
+generate: controller-gen
+	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
+
+manifests: generate
+	$(CONTROLLER_GEN) crd paths="./apis/rbac/..." output:crd:artifacts:config=config/base/crds
 
 deploy:
 	kustomize build config/base | kubectl apply -f -
@@ -53,13 +60,19 @@ docker-push:
 docker-tag:
 	docker tag $(IMAGE):$$(git rev-parse HEAD) $(IMAGE):latest
 
-# We place manifests in a non-standard location, config/base/crds, rather than
-# config/crds. This means we can provide a more idiomatic kustomize structure,
-# but requires us to move the files after generation.
-#
-# npm install -g prettier
-manifests:
-	# go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \
-	# 	&& rm -rfv config/base/crds \
-	# 	&& mv -v config/crds config/base/crds \
-	# 	&& prettier --parser yaml --write config/base/crds/*
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif

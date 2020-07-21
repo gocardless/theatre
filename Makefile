@@ -1,4 +1,4 @@
-PROG=bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
+PROG=#bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -24,13 +24,13 @@ bin/%:
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -v -r
+	#ginkgo -v -r
 
 codegen:
-	vendor/k8s.io/code-generator/generate-groups.sh all \
-		$(PROJECT)/pkg/client \
-		$(PROJECT)/pkg/apis \
-		"rbac:v1alpha1 workloads:v1alpha1"
+	# vendor/k8s.io/code-generator/generate-groups.sh all \
+	# 	$(PROJECT)/pkg/client \
+	# 	$(PROJECT)/pkg/apis \
+	# 	"rbac:v1alpha1 workloads:v1alpha1"
 
 deploy:
 	kustomize build config/base | kubectl apply -f -
@@ -39,7 +39,7 @@ deploy-production:
 	kustomize build config/overlays/production | kubectl apply -f -
 
 clean:
-	rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
+	#rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
 
 docker-build:
 	docker build -t $(IMAGE):latest .
@@ -59,7 +59,7 @@ docker-tag:
 #
 # npm install -g prettier
 manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \
-		&& rm -rfv config/base/crds \
-		&& mv -v config/crds config/base/crds \
-		&& prettier --parser yaml --write config/base/crds/*
+	# go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all \
+	# 	&& rm -rfv config/base/crds \
+	# 	&& mv -v config/crds config/base/crds \
+	# 	&& prettier --parser yaml --write config/base/crds/*

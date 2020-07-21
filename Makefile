@@ -1,4 +1,5 @@
-PROG=#bin/rbac-manager bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
+PROG=bin/rbac-manager
+#bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -31,7 +32,7 @@ bin/%:
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	#ginkgo -v -r
+	ginkgo -r controllers/rbac
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
@@ -46,7 +47,7 @@ deploy-production:
 	kustomize build config/overlays/production | kubectl apply -f -
 
 clean:
-	#rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
+	rm -rvf $(PROG) $(PROG:%=%.linux_amd64) $(PROG:%=%.darwin_amd64)
 
 docker-build:
 	docker build -t $(IMAGE):latest .

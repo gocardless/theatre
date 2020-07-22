@@ -8,14 +8,6 @@ metadata:
 rules:
   - apiGroups:
       - ""
-      - admissionregistration.k8s.io
-    resources:
-      - services
-      - mutatingwebhookconfigurations
-    verbs:
-      - "*"
-  - apiGroups:
-      - ""
     resources:
       - configmaps
     verbs:
@@ -73,16 +65,38 @@ subjects:
   - kind: ServiceAccount
     name: vault-manager
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vault-manager-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: theatre-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: vault-manager
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: vault-manager
+spec:
+  dnsNames:
+    - theatre-vault-manager.theatre-system.svc
+  issuerRef:
+    kind: Issuer
+    name: theatre-webhooks
+  secretName: theatre-vault-manager-certificate
+---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: vault-manager
   labels:
     group: vault.crd.gocardless.com
 spec:
-  serviceName: vault-manager
-  replicas: 1
-  volumeClaimTemplates: []
+  replicas: 2
   selector:
     matchLabels:
       group: vault.crd.gocardless.com
@@ -91,16 +105,18 @@ spec:
       labels:
         group: vault.crd.gocardless.com
     spec:
-      serviceAccountName: vault-manager
+      serviceAccountName: rbac-manager
       terminationGracePeriodSeconds: 10
       containers:
         - command:
             - /usr/local/bin/vault-manager
-            - --theatre-image
-            - $(THEATRE_IMAGE)
-            - --metrics-address
-            - 0.0.0.0
+          args:
+            - --theatre-image=$(THEATRE_IMAGE)
+            - --metrics-address=0.0.0.0
+            - --manager-metrics-address=0.0.0.0
+            - --manager-leader-election
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
+          imagePullPolicy: Always
           name: manager
           env:
             - name: POD_NAMESPACE
@@ -114,3 +130,23 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      volumes:
+        - name: cert
+          secret:
+            secretName: theatre-vault-manager-certificate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-manager
+spec:
+  selector:
+    app: theatre
+    group: vault.crd.gocardless.com
+  ports:
+    - port: 443
+      targetPort: 443

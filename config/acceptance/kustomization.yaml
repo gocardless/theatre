@@ -9,4 +9,5 @@ resources:
   - resources/google-application-credentials.yaml
 
 patchesStrategicMerge:
+  - overlays/rbac-manager.yaml
   - overlays/vault-manager.yaml

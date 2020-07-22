@@ -96,10 +96,10 @@ func (erl *EventRecordingLogger) Error(err error, msg string, keyvals ...interfa
 		return // don't record this event
 	}
 
-	erl.recorder.Event(erl.object, corev1.EventTypeWarning, event, err.Error())
+	erl.recorder.Event(erl.object, corev1.EventTypeWarning, event, msg)
 }
 
-// WithRecorder decorates a kitlog.Logger so that any log entries that contain an
+// WithRecorder decorates a logr.Logger so that any log entries that contain an
 // appropriate event will also log to the Kubernetes resource using events.
 func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 	erl.Logger.Info(msg, keyvals...)

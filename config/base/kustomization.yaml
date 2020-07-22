@@ -9,14 +9,12 @@ commonLabels:
   app: theatre
 
 resources:
-  - crds/rbac.crd.gocardless.com_directoryrolebindings.yaml
-  - crds/workloads_v1alpha1_console.yaml
-  - crds/workloads_v1alpha1_consoleauthorisation.yaml
-  - crds/workloads_v1alpha1_consoletemplate.yaml
+  - crds/rbac_v1alpha1_directoryrolebinding.yaml
   - managers/namespace.yaml
   - managers/rbac.yaml
   - managers/vault.yaml
-  - managers/workloads.yaml
+  - rbac/leader-election.yaml
+  - cert-manager/certificate.yaml
 
 vars:
   # We want our mutating webhook to ensure it only ever configures pods to use
@@ -27,7 +25,7 @@ vars:
   - name: THEATRE_IMAGE
     objref:
       apiVersion: apps/v1
-      kind: StatefulSet
+      kind: Deployment
       name: vault-manager
     fieldref:
       fieldpath: spec.template.spec.containers[0].image

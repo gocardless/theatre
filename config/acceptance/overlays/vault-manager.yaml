@@ -1,6 +1,6 @@
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: vault-manager
 spec:
@@ -11,3 +11,5 @@ spec:
         - name: manager
           image: theatre:latest
           imagePullPolicy: Never
+          args:
+            - --theatre-image=$(THEATRE_IMAGE)

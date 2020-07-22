@@ -1,5 +1,4 @@
-PROG=bin/rbac-manager bin/vault-manager bin/theatre-envconsul bin/workloads-manager
-# bin/theatre-consoles
+PROG=bin/rbac-manager bin/vault-manager bin/theatre-envconsul bin/workloads-manager bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev

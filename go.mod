@@ -7,6 +7,7 @@ require (
 	github.com/go-kit/kit v0.8.0
 	github.com/go-logr/logr v0.1.0
 	github.com/google/uuid v1.1.1
+	github.com/hashicorp/vault/api v1.0.4
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1

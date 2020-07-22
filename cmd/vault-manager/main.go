@@ -1,27 +1,25 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/alecthomas/kingpin"
-
-	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
-
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	vaultv1alpha1 "github.com/gocardless/theatre/apis/vault/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/apis"
 	"github.com/gocardless/theatre/pkg/signals"
-	"github.com/gocardless/theatre/pkg/vault/envconsul"
 )
 
 var (
-	app                     = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	app = kingpin.New("vault-manager", "Manages vault.crd.gocardless.com resources").Version(cmd.VersionStanza())
+
+	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
+
 	namespace               = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
 	serviceName             = app.Flag("service-name", "Name of service for webhook").Default("theatre-vault-manager").String()
 	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
@@ -43,51 +41,26 @@ var (
 				Default("/var/run/secrets/kubernetes.io/vault/token").String()
 	serviceAccountTokenExpiry   = app.Flag("service-account-token-expiry", "Expiry for service account tokens").Default("15m").Duration()
 	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
-
-	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	logger := commonOpts.Logger()
 
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		app.Fatalf("failed to add schemes: %v", err)
-	}
-
-	go func() {
-		commonOpts.ListenAndServeMetrics(logger)
-	}()
-
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		Port:               443,
+		LeaderElection:     commonOpts.ManagerLeaderElection,
+		LeaderElectionID:   "vault.crds.gocardless.com",
+	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	opts := webhook.ServerOptions{
-		CertDir: "/tmp/theatre-vault",
-		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: *webhookName,
-			Service: &webhook.Service{
-				Namespace: *namespace,
-				Name:      *serviceName,
-				Selectors: map[string]string{
-					"app":   "theatre",
-					"group": "vault.crd.gocardless.com",
-				},
-			},
-		},
-	}
-
-	svr, err := webhook.NewServer("vault", mgr, opts)
-	if err != nil {
-		app.Fatalf("failed to create admission server: %v", err)
-	}
-
-	injectorOpts := envconsul.InjectorOptions{
+	injectorOpts := vaultv1alpha1.EnvconsulInjectorOptions{
 		Image:          *theatreImage,
 		InstallPath:    *installPath,
 		NamespaceLabel: *namespaceLabel,
@@ -100,14 +73,13 @@ func main() {
 		ServiceAccountTokenAudience: *serviceAccountTokenAudience,
 	}
 
-	var wh *admission.Webhook
-	if wh, err = envconsul.NewWebhook(logger, mgr, injectorOpts); err != nil {
-		app.Fatalf(err.Error())
-	}
-
-	if err := svr.Register(wh); err != nil {
-		app.Fatalf(err.Error())
-	}
+	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
+		Handler: vaultv1alpha1.NewEnvconsulInjector(
+			mgr.GetClient(),
+			logger.WithName("webhooks").WithName("envconsul-injector"),
+			injectorOpts,
+		),
+	})
 
 	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)

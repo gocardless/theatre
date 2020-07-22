@@ -23,6 +23,14 @@ jobs:
           name: Ensure generated CRDs and RBAC are up to date
           command: make manifests && git diff --exit-code config/
 
+  vet:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run:
+          name: Ensure no go vet errors
+          command: go vet ./cmd/rbac-manager/...
+
   unit-integration:
     <<: *docker_golang
     steps:
@@ -123,6 +131,7 @@ workflows:
   build-integration:
     jobs:
       - check-generated-resources
+      - vet
       - unit-integration
       # - build
       # - acceptance:

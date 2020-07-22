@@ -34,6 +34,9 @@ bin/%:
 test:
 	ginkgo -r controllers/rbac
 
+vet:
+	go vet ./cmd/rbac-manager/...
+
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
 

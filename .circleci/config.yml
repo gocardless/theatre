@@ -23,22 +23,30 @@ jobs:
           name: Ensure generated CRDs and RBAC are up to date
           command: make manifests && git diff --exit-code config/
 
-  # unit-integration:
-  #   <<: *docker_golang
-  #   steps:
-  #     - checkout
-  #     - run:
-  #         name: Install ginkgo test runner
-  #         command: go get github.com/onsi/ginkgo/ginkgo
-  #     - run:
-  #         name: Install Kubebuilder test helpers
-  #         command: |
-  #           mkdir /usr/local/kubebuilder
-  #           curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz \
-  #             | tar -xvz --strip=1 -C /usr/local/kubebuilder
-  #     - run:
-  #         name: Run tests
-  #         command: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v
+  vet:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run:
+          name: Ensure no go vet errors
+          command: go vet ./cmd/rbac-manager/...
+
+  unit-integration:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run:
+          name: Install ginkgo test runner
+          command: go get github.com/onsi/ginkgo/ginkgo
+      - run:
+          name: Install Kubebuilder test helpers
+          command: |
+            mkdir /usr/local/kubebuilder
+            curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz \
+              | tar -xvz --strip=1 -C /usr/local/kubebuilder
+      - run:
+          name: Run tests
+          command: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/rbac
 
   # build:
   #   <<: *docker_golang
@@ -123,7 +131,8 @@ workflows:
   build-integration:
     jobs:
       - check-generated-resources
-      # - unit-integration
+      - vet
+      - unit-integration
       # - build
       # - acceptance:
       #     requires: [build]

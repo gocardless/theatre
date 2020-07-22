@@ -5,16 +5,21 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	theatre "github.com/gocardless/theatre/pkg/client/clientset/versioned"
-	workloadsclient "github.com/gocardless/theatre/pkg/client/clientset/versioned/typed/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/workloads/console/runner"
+	"k8s.io/api/admissionregistration/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/pkg/workloads/console/runner"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -28,46 +33,35 @@ const (
 	user         = "kubernetes-admin"
 )
 
-// This clientset is a union of the default kubernetes clientset and the workloads client.
-type clientset struct {
-	*kubernetes.Clientset
-	workloadsV1alpha1 *workloadsclient.WorkloadsV1alpha1Client
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = workloadsv1alpha1.AddToScheme(scheme)
+	_ = rbacv1alpha1.AddToScheme(scheme)
 }
 
-func (c *clientset) WorkloadsV1Alpha1() *workloadsclient.WorkloadsV1alpha1Client {
-	return c.workloadsV1alpha1
-}
-
-func newClient(config *rest.Config) clientset {
-	// Construct a client for the workloads API Group
-	workloadsClient, err := workloadsclient.NewForConfig(config)
+func newClient(config *rest.Config) client.Client {
+	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
 
-	// Construct a client for the core Kubernetes API Groups
-	core, err := kubernetes.NewForConfig(config)
-	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
-
-	return clientset{Clientset: core, workloadsV1alpha1: workloadsClient}
-}
-
-func newTheatreClient(config *rest.Config) theatre.Interface {
-	// Construct a client for the workloads API Group
-	client, err := theatre.NewForConfig(config)
-	Expect(err).NotTo(HaveOccurred(), "could not connect to kubernetes cluster")
-	return client
+	return kubeClient
 }
 
 // The console template is the ultimate owner of all resources created during
 // this test, so by removing it we will clean up all objects.
-func deleteConsoleTemplate(client clientset) {
+func deleteConsoleTemplate(kubeClient client.Client) {
 	By("Delete the console template")
 
 	policy := metav1.DeletePropagationForeground
-	err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-		Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+	opts := &client.DeleteOptions{PropagationPolicy: &policy}
+	template := &workloadsv1alpha1.ConsoleTemplate{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: templateName}}
+	_ = kubeClient.Delete(context.TODO(), template, opts)
 
 	Eventually(func() metav1.StatusReason {
-		_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+		err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: templateName}, template)
 		return apierrors.ReasonForError(err)
 	}).Should(Equal(metav1.StatusReasonNotFound), "expected console template to be deleted, it still exists")
 }
@@ -75,7 +69,7 @@ func deleteConsoleTemplate(client clientset) {
 type Runner struct{}
 
 func (r *Runner) Name() string {
-	return "pkg/workloads/console/acceptance"
+	return "pkg/workloads-manager/acceptance"
 }
 
 func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
@@ -85,17 +79,18 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	Describe("Consoles", func() {
 		var (
-			client clientset
+			kubeClient client.Client
 		)
 
 		BeforeEach(func() {
 			logger.Log("msg", "starting test")
 
-			client = newClient(config)
+			kubeClient = newClient(config)
 
 			// Wait for MutatingWebhookConfig to be created
 			Eventually(func() bool {
-				_, err := client.Admissionregistration().MutatingWebhookConfigurations().Get("theatre-workloads", metav1.GetOptions{})
+				mutatingWebhookConfig := &v1beta1.MutatingWebhookConfiguration{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: "theatre-system", Name: "theatre-workloads"}, mutatingWebhookConfig)
 				if err != nil {
 					logger.Log("error", err)
 					return false
@@ -106,11 +101,11 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			// Because we use the same namespace for each spec, remove any templates
 			// that are left over from previous failed runs to avoid 'already exists'
 			// errors.
-			deleteConsoleTemplate(client)
+			deleteConsoleTemplate(kubeClient)
 		})
 
 		AfterEach(func() {
-			deleteConsoleTemplate(client)
+			deleteConsoleTemplate(kubeClient)
 		})
 
 		Specify("Happy path", func() {
@@ -118,91 +113,110 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			var TTLBeforeRunning int32 = 60
 			var TTLAfterFinished int32 = 10
 			template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
-			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			err := kubeClient.Create(context.TODO(), template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 			By("Create a console")
 			console := buildConsole()
 			console.Spec.Command = []string{"sleep", "666"}
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			err = kubeClient.Create(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
 			By("Expect an authorisation has been created")
-			var consoleAuthorisation *workloadsv1alpha1.ConsoleAuthorisation
+			consoleAuthorisation := &workloadsv1alpha1.ConsoleAuthorisation{}
 			Eventually(func() error {
-				consoleAuthorisation, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(consoleName, metav1.GetOptions{})
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, consoleAuthorisation)
 				return err
 			}).ShouldNot(HaveOccurred(), "could not find authorisation")
 
 			By("Expect the console phase is pending authorisation")
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
-				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				csl := &workloadsv1alpha1.Console{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, csl)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
-				return console.Status.Phase
+				return csl.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsolePendingAuthorisation))
 
 			By("Expect that the job has not been created")
 			Eventually(func() error {
-				_, err = client.BatchV1().Jobs(namespace).Get(consoleName, metav1.GetOptions{})
+				job := &batchv1.Job{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: jobName}, job)
 				return err
 			}).Should(HaveOccurred(), "expected not to find job, but did")
 
 			// Change the console user to another user as a user cannot authorise their own console
 			By("Update the console user")
+			err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
+			Expect(err).NotTo(HaveOccurred(), "could not get console to update console user")
 			console.Spec.User = "another-user@example.com"
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Update(console)
+			err = kubeClient.Update(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not update console user")
 
 			By("Authorise a console")
 			consoleAuthorisation.Spec.Authorisations = []rbacv1.Subject{{Kind: "User", Name: user}}
-			_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Update(consoleAuthorisation)
+			err = kubeClient.Update(context.TODO(), consoleAuthorisation)
 			Expect(err).NotTo(HaveOccurred(), "could not authorise console")
 
 			By("Expect a job has been created")
 			Eventually(func() error {
-				_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
+				job := &batchv1.Job{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: jobName}, job)
 				return err
 			}).ShouldNot(HaveOccurred(), "could not find job")
 
 			By("Expect a pod has been created")
 			Eventually(func() ([]corev1.Pod, error) {
-				opts := metav1.ListOptions{LabelSelector: "job-name=" + jobName}
-				podList, err := client.CoreV1().Pods(namespace).List(opts)
+				selectorSet, err := labels.ConvertSelectorToLabelsMap("job-name=" + jobName)
+				if err != nil {
+					return nil, err
+				}
+				opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+				podList := &corev1.PodList{}
+				kubeClient.List(context.TODO(), podList, opts)
 				return podList.Items, err
 			}).Should(HaveLen(1), "expected to find a single pod")
 
 			By("Expect the console phase is Running")
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
-				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				csl := &workloadsv1alpha1.Console{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, csl)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
-				return console.Status.Phase
+				return csl.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
 
 			By("Expect the console phase eventually changes to Stopped")
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
-				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				csl := &workloadsv1alpha1.Console{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, csl)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
-				return console.Status.Phase
+				return csl.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsoleStopped))
 
 			// TODO: attach to pod
 
 			By("Expect that the job still exists")
-			_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
+			job := &batchv1.Job{}
+			err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: jobName}, job)
 			Expect(err).NotTo(HaveOccurred(), "could not find job")
 
 			By("Expect that the console is deleted shortly after stopping, due to its TTL after running")
 			Eventually(func() error {
-				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(consoleName, metav1.GetOptions{})
+				console := &workloadsv1alpha1.Console{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				return err
 			}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
 
 			By("Expect that the pod eventually terminates")
-			Eventually(func() int {
-				opts := metav1.ListOptions{LabelSelector: "job-name=" + jobName}
-				podList, _ := client.CoreV1().Pods(namespace).List(opts)
-				return len(podList.Items)
-			}).Should(Equal(0), "pod did not get deleted")
+			Eventually(func() ([]corev1.Pod, error) {
+				selectorSet, err := labels.ConvertSelectorToLabelsMap("job-name=" + jobName)
+				if err != nil {
+					return nil, err
+				}
+				opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+				podList := &corev1.PodList{}
+				kubeClient.List(context.TODO(), podList, opts)
+				return podList.Items, err
+			}).Should(HaveLen(0), "pod did not get deleted")
 		})
 
 		Describe("Runner interface", func() {
@@ -213,7 +227,9 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			)
 
 			BeforeEach(func() {
-				consoleRunner = runner.New(client, newTheatreClient(config))
+				var err error
+				consoleRunner, err = runner.New(config)
+				Expect(err).NotTo(HaveOccurred(), "could not create runner")
 			})
 
 			Specify("Happy path", func() {
@@ -221,7 +237,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				var TTLBeforeRunning int32 = 60
 				var TTLAfterFinished int32 = 10
 				template := buildConsoleTemplate(&TTLBeforeRunning, &TTLAfterFinished, true)
-				template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+				err := kubeClient.Create(context.TODO(), template, &client.CreateOptions{})
 				Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 				By("Create a console")
@@ -243,12 +259,15 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Wait for the console to be created")
 				Eventually(func() *workloadsv1alpha1.Console {
-					consoles, err := client.WorkloadsV1Alpha1().Consoles(namespace).List(metav1.ListOptions{})
+					opts := &client.ListOptions{Namespace: namespace}
+					consoleList := &workloadsv1alpha1.ConsoleList{}
+					err := kubeClient.List(context.TODO(), consoleList, opts)
+
 					Expect(err).To(BeNil(), "Failed to list consoles")
 
-					if len(consoles.Items) == 1 {
-						console = &consoles.Items[0]
-						return &consoles.Items[0]
+					if len(consoleList.Items) == 1 {
+						console = &consoleList.Items[0]
+						return &consoleList.Items[0]
 					}
 
 					return nil
@@ -256,28 +275,32 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Expect an authorisation has been created")
 				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().ConsoleAuthorisations(namespace).Get(console.Name, metav1.GetOptions{})
+					consoleAuthorisation := &workloadsv1alpha1.ConsoleAuthorisation{}
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, consoleAuthorisation)
 					return err
 				}).ShouldNot(HaveOccurred(), "could not find authorisation")
 
 				By("Expect the console phase is pending authorisation")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
-					console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+					err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsolePendingAuthorisation))
 
 				By("Expect that the job has not been created")
 				Eventually(func() error {
-					_, err = client.BatchV1().Jobs(namespace).Get(console.Name, metav1.GetOptions{})
+					job := &batchv1.Job{}
+					err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name + "-console"}, job)
 					return err
 				}).Should(HaveOccurred(), "expected not to find job, but did")
 
 				// Change the console user to another user as a user cannot authorise their own console
 				By("Update the console user")
-				console.Spec.User = "another-user@example.com"
-				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Update(console)
-				Expect(err).NotTo(HaveOccurred(), "could not update console user")
+				Eventually(func() error {
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
+					console.Spec.User = "another-user@example.com"
+					return kubeClient.Update(context.TODO(), console)
+				}).ShouldNot(HaveOccurred(), "could not update console user")
 
 				By("Authorise a console")
 				err = consoleRunner.Authorise(context.TODO(), runner.AuthoriseOptions{
@@ -289,21 +312,27 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Expect a pod has been created")
 				Eventually(func() ([]corev1.Pod, error) {
-					opts := metav1.ListOptions{LabelSelector: "console-name=" + console.Name}
-					podList, err := client.CoreV1().Pods(namespace).List(opts)
+					selectorSet, err := labels.ConvertSelectorToLabelsMap("console-name=" + console.Name)
+					if err != nil {
+						return nil, err
+					}
+					opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+					podList := &corev1.PodList{}
+					kubeClient.List(context.TODO(), podList, opts)
+
 					return podList.Items, err
 				}).Should(HaveLen(1), "expected to find a single pod")
 
 				By("Expect the console phase is Running")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
-					console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
 
 				By("Expect the console phase eventually changes to Stopped")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
-					console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleStopped))
@@ -312,33 +341,45 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Expect that the console is deleted shortly after stopping, due to its TTL")
 				Eventually(func() error {
-					_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					return err
 				}, 12*time.Second).Should(HaveOccurred(), "expected not to find console, but did")
 
 				By("Expect that the pod eventually terminates")
-				Eventually(func() int {
-					opts := metav1.ListOptions{LabelSelector: "console-name=" + console.Name}
-					podList, _ := client.CoreV1().Pods(namespace).List(opts)
-					return len(podList.Items)
-				}).Should(Equal(0), "pod did not get deleted")
+				Eventually(func() ([]corev1.Pod, error) {
+					selectorSet, err := labels.ConvertSelectorToLabelsMap("console-name=" + console.Name)
+					if err != nil {
+						return nil, err
+					}
+					opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+					podList := &corev1.PodList{}
+					kubeClient.List(context.TODO(), podList, opts)
+					return podList.Items, err
+				}).Should(HaveLen(0), "pod did not get deleted")
 			})
 		})
 
 		Specify("Deleting a console template", func() {
 			By("Create a console template")
 			template := buildConsoleTemplate(nil, nil, false)
-			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			err := kubeClient.Create(context.TODO(), template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 			By("Create a console")
 			console := buildConsole()
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			err = kubeClient.Create(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
 			By("Expect a console has been created")
-			_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+			err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 			Expect(err).NotTo(HaveOccurred(), "could not find console")
+
+			By("Expect consoleTemplate becomes console owner")
+			Eventually(func() []metav1.OwnerReference {
+				kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
+				return console.OwnerReferences
+			}).Should(HaveLen(1), "console has no owners")
+			Expect(console.OwnerReferences[0].Name).To(Equal(template.Name), "consoleTemplate is not set as console owner")
 
 			// Leave this assertion rather than using the deleteConsoleTemplate
 			// function, as it's useful to assert on any errors that are returned
@@ -346,18 +387,19 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			// omits.
 			By("Delete the console template")
 			policy := metav1.DeletePropagationForeground
-			err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).
-				Delete(templateName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+			opts := &client.DeleteOptions{PropagationPolicy: &policy}
+			template = &workloadsv1alpha1.ConsoleTemplate{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: templateName}}
+			err = kubeClient.Delete(context.TODO(), template, opts)
 			Expect(err).NotTo(HaveOccurred(), "could not delete console template")
 
 			Eventually(func() error {
-				_, err = client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Get(templateName, metav1.GetOptions{})
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: template.Name}, template)
 				return err
 			}).Should(HaveOccurred(), "expected console template to be deleted, it still exists")
 
 			By("Expect that the console no longer exists")
 			Eventually(func() error {
-				_, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				return err
 			}).Should(HaveOccurred(), "expected not to find console, but did")
 		})
@@ -365,34 +407,39 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Specify("Deleting a job", func() {
 			By("Create a console template")
 			template := buildConsoleTemplate(nil, nil, false)
-			template, err := client.WorkloadsV1Alpha1().ConsoleTemplates(namespace).Create(template)
+			err := kubeClient.Create(context.TODO(), template)
 			Expect(err).NotTo(HaveOccurred(), "could not create console template")
 
 			By("Create a console")
 			console := buildConsole()
-			console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Create(console)
+			err = kubeClient.Create(context.TODO(), console)
 			Expect(err).NotTo(HaveOccurred(), "could not create console")
 
 			By("Expect a job has been created")
 			Eventually(func() error {
-				_, err = client.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
+				job := &batchv1.Job{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: jobName}, job)
 				return err
 			}).ShouldNot(HaveOccurred(), "could not find job")
 
 			By("Delete the job")
 			policy := metav1.DeletePropagationForeground
-			err = client.BatchV1().Jobs(namespace).Delete(jobName, &metav1.DeleteOptions{PropagationPolicy: &policy})
+			opts := &client.DeleteOptions{PropagationPolicy: &policy}
+			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: jobName}}
+			err = kubeClient.Delete(context.TODO(), job, opts)
+
 			Expect(err).NotTo(HaveOccurred(), "could not delete console job")
 
 			By("Expect that the job no longer exists")
 			Eventually(func() error {
-				_, err = client.BatchV1().Jobs(namespace).Get(console.Name, metav1.GetOptions{})
+				job := &batchv1.Job{}
+				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, job)
 				return err
 			}).Should(HaveOccurred(), "expected not to find job, but did")
 
 			By("Expect the console phase is Destroyed")
 			Eventually(func() workloadsv1alpha1.ConsolePhase {
-				console, err = client.WorkloadsV1Alpha1().Consoles(namespace).Get(console.Name, metav1.GetOptions{})
+				err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 				Expect(err).NotTo(HaveOccurred(), "could not find console")
 				return console.Status.Phase
 			}).Should(Equal(workloadsv1alpha1.ConsoleDestroyed))
@@ -447,7 +494,7 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 			MaxTimeoutSeconds:              60,
 			DefaultTTLSecondsBeforeRunning: TTLBeforeRunning,
 			DefaultTTLSecondsAfterFinished: TTLAfterFinished,
-			AdditionalAttachSubjects:       []rbacv1.Subject{rbacv1.Subject{Kind: "User", Name: "add-user@example.com"}},
+			AdditionalAttachSubjects:       []rbacv1.Subject{{Kind: "User", Name: "add-user@example.com"}},
 			AuthorisationRules:             authorisationRules,
 			DefaultAuthorisationRule:       defaultAuthorisation,
 			Template: corev1.PodTemplateSpec{
@@ -455,7 +502,7 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 					// Set the grace period to 0, to ensure quick cleanup.
 					TerminationGracePeriodSeconds: new(int64),
 					Containers: []corev1.Container{
-						corev1.Container{
+						{
 							Image:   "alpine:latest",
 							Name:    "console-container-0",
 							Command: []string{"false", "false", "false"},
@@ -477,7 +524,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			Command:            []string{"sleep", "30"},
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
-			TimeoutSeconds:     6,
+			TimeoutSeconds:     10,
 		},
 	}
 }

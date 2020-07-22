@@ -71,7 +71,7 @@ func main() {
 		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
 		Port:               9443,
 		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "vault.crds.gocardless.com",
+		LeaderElectionID:   "rbac.crds.gocardless.com",
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)

@@ -114,7 +114,7 @@ func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 		keyvals = keyvals[2:]
 	}
 
-	var event, eventType, message string
+	var event string
 	var ok bool
 
 	if event, ok = kvs["event"]; !ok {
@@ -125,16 +125,5 @@ func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 		return // don't record this event
 	}
 
-	// TODO(jackatbancast): remove error handling here
-	// Now that we have an Error method to use to report errors,
-	// we should adopt this and use theinfo method for informative messages
-	if err, hasError := kvs["error"]; hasError {
-		eventType = corev1.EventTypeWarning
-		message = err
-	} else {
-		eventType = corev1.EventTypeNormal
-		message = msg
-	}
-
-	erl.recorder.Event(erl.object, eventType, event, message)
+	erl.recorder.Event(erl.object, corev1.EventTypeNormal, event, msg)
 }

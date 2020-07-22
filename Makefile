@@ -42,9 +42,11 @@ vet:
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
+	$(CONTROLLER_GEN) object paths="./apis/workloads/..."
 
 manifests: generate
 	$(CONTROLLER_GEN) crd paths="./apis/rbac/..." output:crd:artifacts:config=config/base/crds
+	$(CONTROLLER_GEN) crd paths="./apis/workloads/..." output:crd:artifacts:config=config/base/crds
 
 deploy:
 	kustomize build config/base | kubectl apply -f -

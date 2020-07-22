@@ -1,4 +1,4 @@
-package envconsul
+package v1alpha1
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ var _ = Describe("PodInjector", func() {
 				AuthRole:              "default",
 				SecretMountPathPrefix: "secret/data/kubernetes",
 			},
-			InjectorOptions: InjectorOptions{
+			EnvconsulInjectorOptions: EnvconsulInjectorOptions{
 				Image:       "theatre:latest",
 				InstallPath: "/var/run/theatre-envconsul",
 				VaultConfigMapKey: client.ObjectKey{

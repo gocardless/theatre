@@ -1,4 +1,4 @@
-package envconsul
+package v1alpha1
 
 import (
 	"testing"
@@ -9,5 +9,5 @@ import (
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/vault/envconsul")
+	RunSpecs(t, "api/vault/v1alpha1")
 }

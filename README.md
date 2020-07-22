@@ -77,14 +77,12 @@ all the necessary dependencies:
 
 ```shell
 brew cask install docker
-brew install go kubernetes-cli
+brew install go kubernetes-cli kustomize
 curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-darwin-amd64 \
   && chmod a+x /usr/local/bin/kind
-curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_darwin_amd64.tar.gz \
-  | tar -xvz -C /usr/local/bin
 mkdir /usr/local/kubebuilder
-curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.7/kubebuilder_1.0.7_darwin_amd64.tar.gz \
-  | tar -xvz --strip=1 -C /usr/local/kubebuilder
+curl -fsL https://go.kubebuilder.io/dl/2.3.1/$(go env GOOS)/$(go env GOARCH) | tar -xvz --strip=1 -C /usr/local/kubebuilder
+export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
 ```
 
 Running `make` should now compile binaries into `bin`.

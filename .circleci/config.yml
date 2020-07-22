@@ -29,7 +29,7 @@ jobs:
       - checkout
       - run:
           name: Ensure no go vet errors
-          command: go vet ./cmd/rbac-manager/...
+          command: go vet ./cmd/rbac-manager/... ./cmd/vault-manager./...
 
   unit-integration:
     <<: *docker_golang
@@ -46,59 +46,61 @@ jobs:
               | tar -xvz --strip=1 -C /usr/local/kubebuilder
       - run:
           name: Run tests
-          command: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/rbac
+          command: |
+            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/rbac
+            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v apis/vault
 
-  # build:
-  #   <<: *docker_golang
-  #   steps:
-  #     - checkout
-  #     - run:
-  #         name: Build test binaries
-  #         command: make bin/acceptance.linux_amd64
-  #     - persist_to_workspace:
-  #         root: /go/src/github.com/gocardless/theatre
-  #         paths: ['bin']
+  build:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run:
+          name: Build test binaries
+          command: make bin/acceptance.linux_amd64
+      - persist_to_workspace:
+          root: /go/src/github.com/gocardless/theatre
+          paths: ['bin']
 
-  # acceptance:
-  #   machine: true
-  #   resource_class: large
-  #   steps:
-  #     - checkout
-  #     - attach_workspace:
-  #         at: workspace
-  #     - run:
-  #         name: Install tooling
-  #         command: |
-  #           sudo bash <<EOF
-  #           curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64
-  #           curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz \
-  #             | tar xfz -
-  #           mv -v kustomize /usr/local/bin/kustomize
-  #           curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.13.12/bin/linux/amd64/kubectl
+  acceptance:
+    machine: true
+    resource_class: large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: workspace
+      - run:
+          name: Install tooling
+          command: |
+            sudo bash <<EOF
+            curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64
+            curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz \
+              | tar xfz -
+            mv -v kustomize /usr/local/bin/kustomize
+            curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.13.12/bin/linux/amd64/kubectl
 
-  #           chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
-  #           EOF
-  #     # Sleep to wait for everything to install properly before beginning tests
-  #     - run:
-  #         name: Prepare the cluster
-  #         command: workspace/bin/acceptance.linux_amd64 prepare --verbose && sleep 10
-  #     - run:
-  #         name: Run acceptance tests
-  #         command: workspace/bin/acceptance.linux_amd64 run --verbose
-  #     # If the test failed due to a flake then we want to gather as much
-  #     # information as possible, because it could be hard to reproduce.
-  #     - run:
-  #         name: Show events
-  #         command: kubectl get events
-  #         when: on_fail
-  #     - run:
-  #         name: Show workloads logs
-  #         command: kubectl -n theatre-system logs theatre-workloads-manager-0
-  #         when: on_fail
-  #     - run:
-  #         name: Show rbac logs
-  #         command: kubectl -n theatre-system logs theatre-rbac-manager-0
-  #         when: on_fail
+            chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
+            EOF
+      # Sleep to wait for everything to install properly before beginning tests
+      - run:
+          name: Prepare the cluster
+          command: workspace/bin/acceptance.linux_amd64 prepare --verbose && sleep 10
+      - run:
+          name: Run acceptance tests
+          command: workspace/bin/acceptance.linux_amd64 run --verbose
+      # If the test failed due to a flake then we want to gather as much
+      # information as possible, because it could be hard to reproduce.
+      - run:
+          name: Show events
+          command: kubectl get events
+          when: on_fail
+      - run:
+          name: Show workloads logs
+          command: kubectl -n theatre-system logs theatre-workloads-manager-0
+          when: on_fail
+      - run:
+          name: Show rbac logs
+          command: kubectl -n theatre-system logs theatre-rbac-manager-0
+          when: on_fail
 
   # release:
   #   <<: *docker_golang
@@ -133,9 +135,9 @@ workflows:
       - check-generated-resources
       - vet
       - unit-integration
-      # - build
-      # - acceptance:
-      #     requires: [build]
+      - build
+      - acceptance:
+          requires: [build]
       # - release:
       #     requires: [acceptance]
       #     filters:

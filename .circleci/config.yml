@@ -49,6 +49,7 @@ jobs:
           command: |
             ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/rbac
             ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v apis/vault
+            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v apis/workloads
 
   build:
     <<: *docker_golang

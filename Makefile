@@ -34,6 +34,7 @@ bin/%:
 test:
 	ginkgo -r controllers/rbac
 	ginkgo -r apis/vault/v1alpha1
+	ginkgo -r apis/workloads/v1alpha1
 
 vet:
 	go vet ./cmd/rbac-manager/...

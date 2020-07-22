@@ -1,5 +1,5 @@
-PROG=bin/rbac-manager
-#bin/workloads-manager bin/vault-manager bin/theatre-envconsul bin/theatre-consoles
+PROG=bin/rbac-manager bin/vault-manager 
+#bin/workloads-manager bin/theatre-envconsul bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -33,9 +33,12 @@ bin/%:
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
 	ginkgo -r controllers/rbac
+	ginkgo -r apis/vault/v1alpha1
 
 vet:
 	go vet ./cmd/rbac-manager/...
+	go vet ./cmd/vault-manager/...
+	go vet ./cmd/theatre-envconsul/...
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."

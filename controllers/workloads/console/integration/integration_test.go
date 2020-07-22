@@ -5,90 +5,47 @@ import (
 	"fmt"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/integration"
-	"github.com/gocardless/theatre/pkg/workloads/console"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-)
-
-const (
-	// Expect 2 reconcile events:
-	//   #1: In response to the creation of the console itself.
-	//   #2: In response to the creation of the job.
-	ReconcilesAfterCreate = 2
-)
-
-var (
-	timeout = 5 * time.Second
-	logger  = kitlog.NewLogfmtLogger(GinkgoWriter)
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 )
 
 var _ = Describe("Console", func() {
 	var (
-		ctx                        context.Context
-		cancel                     func()
-		namespace                  string
-		teardown                   func()
-		mgr                        manager.Manager
-		calls                      chan integration.ReconcileCall
-		whcalls                    chan integration.HandleCall
-		consoleName                string
-		csl                        *workloadsv1alpha1.Console
-		consoleTemplate            *workloadsv1alpha1.ConsoleTemplate
-		waitForSuccessfulReconcile func(int)
-		mustCreateResources        func()
+		consoleName         string
+		consoleTemplate     *workloadsv1alpha1.ConsoleTemplate
+		csl                 *workloadsv1alpha1.Console
+		mustCreateNamespace func()
+		mustCreateResources func()
+		namespaceName       string
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
-		namespace, teardown = integration.CreateNamespace(clientset)
-		mgr = integration.StartTestManager(ctx, cfg)
-
-		integration.MustController(
-			console.Add(ctx, logger, mgr,
-				func(opt *controller.Options) {
-					opt.Reconciler, calls = integration.CaptureReconcile(
-						opt.Reconciler,
-					)
-				},
-			),
-		)
-
-		integration.NewServer(
-			mgr,
-			integration.MustWebhook(
-				console.NewAuthenticatorWebhook(logger, mgr,
-					func(handler *admission.Handler) {
-						*handler, whcalls = integration.CaptureWebhook(mgr, *handler)
-					},
-				),
-			),
-			integration.MustWebhook(console.NewTemplateValidationWebhook(logger, mgr)),
-		)
-
 		// Set a high default in case the tests are slow to execute
 		defaultTTLSecondsBeforeRunning := int32(10)
+
+		namespaceName = uuid.New().String()
+
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespaceName,
+			},
+		}
 
 		consoleTemplate = &workloadsv1alpha1.ConsoleTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "console-template-0",
-				Namespace: namespace,
+				Namespace: namespaceName,
 				Labels: map[string]string{
 					"repo":        "myapp-owner-myapp-repo",
 					"environment": "myapp-env",
@@ -121,7 +78,7 @@ var _ = Describe("Console", func() {
 		csl = &workloadsv1alpha1.Console{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      consoleName,
-				Namespace: namespace,
+				Namespace: namespaceName,
 				Labels: map[string]string{
 					"repo":        "no-app",
 					"other-label": "other-value",
@@ -135,21 +92,15 @@ var _ = Describe("Console", func() {
 			},
 		}
 
-		waitForSuccessfulReconcile = func(times int) {
-			// Wait twice for reconcile: the second reconciliation is triggered due to
-			// the update of the status field with an expiry time
-			for i := 1; i <= times; i++ {
-				By(fmt.Sprintf("Expect reconcile succeeded (%d of %d)", i, times))
-				Eventually(calls, timeout).Should(
-					Receive(
-						integration.ReconcileResourceSuccess(namespace, consoleName),
-					),
-				)
-			}
-			By("Reconcile done")
+		mustCreateNamespace = func() {
+			By("Creating test namespace: " + namespaceName)
+			Expect(mgr.GetClient().Create(context.TODO(), namespace)).NotTo(
+				HaveOccurred(), "failed to create test namespace",
+			)
 		}
-
 		mustCreateResources = func() {
+			mustCreateNamespace()
+
 			By("Creating console template")
 			Expect(mgr.GetClient().Create(context.TODO(), consoleTemplate)).NotTo(
 				HaveOccurred(), "failed to create Console Template",
@@ -160,11 +111,6 @@ var _ = Describe("Console", func() {
 				HaveOccurred(), "failed to create Console",
 			)
 		}
-	})
-
-	AfterEach(func() {
-		cancel()
-		teardown()
 	})
 
 	Describe("Enforcing valid timeout values", func() {
@@ -179,17 +125,13 @@ var _ = Describe("Console", func() {
 
 			It("Enforces the console template's MaxTimeoutSeconds", func() {
 				By("Creating a console with a timeout > MaxTimeoutSeconds")
-
-				waitForSuccessfulReconcile(ReconcilesAfterCreate)
-
 				By("Expect console has timeout == MaxTimeoutSeconds")
-				identifier, _ := client.ObjectKeyFromObject(csl)
-				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-				Expect(
-					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7200),
-					"console's timeout does not match template's MaxTimeoutSeconds",
-				)
+				Eventually(func() int {
+					identifier, _ := client.ObjectKeyFromObject(csl)
+					mgr.GetClient().Get(context.TODO(), identifier, csl)
+					return csl.Spec.TimeoutSeconds
+				}).Should(Equal(7200),
+					"console's timeout does not match template's MaxTimeoutSeconds")
 			})
 		})
 
@@ -200,17 +142,13 @@ var _ = Describe("Console", func() {
 
 			It("Uses the template's DefaultTimeoutSeconds", func() {
 				By("Creating a console with a timeout of 0")
-
-				waitForSuccessfulReconcile(ReconcilesAfterCreate)
-
-				By("Expect console has timeout == MaxTimeoutSeconds")
-				identifier, _ := client.ObjectKeyFromObject(csl)
-				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-				Expect(
-					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 600),
-					"console's timeout does not match template's DefaultTimeoutSeconds",
-				)
+				By("Expect console has timeout == DefaultTimeoutSeconds")
+				Eventually(func() int {
+					identifier, _ := client.ObjectKeyFromObject(csl)
+					mgr.GetClient().Get(context.TODO(), identifier, csl)
+					return csl.Spec.TimeoutSeconds
+				}).Should(Equal(600),
+					"console's timeout does not match template's DefaultTimeoutSeconds")
 			})
 		})
 
@@ -220,16 +158,13 @@ var _ = Describe("Console", func() {
 			})
 
 			It("Keeps the console's timeout", func() {
-				waitForSuccessfulReconcile(ReconcilesAfterCreate)
-
-				By("Expect console has timeout == MaxTimeoutSeconds")
-				identifier, _ := client.ObjectKeyFromObject(csl)
-				err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-				Expect(err).NotTo(HaveOccurred(), "failed to find Console")
-				Expect(
-					csl.Spec.TimeoutSeconds).To(BeNumerically("==", 7199),
-					"console's timeout does not match template's MaxTimeoutSeconds",
-				)
+				By("Expect console kept it's timeout")
+				Eventually(func() int {
+					identifier, _ := client.ObjectKeyFromObject(csl)
+					mgr.GetClient().Get(context.TODO(), identifier, csl)
+					return csl.Spec.TimeoutSeconds
+				}).Should(Equal(7199),
+					"console's timeout was not kept")
 			})
 		})
 
@@ -240,35 +175,39 @@ var _ = Describe("Console", func() {
 	Describe("Creating resources", func() {
 		JustBeforeEach(func() {
 			mustCreateResources()
-			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 		})
 
-		It("Sets console.spec.user from rbac", func() {
-			By("Expect webhook was invoked")
-			Eventually(whcalls, timeout).Should(
-				Receive(
-					integration.HandleResource(namespace, consoleName),
-				),
-			)
+		// TODO: Webhooks are not easily tested in envtest at the moment.
+		// It("Sets console.spec.user from rbac", func() {
+		// 	By("Expect webhook was invoked")
+		// 	Eventually(whcalls, timeout).Should(
+		// 		Receive(
+		// 			integration.HandleResource(namespace, consoleName),
+		// 		),
+		// 	)
 
-			By("Expect console.spec.user to be set")
-			Expect(csl.Spec.User).To(Equal("system:unsecured"))
-		})
+		// 	By("Expect console.spec.user to be set")
+		// 	Expect(csl.Spec.User).To(Equal("system:unsecured"))
+		// })
 
 		It("Creates a job", func() {
 			By("Expect job was created")
 			job := &batchv1.Job{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			identifier.Name += "-console"
-			err := mgr.GetClient().Get(context.TODO(), identifier, job)
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+			Eventually(func() error {
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier.Name += "-console"
+				err := mgr.GetClient().Get(context.TODO(), identifier, job)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find associated Job for Console")
 
 			By("Expect job and pod labels are correctly populated from the console template and console")
-			Expect(
-				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
-				"job should have a user label matching the console owner",
-			)
+			// TODO: Webhooks are not easily tested in envtest at the moment.
+			// Expect(
+			// job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
+			// "job should have a user label matching the console owner",
+			// )
 			Expect(
 				job.ObjectMeta.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name),
 				"job should have a label console-name matching the console name",
@@ -329,41 +268,42 @@ var _ = Describe("Console", func() {
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
 			identifier.Name += "-console"
-			err := mgr.GetClient().Get(context.TODO(), identifier, job)
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+
+			Eventually(func() error {
+				err := mgr.GetClient().Get(context.TODO(), identifier, job)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find associated Job for Console")
 
 			By("Modifying job")
 			job.Spec.Parallelism = &parallelism
-			err = mgr.GetClient().Update(context.TODO(), job)
+			err := mgr.GetClient().Update(context.TODO(), job)
 			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
 			Expect(*job.Spec.Parallelism).To(Equal(parallelism))
 
 			By("Expect job has properties restored")
-			waitForSuccessfulReconcile(1)
-			err = mgr.GetClient().Get(context.TODO(), identifier, job)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve Job")
-			Expect(
-				*job.Spec.Parallelism).To(Equal(defaultParallelism),
-				"job Spec Parallelism is restored to original value",
-			)
-
+			Eventually(func() int32 {
+				mgr.GetClient().Get(context.TODO(), identifier, job)
+				return *job.Spec.Parallelism
+			}).Should(Equal(defaultParallelism),
+				"job Spec Parallelism is restored to original value")
 		})
 
-		It("Only creates one job when reconciling twice", func() {
-			By("Retrieving latest console object")
-			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+		// 	It("Only creates one job when reconciling twice", func() {
+		// 		By("Retrieving latest console object")
+		// 		updatedCsl := &workloadsv1alpha1.Console{}
+		// 		identifier, _ := client.ObjectKeyFromObject(csl)
+		// 		err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+		// 		Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
 
-			By("Reconciling again")
-			updatedCsl.Spec.Reason = "a different reason"
-			err = mgr.GetClient().Update(context.TODO(), updatedCsl)
-			Expect(err).NotTo(HaveOccurred(), "failed to update console")
+		// 		By("Reconciling again")
+		// 		updatedCsl.Spec.Reason = "a different reason"
+		// 		err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+		// 		Expect(err).NotTo(HaveOccurred(), "failed to update console")
 
-			waitForSuccessfulReconcile(1)
-			// TODO: check that the 'already exists' event was logged
-		})
+		// 		waitForSuccessfulReconcile(1)
+		// 		// TODO: check that the 'already exists' event was logged
+		// 	})
 
 		It("Creates a role and directory role binding for the user", func() {
 			podName := fmt.Sprintf("%s-console-abcde", consoleName)
@@ -373,7 +313,7 @@ var _ = Describe("Console", func() {
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
-					Namespace: namespace,
+					Namespace: namespaceName,
 					Labels:    labels.Set{"job-name": jobName},
 				},
 				Spec: corev1.PodSpec{
@@ -396,15 +336,15 @@ var _ = Describe("Console", func() {
 			err = mgr.GetClient().Status().Update(context.TODO(), pod)
 			Expect(err).NotTo(HaveOccurred(), "failed to update fake pod status")
 
-			By("Reconciling again")
-			waitForSuccessfulReconcile(1)
-
 			By("Expect role was created")
 			role := &rbacv1.Role{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err = mgr.GetClient().Get(context.TODO(), identifier, role)
+			Eventually(func() error {
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, role)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find role")
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find role")
 			Expect(role.Rules).To(
 				Equal(
 					[]rbacv1.PolicyRule{
@@ -430,17 +370,19 @@ var _ = Describe("Console", func() {
 				),
 				"role rule did not match expectation",
 			)
-
 			By("Expect role is owned by console")
 			Expect(role.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(role.ObjectMeta.OwnerReferences[0].Name).To(Equal(csl.ObjectMeta.Name))
 
 			By("Expect directory role binding was created for user and AdditionalAttachSubjects")
 			drb := &rbacv1alpha1.DirectoryRoleBinding{}
-			identifier, _ = client.ObjectKeyFromObject(csl)
-			err = mgr.GetClient().Get(context.TODO(), identifier, drb)
+			Eventually(func() error {
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				err := mgr.GetClient().Get(context.TODO(), identifier, drb)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find associated DirectoryRoleBinding")
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated DirectoryRoleBinding")
 			Expect(drb.Spec.RoleRef).To(
 				Equal(
 					rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: consoleName},
@@ -462,11 +404,18 @@ var _ = Describe("Console", func() {
 		It("Updates the status with expiry time", func() {
 			updatedCsl := &workloadsv1alpha1.Console{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+			Eventually(func() workloadsv1alpha1.ConsoleStatus {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Status
+			}).ShouldNot(BeNil(),
+				"the console status should be defined")
 
-			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
-			Expect(updatedCsl.Status.ExpiryTime).NotTo(BeNil(), "the console expiry time should be set")
+			Eventually(func() *metav1.Time {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Status.ExpiryTime
+			}).ShouldNot(BeNil(),
+				"the console expiry time should be defined")
+
 			Expect(
 				updatedCsl.Status.ExpiryTime.Time.After(time.Now())).To(BeTrue(),
 				"the console expiry time should be after now()",
@@ -476,18 +425,22 @@ var _ = Describe("Console", func() {
 		It("Updates the status with completion time", func() {
 			updatedCsl := &workloadsv1alpha1.Console{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+			Eventually(func() workloadsv1alpha1.ConsoleStatus {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Status
+			}).ShouldNot(BeNil(),
+				"the console status should be defined")
 
-			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
 			Expect(updatedCsl.Status.CompletionTime).To(BeNil(), "the console completion time shouldn't be set")
 
 			By("Expect job was created")
 			job := &batchv1.Job{}
-			identifier, _ = client.ObjectKeyFromObject(csl)
 			identifier.Name += "-console"
-			err = mgr.GetClient().Get(context.TODO(), identifier, job)
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated Job for Console")
+			Eventually(func() error {
+				err := mgr.GetClient().Get(context.TODO(), identifier, job)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find associated Job for Console")
 
 			By("Updating job status")
 			// integration tests don't run controller manager. It's required to
@@ -503,18 +456,21 @@ var _ = Describe("Console", func() {
 				},
 			}
 
-			err = mgr.GetClient().Status().Update(context.TODO(), job)
+			err := mgr.GetClient().Status().Update(context.TODO(), job)
 			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
-
-			waitForSuccessfulReconcile(1)
 
 			By("Expect console status updated")
 			identifier, _ = client.ObjectKeyFromObject(csl)
-			err = mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve updated console")
+			Eventually(func() workloadsv1alpha1.ConsoleStatus {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Status
+			}).ShouldNot(BeNil(),
+				"the console status should be defined")
 
-			Expect(updatedCsl.Status).NotTo(BeNil(), "the console status should be defined")
-			Expect(updatedCsl.Stopped()).To(BeTrue())
+			Eventually(func() bool {
+				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				return updatedCsl.Stopped()
+			}).Should(BeTrue())
 			Expect(
 				updatedCsl.Status.CompletionTime.Time.Before(time.Now())).To(BeTrue(),
 				"the console completion time should be before now()",
@@ -523,12 +479,13 @@ var _ = Describe("Console", func() {
 
 		It("Sets the owner of the console to be the template", func() {
 			By("Retrieving latest console object")
-			identifier, _ := client.ObjectKeyFromObject(csl)
-			err := mgr.GetClient().Get(context.TODO(), identifier, csl)
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+			Eventually(func() []metav1.OwnerReference {
+				identifier, _ := client.ObjectKeyFromObject(csl)
+				mgr.GetClient().Get(context.TODO(), identifier, csl)
+				return csl.ObjectMeta.OwnerReferences
+			}).Should(HaveLen(1), "expect console owner to be defined")
 
 			By("Expect console is owned by console template")
-			Expect(csl.ObjectMeta.OwnerReferences).To(HaveLen(1))
 			Expect(csl.ObjectMeta.OwnerReferences[0].Name).To(Equal(consoleTemplate.ObjectMeta.Name))
 		})
 
@@ -569,9 +526,12 @@ var _ = Describe("Console", func() {
 				By("Expect consoleauthorisation was created")
 				auth := &workloadsv1alpha1.ConsoleAuthorisation{}
 				identifier, _ := client.ObjectKeyFromObject(csl)
-				err := mgr.GetClient().Get(context.TODO(), identifier, auth)
+				Eventually(func() error {
+					err := mgr.GetClient().Get(context.TODO(), identifier, auth)
+					return err
+				}).ShouldNot(HaveOccurred(),
+					"failed to find consoleauthorisation")
 
-				Expect(err).NotTo(HaveOccurred(), "failed to find consoleauthorisation")
 				Expect(auth.Spec.Authorisations).To(BeEmpty(),
 					"authorisations should not yet be populated",
 				)
@@ -584,9 +544,12 @@ var _ = Describe("Console", func() {
 				role := &rbacv1.Role{}
 				identifier, _ = client.ObjectKeyFromObject(csl)
 				identifier.Name = fmt.Sprintf("%s-authorisation", identifier.Name)
-				err = mgr.GetClient().Get(context.TODO(), identifier, role)
+				Eventually(func() error {
+					err := mgr.GetClient().Get(context.TODO(), identifier, role)
+					return err
+				}).ShouldNot(HaveOccurred(),
+					"failed to find role")
 
-				Expect(err).NotTo(HaveOccurred(), "failed to find role")
 				Expect(role.Rules).To(
 					Equal(
 						[]rbacv1.PolicyRule{
@@ -607,9 +570,12 @@ var _ = Describe("Console", func() {
 
 				By("Expect directory role binding was created for authorising user")
 				drb := &rbacv1alpha1.DirectoryRoleBinding{}
-				err = mgr.GetClient().Get(context.TODO(), identifier, drb)
+				Eventually(func() error {
+					err := mgr.GetClient().Get(context.TODO(), identifier, drb)
+					return err
+				}).ShouldNot(HaveOccurred(),
+					"failed to find associated DirectoryRoleBinding")
 
-				Expect(err).NotTo(HaveOccurred(), "failed to find associated DirectoryRoleBinding")
 				Expect(drb.Spec.RoleRef).To(
 					Equal(
 						rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: identifier.Name},
@@ -644,7 +610,6 @@ var _ = Describe("Console", func() {
 			})
 		})
 	})
-
 	Describe("Enforcing job name", func() {
 		BeforeEach(func() {
 			consoleName = "very-very-very-very-long-long-long-long-name-very-very-very-very-long-long-long-long-name"
@@ -653,7 +618,6 @@ var _ = Describe("Console", func() {
 
 		JustBeforeEach(func() {
 			mustCreateResources()
-			waitForSuccessfulReconcile(ReconcilesAfterCreate)
 		})
 
 		It("Truncates long job names and adds a 'console' suffix", func() {
@@ -662,84 +626,89 @@ var _ = Describe("Console", func() {
 			job := &batchv1.Job{}
 			identifier, _ := client.ObjectKeyFromObject(csl)
 			identifier.Name = expectJobName
-			err := mgr.GetClient().Get(context.TODO(), identifier, job)
+			Eventually(func() error {
+				err := mgr.GetClient().Get(context.TODO(), identifier, job)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to retrieve job")
 
-			Expect(err).NotTo(HaveOccurred(), "failed to retrieve job")
 			Expect(job.ObjectMeta.Labels["console-name"]).To(Equal(consoleName[0:63]))
 		})
 	})
 
-	Describe("Validating console templates", func() {
-		var (
-			createErr error
-		)
+	// TODO: Webhooks are not easily tested in envtest at the moment.
+	// Describe("Validating console templates", func() {
+	// 	var (
+	// 		createErr error
+	// 	)
 
-		JustBeforeEach(func() {
-			By("Creating console template")
-			createErr = mgr.GetClient().Create(context.TODO(), consoleTemplate)
-		})
+	// 	JustBeforeEach(func() {
+	// 		mustCreateNamespace()
+	// 		By("Creating console template")
+	// 		createErr = mgr.GetClient().Create(context.TODO(), consoleTemplate)
+	// 	})
 
-		Context("when authorisation rules are defined", func() {
-			BeforeEach(func() {
-				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-					{
-						Name:                 "test",
-						MatchCommandElements: []string{"bash"},
-						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-							Subjects: []rbacv1.Subject{},
-						},
-					},
-				}
-			})
+	// 	Context("when authorisation rules are defined", func() {
+	// 		BeforeEach(func() {
+	// 			consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+	// 				{
+	// 					Name:                 "test",
+	// 					MatchCommandElements: []string{"bash"},
+	// 					ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+	// 						Subjects: []rbacv1.Subject{},
+	// 					},
+	// 				},
+	// 			}
+	// 		})
 
-			Context("and a default rule is not set", func() {
-				BeforeEach(func() {
-					consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-						{
-							Name:                 "test",
-							MatchCommandElements: []string{"bash"},
-							ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-								Subjects: []rbacv1.Subject{},
-							},
-						},
-					}
-				})
+	// 		Context("and a default rule is not set", func() {
+	// 			BeforeEach(func() {
+	// 				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+	// 					{
+	// 						Name:                 "test",
+	// 						MatchCommandElements: []string{"bash"},
+	// 						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+	// 							Subjects: []rbacv1.Subject{},
+	// 						},
+	// 					},
+	// 				}
+	// 			})
 
-				It("rejects the template", func() {
-					Expect(createErr).To(MatchError(ContainSubstring(".spec.defaultAuthorisationRule must be set")))
-				})
-			})
+	// 			It("rejects the template", func() {
+	// 				Expect(createErr).To(MatchError(ContainSubstring(".spec.defaultAuthorisationRule must be set")))
+	// 			})
+	// 		})
 
-			Context("and a default rule is set", func() {
-				BeforeEach(func() {
-					consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
-						Subjects: []rbacv1.Subject{},
-					}
-				})
+	// 		Context("and a default rule is set", func() {
+	// 			BeforeEach(func() {
+	// 				consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
+	// 					Subjects: []rbacv1.Subject{},
+	// 				}
+	// 			})
 
-				It("accepts the template", func() {
-					Expect(createErr).NotTo(HaveOccurred())
-				})
-			})
+	// 			It("accepts the template", func() {
+	// 				Expect(createErr).NotTo(HaveOccurred())
+	// 			})
+	// 		})
 
-		})
+	// 	})
 
-		Context("when invalid auth rules are set", func() {
-			BeforeEach(func() {
-				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-					{
-						Name:                 "test",
-						MatchCommandElements: []string{"bash", "**", "abc"},
-						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-							Subjects: []rbacv1.Subject{},
-						},
-					},
-				}
-			})
+	// 	Context("when invalid auth rules are set", func() {
+	// 		BeforeEach(func() {
+	// 			consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+	// 				{
+	// 					Name:                 "test",
+	// 					MatchCommandElements: []string{"bash", "**", "abc"},
+	// 					ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+	// 						Subjects: []rbacv1.Subject{},
+	// 					},
+	// 				},
+	// 			}
+	// 		})
 
-			It("rejects the template", func() {
-				Expect(createErr).To(MatchError(ContainSubstring("a double wildcard is only valid at the end of the pattern")))
-			})
-		})
-	})
+	// 		It("rejects the template", func() {
+	// 			Expect(createErr).To(MatchError(ContainSubstring("a double wildcard is only valid at the end of the pattern")))
+	// 		})
+	// 	})
+	// })
 })

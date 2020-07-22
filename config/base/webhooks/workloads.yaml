@@ -1,0 +1,91 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: workloads
+  annotations:
+    certmanager.k8s.io/inject-ca-from: theatre-system/theatre-workloads-manager
+    cert-manager.io/inject-ca-from: theatre-system/theatre-workloads-manager
+webhooks:
+  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-workloads-manager
+        namespace: theatre-system
+        path: /mutate-consoles
+        port: 443
+    name: console-authenticator.workloads.crd.gocardless.com
+    namespaceSelector:
+      matchExpressions:
+        - key: control-plane
+          operator: DoesNotExist
+    rules:
+      - apiGroups:
+          - workloads.crd.gocardless.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - consoles
+        scope: '*'
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: workloads
+  annotations:
+    certmanager.k8s.io/inject-ca-from: theatre-system/theatre-workloads-manager
+    cert-manager.io/inject-ca-from: theatre-system/theatre-workloads-manager
+webhooks:
+  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-workloads-manager
+        namespace: theatre-system
+        path: /validate-consoleauthorisations
+        port: 443
+    name: console-authorisation.workloads.crd.gocardless.com
+    namespaceSelector:
+      matchExpressions:
+        - key: control-plane
+          operator: DoesNotExist
+    rules:
+      - apiGroups:
+          - workloads.crd.gocardless.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - UPDATE
+        resources:
+          - consoleauthorisations
+        scope: '*'
+    sideEffects: None
+  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-workloads-manager
+        namespace: theatre-system
+        path: /validate-consoletemplates
+        port: 443
+    name: console-template-validation.workloads.crd.gocardless.com
+    namespaceSelector:
+      matchExpressions:
+        - key: control-plane
+          operator: DoesNotExist
+    rules:
+      - apiGroups:
+          - workloads.crd.gocardless.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - consoletemplates
+        scope: '*'
+    sideEffects: None

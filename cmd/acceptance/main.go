@@ -24,6 +24,7 @@ import (
 	"k8s.io/klog"
 
 	vaultManagerAcceptance "github.com/gocardless/theatre/cmd/vault-manager/acceptance"
+	workloadsManagerAcceptance "github.com/gocardless/theatre/cmd/workloads-manager/acceptance"
 )
 
 var (
@@ -50,6 +51,7 @@ var (
 // In future, we'll make this more ginkgo native. For now, this will do.
 var Runners = []runner{
 	&vaultManagerAcceptance.Runner{},
+	&workloadsManagerAcceptance.Runner{},
 }
 
 type runner interface {

@@ -9,5 +9,5 @@ import (
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/apis")
+	RunSpecs(t, "api/workloads/v1alpha1")
 }

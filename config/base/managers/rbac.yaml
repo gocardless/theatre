@@ -93,7 +93,6 @@ spec:
           args:
             - --google  # enable GoogleGroup resolution
             - --metrics-address=0.0.0.0
-            - --manager-metrics-address=0.0.0.0
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager

@@ -115,7 +115,6 @@ spec:
           args:
             - --theatre-image=$(THEATRE_IMAGE)
             - --metrics-address=0.0.0.0
-            - --manager-metrics-address=0.0.0.0
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager

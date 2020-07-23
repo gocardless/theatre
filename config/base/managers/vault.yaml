@@ -90,13 +90,15 @@ spec:
   secretName: theatre-vault-manager-certificate
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: vault-manager
   labels:
     group: vault.crd.gocardless.com
 spec:
-  replicas: 2
+  serviceName: vault-manager
+  replicas: 1
+  volumeClaimTemplates: []
   selector:
     matchLabels:
       group: vault.crd.gocardless.com
@@ -105,7 +107,7 @@ spec:
       labels:
         group: vault.crd.gocardless.com
     spec:
-      serviceAccountName: rbac-manager
+      serviceAccountName: vault-manager
       terminationGracePeriodSeconds: 10
       containers:
         - command:
@@ -114,7 +116,6 @@ spec:
             - --theatre-image=$(THEATRE_IMAGE)
             - --metrics-address=0.0.0.0
             - --manager-metrics-address=0.0.0.0
-            - --manager-leader-election
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager
@@ -145,7 +146,6 @@ metadata:
   name: vault-manager
 spec:
   selector:
-    app: theatre
     group: vault.crd.gocardless.com
   ports:
     - port: 443

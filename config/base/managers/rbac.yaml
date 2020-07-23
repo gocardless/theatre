@@ -64,13 +64,15 @@ subjects:
     name: rbac-manager
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rbac-manager
   labels:
     group: rbac.crd.gocardless.com
 spec:
-  replicas: 2
+  serviceName: rbac-manager
+  replicas: 1
+  volumeClaimTemplates: []
   selector:
     matchLabels:
       group: rbac.crd.gocardless.com
@@ -92,7 +94,6 @@ spec:
             - --google  # enable GoogleGroup resolution
             - --metrics-address=0.0.0.0
             - --manager-metrics-address=0.0.0.0
-            - --manager-leader-election
           image: eu.gcr.io/gc-containers/gocardless/theatre:latest
           imagePullPolicy: Always
           name: manager

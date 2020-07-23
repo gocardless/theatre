@@ -350,18 +350,26 @@ var _ = Describe("Runner", func() {
 		})
 
 		Context("But it is later created", func() {
-			createCsl := func() {
-				defer GinkgoRecover()
-				mustCreateConsole(console)
-			}
+			//	I think this conflicts with the JustBeforeEach on L248 creating
+			//	'console' as the func binds outside of the context of the It()
+			var nConsole *workloadsv1alpha1.Console
+			var createCsl func()
+			JustBeforeEach(func() {
+				nConsole = newConsole("test-ns", "delayed-console", "delayed-console", "test-user", map[string]string{})
+				createCsl = func() {
+					defer GinkgoRecover()
+					mustCreateConsole(nConsole)
+				}
+			})
+
+			// I have no idea what this test is actually trying to do
 
 			It("Returns successfully", func() {
-				console = newConsole(namespace.Name, "idontexistyet", consoleTemplate.Name, "test-user", map[string]string{})
-				console.Status.Phase = workloadsv1alpha1.ConsoleRunning
 				time.AfterFunc(timeout/2, createCsl)
 
 				roleBinding := newRoleBinding(namespace.Name, console.Name, console.Spec.User)
 				mustCreateRoleBinding(roleBinding)
+				nConsole.Status.Phase = workloadsv1alpha1.ConsoleRunning
 
 				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()

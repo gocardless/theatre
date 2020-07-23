@@ -226,9 +226,16 @@ var _ = Describe("Runner", func() {
 		}
 
 		addSubjectsToRoleBinding := func(rb *rbacv1.RoleBinding, subjects []rbacv1.Subject) {
-			rb.Subjects = subjects
-			err := kubeClient.Update(context.TODO(), rb)
-			Expect(err).NotTo(HaveOccurred())
+			obj := &rbacv1.RoleBinding{}
+			err := kubeClient.Get(context.TODO(), client.ObjectKey{
+				Namespace: rb.GetNamespace(),
+				Name:      rb.GetName(),
+			}, obj)
+			Expect(err).ToNot(HaveOccurred(), "error while retrieving rolebinding")
+
+			obj.Subjects = subjects
+			err = kubeClient.Update(context.TODO(), obj)
+			Expect(err).NotTo(HaveOccurred(), "error while updating rolebinding subjects")
 		}
 
 		JustBeforeEach(func() {

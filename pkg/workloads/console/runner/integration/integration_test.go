@@ -20,68 +20,44 @@ func newNamespace(name string) *corev1.Namespace {
 	if name == "" {
 		name = uuid.New().String()
 	}
-	return &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
+
+	ns := ExampleNamespace.DeepCopy()
+
+	ns.ObjectMeta.Name = name
+	return ns
 }
 
 func newConsoleTemplate(namespace, name string, labels map[string]string) *workloadsv1alpha1.ConsoleTemplate {
-	return &workloadsv1alpha1.ConsoleTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
-		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						corev1.Container{
-							Image: "alpine:latest",
-							Name:  "console-container-0",
-						},
-					},
-				},
-			},
-		},
-	}
+	ct := ExampleConsoleTemplate.DeepCopy()
+
+	ct.ObjectMeta.Namespace = namespace
+	ct.ObjectMeta.Name = name
+	ct.ObjectMeta.Labels = labels
+
+	return ct
 }
 
 func newConsole(namespace, name, consoleTemplateName, username string, labels map[string]string) *workloadsv1alpha1.Console {
-	return &workloadsv1alpha1.Console{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
-		Spec: workloadsv1alpha1.ConsoleSpec{
-			User: username,
-			ConsoleTemplateRef: corev1.LocalObjectReference{
-				Name: consoleTemplateName,
-			},
-		},
-	}
+	c := ExampleConsole.DeepCopy()
+
+	c.ObjectMeta.Namespace = namespace
+	c.ObjectMeta.Name = name
+	c.ObjectMeta.Labels = labels
+
+	c.Spec.User = username
+	c.Spec.ConsoleTemplateRef.Name = consoleTemplateName
+
+	return c
 }
 
 func newRoleBinding(namespace, name, username string) *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind: "User",
-				Name: username,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind: "Role",
-			Name: "console-test",
-		},
-	}
+	rb := ExampleRoleBinding.DeepCopy()
+
+	rb.ObjectMeta.Namespace = namespace
+	rb.ObjectMeta.Name = name
+	rb.Subjects[0].Name = username
+
+	return rb
 
 }
 

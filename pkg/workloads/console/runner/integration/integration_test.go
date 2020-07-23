@@ -465,14 +465,14 @@ var _ = Describe("Runner", func() {
 				console.Status.Phase = workloadsv1alpha1.ConsoleRunning
 				mustCreateConsole(console)
 
-				roleBinding = newRoleBinding(namespace.Name, console.Name, console.Spec.User)
-				roleBinding.Subjects = nil
-				mustCreateRoleBinding(roleBinding)
+				nRoleBinding := newRoleBinding(namespace.Name, console.Name, console.Spec.User)
+				nRoleBinding.Subjects = nil
+				mustCreateRoleBinding(nRoleBinding)
 
 				time.AfterFunc(timeout/2,
 					func() {
 						defer GinkgoRecover()
-						addSubjectsToRoleBinding(roleBinding, []rbacv1.Subject{{Kind: "User", Name: "rando"}})
+						addSubjectsToRoleBinding(nRoleBinding, []rbacv1.Subject{{Kind: "User", Name: "rando"}})
 					},
 				)
 

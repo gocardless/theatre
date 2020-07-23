@@ -4,7 +4,6 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: vault
   annotations:
-    certmanager.k8s.io/inject-ca-from: theatre-system/theatre-vault-manager
     cert-manager.io/inject-ca-from: theatre-system/theatre-vault-manager
 webhooks:
   - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
@@ -33,3 +32,4 @@ webhooks:
           - pods
         scope: '*'
     sideEffects: None
+    timeoutSeconds: 10

@@ -1,75 +1,47 @@
-package envconsul
+package v1alpha1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 )
 
 const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
 
-func NewWebhook(logger kitlog.Logger, mgr manager.Manager, injectorOpts InjectorOptions, opts ...func(*admission.Handler)) (*admission.Webhook, error) {
-	var handler admission.Handler
-	handler = &injector{
-		logger:  kitlog.With(logger, "component", "EnvconsulInjector"),
-		decoder: mgr.GetAdmissionDecoder(),
-		client:  mgr.GetClient(),
-		opts:    injectorOpts,
-	}
-
-	for _, opt := range opts {
-		opt(&handler)
-	}
-
-	namespaceSelectors := &metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			metav1.LabelSelectorRequirement{
-				Key:      injectorOpts.NamespaceLabel,
-				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"enabled"},
-			},
-		},
-	}
-
-	return builder.NewWebhookBuilder().
-		Name(EnvconsulInjectorFQDN).
-		Mutating().
-		Operations(admissionregistrationv1beta1.Create).
-		ForType(&corev1.Pod{}).
-		FailurePolicy(admissionregistrationv1beta1.Fail).
-		NamespaceSelector(namespaceSelectors).
-		Handlers(handler).
-		WithManager(mgr).
-		Build()
-}
-
-type injector struct {
-	logger  kitlog.Logger
-	decoder types.Decoder
+type EnvconsulInjector struct {
 	client  client.Client
-	opts    InjectorOptions
+	logger  logr.Logger
+	decoder *admission.Decoder
+	opts    EnvconsulInjectorOptions
 }
 
-type InjectorOptions struct {
+func NewEnvconsulInjector(c client.Client, logger logr.Logger, opts EnvconsulInjectorOptions) *EnvconsulInjector {
+	return &EnvconsulInjector{
+		client: c,
+		logger: logger,
+		opts:   opts,
+	}
+}
+
+func (e *EnvconsulInjector) InjectDecoder(d *admission.Decoder) error {
+	e.decoder = d
+	return nil
+}
+
+type EnvconsulInjectorOptions struct {
 	Image                       string           // image of theatre to use when constructing pod
 	InstallPath                 string           // location of vault installation directory
 	NamespaceLabel              string           // namespace label that enables webhook to operate on
@@ -81,28 +53,28 @@ type InjectorOptions struct {
 
 var (
 	podLabels   = []string{"pod_namespace"}
-	handleTotal = promauto.NewCounterVec(
+	handleTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "theatre_vault_envconsul_injector_handle_total",
 			Help: "Count of requests handled by the webhook",
 		},
 		podLabels,
 	)
-	mutateTotal = promauto.NewCounterVec(
+	mutateTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "theatre_vault_envconsul_injector_mutate_total",
 			Help: "Count of pods mutated by the webhook",
 		},
 		podLabels,
 	)
-	skipTotal = promauto.NewCounterVec(
+	skipTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "theatre_vault_envconsul_injector_skip_total",
 			Help: "Count of pods skipped by the webhook, as they lack annotations",
 		},
 		podLabels,
 	)
-	errorsTotal = promauto.NewCounterVec(
+	errorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "theatre_vault_envconsul_injector_errors_total",
 			Help: "Count of not-allowed responses from webhook",
@@ -111,12 +83,17 @@ var (
 	)
 )
 
-func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Response) {
-	labels := prometheus.Labels{"pod_namespace": req.AdmissionRequest.Namespace}
-	logger := kitlog.With(i.logger, "uuid", string(req.AdmissionRequest.UID))
-	logger.Log("event", "request.start")
+func init() {
+	// Register custom metrics with the global controller runtime prometheus registry
+	metrics.Registry.MustRegister(handleTotal, mutateTotal, skipTotal, errorsTotal)
+}
+
+func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
+	labels := prometheus.Labels{"pod_namespace": req.Namespace}
+	logger := i.logger.WithValues("uuid", string(req.UID))
+	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Log("event", "request.end", "duration", time.Since(start).Seconds())
+		logger.Info("request completed", "event", "request.end", "duration", time.Since(start).Seconds())
 
 		handleTotal.With(labels).Inc()
 		{ // add 0 to initialise the metrics
@@ -126,24 +103,24 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		}
 
 		// Catch any Allowed=false responses, as this means we've failed to accept this pod
-		if !resp.Response.Allowed {
+		if !resp.Allowed {
 			errorsTotal.With(labels).Inc()
 		}
 	}(time.Now())
 
 	pod := &corev1.Pod{}
 	if err := i.decoder.Decode(req, pod); err != nil {
-		return admission.ErrorResponse(http.StatusBadRequest, err)
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// This webhook receives requests on all pod creation and so is in the critical
 	// path for all pod creation. We need to exit for pods that don't have the
-	// annotation on them here so they cant start uninterrupted in the event
+	// annotation on them here so they can start uninterrupted in the event
 	// code futher along returns an error.
 	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]; !ok {
-		logger.Log("event", "pod.skipped", "msg", "no annotation found")
+		logger.Info("skipping pod with no annotation", "event", "pod.skipped", "msg", "no annotation found")
 		skipTotal.With(labels).Inc()
-		return admission.PatchResponse(pod, pod)
+		return admission.Allowed("no annotation found")
 	}
 
 	// ensure the pod has a namespace if it has one as we use it in the secretMountPathPrefix
@@ -154,7 +131,7 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 		pod.Name = req.AdmissionRequest.Name
 	}
 
-	logger = kitlog.With(logger,
+	logger = logger.WithValues(
 		"pod_namespace", pod.Namespace,
 		"pod_name", pod.Name,
 	)
@@ -163,21 +140,26 @@ func (i *injector) Handle(ctx context.Context, req types.Request) (resp types.Re
 
 	vaultConfigMap := &corev1.ConfigMap{}
 	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {
-		return admission.ErrorResponse(http.StatusInternalServerError, err)
+		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	vaultConfig, err := newVaultConfig(vaultConfigMap)
 	if err != nil {
-		logger.Log("event", "vault.config", "error", err)
-		return admission.ErrorResponse(http.StatusInternalServerError, err)
+		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	mutatedPod := podInjector{InjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
+	mutatedPod := podInjector{EnvconsulInjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
-		logger.Log("event", "pod.skipped", "msg", "no annotation found during inject - this should never occur")
-		return admission.PatchResponse(pod, pod)
+		logger.Info("no annotation found during inject - this should never occur", "event", "pod.skipped", "msg")
+		return admission.Allowed("no annotation found")
 	}
 
-	return admission.PatchResponse(pod, mutatedPod)
+	mutatedPodBytes, err := json.Marshal(mutatedPod)
+	if err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+	return admission.PatchResponseFromRaw(req.Object.Raw, mutatedPodBytes)
 }
 
 // vaultConfig specifies the structure we expect to find in a cluster-global namespace,
@@ -201,7 +183,7 @@ func newVaultConfig(cfgmap *corev1.ConfigMap) (vaultConfig, error) {
 // do with mutating webhooks. This makes it easy to unit test without getting tangled in
 // webhook noise.
 type podInjector struct {
-	InjectorOptions
+	EnvconsulInjectorOptions
 	vaultConfig
 }
 
@@ -237,7 +219,7 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 					// its secrets.
 					DefaultMode: func() *int32 { mode := int32(444); return &mode }(),
 					Sources: []corev1.VolumeProjection{
-						corev1.VolumeProjection{
+						{
 							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
 								Path:              path.Base(i.ServiceAccountTokenFile),
 								ExpirationSeconds: &expirySeconds,
@@ -313,7 +295,7 @@ func (i podInjector) buildInitContainer() corev1.Container {
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"theatre-envconsul", "install", "--path", i.InstallPath},
 		VolumeMounts: []corev1.VolumeMount{
-			corev1.VolumeMount{
+			{
 				Name:      "theatre-envconsul-install",
 				MountPath: i.InstallPath,
 				ReadOnly:  false,

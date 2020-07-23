@@ -4,6 +4,7 @@ kind: StatefulSet
 metadata:
   name: rbac-manager
 spec:
+  replicas: 1
   template:
     spec:
       containers:
@@ -12,3 +13,4 @@ spec:
           imagePullPolicy: Never
           args:
             - --no-google  # disable Google for acceptance tests
+            - --metrics-address=0.0.0.0

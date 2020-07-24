@@ -4,7 +4,6 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: workloads
   annotations:
-    certmanager.k8s.io/inject-ca-from: theatre-system/theatre-workloads-manager
     cert-manager.io/inject-ca-from: theatre-system/theatre-workloads-manager
 webhooks:
   - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1

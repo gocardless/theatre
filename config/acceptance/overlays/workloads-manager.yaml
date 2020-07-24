@@ -1,6 +1,6 @@
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: workloads-manager
 spec:
@@ -11,4 +11,3 @@ spec:
         - name: manager
           image: theatre:latest
           imagePullPolicy: Never
-          args: []

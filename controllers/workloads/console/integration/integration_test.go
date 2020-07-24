@@ -305,6 +305,9 @@ var _ = Describe("Console", func() {
 				return err
 			}).ShouldNot(HaveOccurred(), "failed to update console")
 
+			// Wait for a second to ensure that the apiserver has time to create a job if it were to do so.
+			time.Sleep(1 * time.Second)
+
 			By("Check that only one job has been created")
 			Eventually(func() []batchv1.Job {
 				jobs := &batchv1.JobList{}

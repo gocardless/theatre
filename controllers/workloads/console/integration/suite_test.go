@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
@@ -41,6 +42,9 @@ var _ = BeforeSuite(func(done Done) {
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "config", "base", "crds")},
+		WebhookInstallOptions: envtest.WebhookInstallOptions{
+			DirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "config", "base", "webhooks")},
+		},
 	}
 
 	cfg, err := testEnv.Start()
@@ -61,8 +65,34 @@ var _ = BeforeSuite(func(done Done) {
 
 	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
+
+		Port:    testEnv.WebhookInstallOptions.LocalServingPort,
+		Host:    testEnv.WebhookInstallOptions.LocalServingHost,
+		CertDir: testEnv.WebhookInstallOptions.LocalServingCertDir,
 	})
 	Expect(err).ToNot(HaveOccurred())
+
+	// console authenticator webhook
+	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
+			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
+		),
+	})
+
+	// console authorisation webhook
+	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
+			mgr.GetClient(),
+			ctrl.Log.WithName("webhooks").WithName("console-authorisation"),
+		),
+	})
+
+	// console template webhook
+	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
+			ctrl.Log.WithName("webhooks").WithName("console-template"),
+		),
+	})
 
 	err = (&consolecontroller.ConsoleReconciler{
 		Client: mgr.GetClient(),

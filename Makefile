@@ -1,5 +1,4 @@
-PROG=bin/rbac-manager bin/vault-manager bin/theatre-envconsul
-#bin/workloads-manager bin/theatre-consoles
+PROG=bin/rbac-manager bin/vault-manager bin/theatre-envconsul bin/workloads-manager bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git rev-parse --short HEAD)-dev
@@ -33,18 +32,24 @@ bin/%:
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
 	ginkgo -r controllers/rbac
+	ginkgo -r controllers/workloads
 	ginkgo -r apis/vault/v1alpha1
+	ginkgo -r apis/workloads/v1alpha1
+	ginkgo -r pkg/workloads/console/runner/integration
 
 vet:
 	go vet ./cmd/rbac-manager/...
 	go vet ./cmd/vault-manager/...
+	go vet ./cmd/workload-manager/...
 	go vet ./cmd/theatre-envconsul/...
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
+	$(CONTROLLER_GEN) object paths="./apis/workloads/..."
 
 manifests: generate
 	$(CONTROLLER_GEN) crd paths="./apis/rbac/..." output:crd:artifacts:config=config/base/crds
+	$(CONTROLLER_GEN) crd paths="./apis/workloads/..." output:crd:artifacts:config=config/base/crds
 
 deploy:
 	kustomize build config/base | kubectl apply -f -

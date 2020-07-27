@@ -1,4 +1,4 @@
-package console
+package controllers
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -16,23 +18,18 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
-
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/pkg/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned/scheme"
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/pkg/logging"
 	"github.com/gocardless/theatre/pkg/recutil"
 )
@@ -78,97 +75,64 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 	return false
 }
 
-func Add(ctx context.Context, logger kitlog.Logger, mgr manager.Manager, opts ...func(*controller.Options)) (controller.Controller, error) {
-	logger = kitlog.With(logger, "component", "Console")
-	ctrlOptions := controller.Options{
-		Reconciler: recutil.ResolveAndReconcile(
-			ctx, logger, mgr, &workloadsv1alpha1.Console{},
-			func(logger kitlog.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
-				reconciler := &reconciler{
-					ctx:     ctx,
-					logger:  logger,
-					client:  mgr.GetClient(),
-					console: obj.(*workloadsv1alpha1.Console),
-					name:    request.NamespacedName,
-				}
+type ConsoleReconciler struct {
+	client.Client
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+}
 
-				return reconciler.Reconcile()
+func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&workloadsv1alpha1.Console{}).
+		Watches(
+			&source.Kind{Type: &workloadsv1alpha1.Console{}},
+			&handler.EnqueueRequestForObject{},
+		).
+		Watches(
+			&source.Kind{Type: &workloadsv1alpha1.ConsoleAuthorisation{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: true,
+				OwnerType:    &workloadsv1alpha1.Console{},
 			},
-		),
-	}
-
-	for _, opt := range opts {
-		opt(&ctrlOptions)
-	}
-
-	ctrl, err := controller.New("console-controller", mgr, ctrlOptions)
-	if err != nil {
-		return ctrl, err
-	}
-
-	err = ctrl.Watch(
-		&source.Kind{Type: &workloadsv1alpha1.Console{}},
-		&handler.EnqueueRequestForObject{},
-	)
-	if err != nil {
-		return ctrl, err
-	}
-
-	// Watch for updates to console authorisations: if this is a console that
-	// requires additional authorisation then this will be the trigger for
-	// whether to actually create the console Job.
-	err = ctrl.Watch(
-		&source.Kind{Type: &workloadsv1alpha1.ConsoleAuthorisation{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &workloadsv1alpha1.Console{},
-		},
-		// Don't unnecessarily reconcile when the controller initially creates the
-		// authorisation object.
-		IgnoreCreatePredicate{},
-	)
-	if err != nil {
-		return ctrl, err
-	}
-
-	// watch for Job events created by Consoles and trigger a reconcile for the
-	// owner
-	err = ctrl.Watch(
-		&source.Kind{Type: &batchv1.Job{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &workloadsv1alpha1.Console{},
-		},
-	)
-
-	return ctrl, err
+			// Don't unnecessarily reconcile when the controller initially creates the
+			// authorisation object.
+			builder.WithPredicates(IgnoreCreatePredicate{}),
+		).
+		Watches(
+			&source.Kind{Type: &batchv1.Job{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: true,
+				OwnerType:    &workloadsv1alpha1.Console{},
+			},
+		).
+		Complete(
+			recutil.ResolveAndReconcile(
+				ctx, r.Log, mgr, &workloadsv1alpha1.Console{},
+				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
+					return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
+				},
+			),
+		)
 }
 
-type reconciler struct {
-	ctx     context.Context
-	logger  kitlog.Logger
-	client  client.Client
-	name    types.NamespacedName
-	console *workloadsv1alpha1.Console
-}
+func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
+	logger = logger.WithValues("console", req.NamespacedName)
 
-func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// Fetch console template
-	var tpl *workloadsv1alpha1.ConsoleTemplate
-	if tpl, err = r.getConsoleTemplate(); err != nil {
-		return res, errors.Wrap(err, "failed to retrieve console template")
+	tpl, err := r.getConsoleTemplate(ctx, csl, req.NamespacedName)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to retrieve console template")
 	}
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	console, err := setConsoleOwner(r.console, tpl)
+	csl, err = setConsoleOwner(csl, tpl, r.Scheme)
 	if err != nil {
-		return res, errors.Wrap(err, "failed to set controller reference on console object")
+		return ctrl.Result{}, errors.Wrap(err, "failed to set controller reference on console object")
 	}
 
-	console = setConsoleTTLs(console, tpl)
-
-	console = r.setConsoleTimeout(console, tpl)
+	csl = setConsoleTTLs(csl, tpl)
+	csl = r.setConsoleTimeout(logger, csl, tpl)
 
 	// We call this function here to ensure that we perform an update on the
 	// console object *if* one is needed; i.e. it defends against not correctly
@@ -184,16 +148,14 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// entering the reconciliation loop.
 	// For the moment though, the simplification and safety outweighs the cost of
 	// the extra API call.
-	if err := r.createOrUpdate(console, Console, consoleDiff); err != nil {
-		return res, err
+	if err := r.createOrUpdate(ctx, logger, csl, csl, Console, consoleDiff); err != nil {
+		return ctrl.Result{}, err
 	}
-
-	r.console = console
 
 	// Get the command for the console to run
 	var command []string
-	if command, err = r.getCommand(tpl); err != nil {
-		return res, errors.Wrap(err, "neither the console or template have a command to evaluate")
+	if command, err = r.getCommand(csl, tpl); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "neither the console or template have a command to evaluate")
 	}
 
 	// Create an authorisation object, if required.
@@ -205,24 +167,23 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	if tpl.HasAuthorisationRules() {
 		rule, err := tpl.GetAuthorisationRuleForCommand(command)
 		if err != nil {
-			return res, errors.Wrap(err, "failed to determine authorisation rule for console command")
+			return ctrl.Result{}, errors.Wrap(err, "failed to determine authorisation rule for console command")
 		}
 
 		authRule = &rule
-		if err := r.createAuthorisationObjects(authRule.Subjects); err != nil {
-			return res, err
+		if err := r.createAuthorisationObjects(ctx, logger, csl, req.NamespacedName, authRule.Subjects); err != nil {
+			return ctrl.Result{}, err
 		}
 
-		authorisation, err = r.getConsoleAuthorisation()
+		authorisation, err = r.getConsoleAuthorisation(ctx, req.NamespacedName)
 		if err != nil {
-			return res, errors.Wrap(err, "failed to retrieve console authorisation")
+			return ctrl.Result{}, errors.Wrap(err, "failed to retrieve console authorisation")
 		}
 	}
 
-	// Try to get the consoles job
-	var job *batchv1.Job
-	if j, err := r.getJob(); err == nil {
-		job = j
+	job, err := r.getJob(ctx, req.NamespacedName)
+	if err != nil {
+		job = nil
 	}
 
 	// Only create/update a job when the console is authorised and pending job
@@ -230,10 +191,10 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 	// Creating phase, but the job no longer exists (it's been destroyed external
 	// to this controller) then don't recreate it.
 	authorised := isConsoleAuthorised(authRule, authorisation)
-	if (authorised && r.console.PendingJob()) || job != nil {
-		job = r.buildJob(tpl)
-		if err := r.createOrUpdate(job, Job, jobDiff); err != nil {
-			return res, err
+	if (authorised && csl.PendingJob()) || job != nil {
+		job = r.buildJob(logger, req.NamespacedName, csl, tpl)
+		if err := r.createOrUpdate(ctx, logger, csl, job, Job, jobDiff); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -247,105 +208,98 @@ func (r *reconciler) Reconcile() (res reconcile.Result, err error) {
 		Job:               job,
 	}
 
-	console, err = r.generateStatusAndAuditEvents(statusCtx)
+	csl, err = r.generateStatusAndAuditEvents(ctx, logger, req.NamespacedName, csl, statusCtx)
 	if err != nil {
-		return res, errors.Wrap(err, "failed to generate console status or audit events")
+		return ctrl.Result{}, errors.Wrap(err, "failed to generate console status or audit events")
 	}
 
-	if err := r.createOrUpdate(console, Console, consoleDiff); err != nil {
-		return res, err
+	if err := r.createOrUpdate(ctx, logger, csl, csl, Console, consoleDiff); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	r.console = console
-
+	var res ctrl.Result
 	switch {
-	case r.console.PendingAuthorisation():
+	case csl.PendingAuthorisation():
 		// Requeue for when the console has reached its before-running TTL, so that
 		// it can be deleted if it has not yet been authorised by that point.
-		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
-	case r.console.Pending():
+		res = requeueAfterInterval(logger, time.Until(*csl.GetGCTime()))
+	case csl.Pending():
 		// Requeue every second while job has been created but there is not yet a
 		// running pod: we won't receive an event via the job watcher when this
 		// event happens, so this is a cheaper alternative to watching the
 		// pods resource and triggering reconciliations via that.
-		res = requeueAfterInterval(r.logger, time.Second)
-	case r.console.Running():
+		res = requeueAfterInterval(logger, time.Second)
+	case csl.Running():
 		// Create or update the role
 		// Role grants permissions for a specific resource name, we need to
 		// wait until the Pod is running to know the resource name
-		role := buildRole(r.name, r.console.Status.PodName)
-		if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
+		role := buildRole(req.NamespacedName, csl.Status.PodName)
+		if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
 			return res, err
 		}
 
 		// Create or update the directory role binding
 		subjects := append(
 			tpl.Spec.AdditionalAttachSubjects,
-			rbacv1.Subject{Kind: "User", Name: r.console.Spec.User},
+			rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
 		)
 
-		drb := buildDirectoryRoleBinding(r.name, role, subjects)
-		if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
-			return res, err
+		drb := buildDirectoryRoleBinding(req.NamespacedName, role, subjects)
+		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+			return ctrl.Result{}, err
 		}
-	case r.console.PostRunning():
+	case csl.PostRunning():
 		// Requeue for when the console has reached its after finished TTL so it can be deleted
-		res = requeueAfterInterval(r.logger, time.Until(*r.console.GetGCTime()))
+		res = requeueAfterInterval(r.Log, time.Until(*csl.GetGCTime()))
 	}
 
-	if r.console.EligibleForGC() {
-		r.logger.Log("event", EventDelete, "kind", Console, "msg", "Deleting expired console")
-		if err = r.client.Delete(r.ctx, r.console, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
-			return res, err
+	if csl.EligibleForGC() {
+		logger.Info("Deleting expired console", "event", EventDelete, "kind", Console)
+		if err = r.Delete(ctx, csl, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			return ctrl.Result{}, err
 		}
 
-		res = reconcile.Result{Requeue: false}
+		return ctrl.Result{Requeue: false}, nil
 	}
 
 	return res, err
 }
 
-func (r *reconciler) getConsoleTemplate() (*workloadsv1alpha1.ConsoleTemplate, error) {
-	name := types.NamespacedName{
-		Name:      r.console.Spec.ConsoleTemplateRef.Name,
-		Namespace: r.name.Namespace,
+func (r *ConsoleReconciler) getConsoleTemplate(ctx context.Context, csl *workloadsv1alpha1.Console, name types.NamespacedName) (*workloadsv1alpha1.ConsoleTemplate, error) {
+	tplName := types.NamespacedName{
+		Name:      csl.Spec.ConsoleTemplateRef.Name,
+		Namespace: name.Namespace,
 	}
 
 	tpl := &workloadsv1alpha1.ConsoleTemplate{}
-	return tpl, r.client.Get(r.ctx, name, tpl)
+	return tpl, r.Get(ctx, tplName, tpl)
 }
 
-func (r *reconciler) getCommand(template *workloadsv1alpha1.ConsoleTemplate) ([]string, error) {
-	csl := r.console
+func (r *ConsoleReconciler) getCommand(csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) ([]string, error) {
 	if len(csl.Spec.Command) > 0 {
 		return csl.Spec.Command, nil
 	}
 	return template.GetDefaultCommandWithArgs()
 }
 
-func (r *reconciler) getConsoleAuthorisation() (*workloadsv1alpha1.ConsoleAuthorisation, error) {
-	name := types.NamespacedName{
-		Name:      r.name.Name,
-		Namespace: r.name.Namespace,
-	}
-
+func (r *ConsoleReconciler) getConsoleAuthorisation(ctx context.Context, name types.NamespacedName) (*workloadsv1alpha1.ConsoleAuthorisation, error) {
 	auth := &workloadsv1alpha1.ConsoleAuthorisation{}
-	return auth, r.client.Get(r.ctx, name, auth)
+	return auth, r.Get(ctx, name, auth)
 }
 
-func (r *reconciler) getJob() (*batchv1.Job, error) {
-	name := types.NamespacedName{
-		Name:      getJobName(r.name.Name),
-		Namespace: r.name.Namespace,
+func (r *ConsoleReconciler) getJob(ctx context.Context, name types.NamespacedName) (*batchv1.Job, error) {
+	jobName := types.NamespacedName{
+		Name:      getJobName(name.Name),
+		Namespace: name.Namespace,
 	}
 
 	job := &batchv1.Job{}
-	return job, r.client.Get(r.ctx, name, job)
+	return job, r.Get(ctx, jobName, job)
 }
 
-func setConsoleOwner(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate) (*workloadsv1alpha1.Console, error) {
+func setConsoleOwner(console *workloadsv1alpha1.Console, consoleTemplate *workloadsv1alpha1.ConsoleTemplate, scheme *runtime.Scheme) (*workloadsv1alpha1.Console, error) {
 	updatedCsl := console.DeepCopy()
-	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme.Scheme); err != nil {
+	if err := controllerutil.SetControllerReference(consoleTemplate, updatedCsl, scheme); err != nil {
 		return nil, errors.Wrap(err, "failed to set controller reference")
 	}
 
@@ -377,16 +331,16 @@ func setConsoleTTLs(console *workloadsv1alpha1.Console, consoleTemplate *workloa
 	return updatedCsl
 }
 
-func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, diffFunc recutil.DiffFunc) error {
+func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, expected recutil.ObjWithMeta, kind string, diffFunc recutil.DiffFunc) error {
 	// If operating on the console itself, don't attempt to set the controller
 	// reference, as this isn't valid.
 	if kind != Console {
-		if err := controllerutil.SetControllerReference(r.console, expected, scheme.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(csl, expected, r.Scheme); err != nil {
 			return err
 		}
 	}
 
-	outcome, err := recutil.CreateOrUpdate(r.ctx, r.client, expected, diffFunc)
+	outcome, err := recutil.CreateOrUpdate(ctx, r, expected, diffFunc)
 	if err != nil {
 		return errors.Wrap(err, "CreateOrUpdate failed")
 	}
@@ -397,17 +351,20 @@ func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, d
 
 	switch outcome {
 	case recutil.Create:
-		r.logger.Log("event", EventSuccessfulCreate, "msg", "Created "+objDesc)
+		logger.Info("Created "+objDesc, "event", EventSuccessfulCreate)
 	case recutil.Update:
-		r.logger.Log("event", EventSuccessfulUpdate, "msg", "Updated "+objDesc)
+		logger.Info("Updated "+objDesc, "event", EventSuccessfulUpdate)
 	case recutil.None:
-		logging.WithNoRecord(r.logger).Log(
-			"event", EventNoCreateOrUpdate, "msg", "Nothing to do for "+objDesc,
+		logging.WithNoRecord(logger).Info(
+			"Nothing to do for "+objDesc,
+			"event", EventNoCreateOrUpdate,
 		)
 	default:
 		// This is only possible in case we implement new outcomes and forget to
 		// add a case here; in which case we should log a warning.
-		r.logger.Log(
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventUnknownOutcome,
 			"error", fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc),
 		)
@@ -417,7 +374,7 @@ func (r *reconciler) createOrUpdate(expected recutil.ObjWithMeta, kind string, d
 }
 
 // Ensure the console timeout is between [0, template.MaxTimeoutSeconds]
-func (r *reconciler) setConsoleTimeout(console *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.Console {
+func (r *ConsoleReconciler) setConsoleTimeout(logger logr.Logger, console *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *workloadsv1alpha1.Console {
 	var timeout int
 	max := template.Spec.MaxTimeoutSeconds
 
@@ -425,9 +382,12 @@ func (r *reconciler) setConsoleTimeout(console *workloadsv1alpha1.Console, templ
 	case console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
 	case console.Spec.TimeoutSeconds > max:
-		r.logger.Log(
+		err := fmt.Errorf("Specified timeout exceeded the template maximum; reduced to %ds", max)
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventInvalidSpecification,
-			"error", fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max),
+			"error", err.Error(),
 		)
 		timeout = max
 	default:
@@ -467,17 +427,16 @@ type consoleStatusContext struct {
 	Job               *batchv1.Job
 }
 
-func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
+func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, logger logr.Logger, name types.NamespacedName, csl *workloadsv1alpha1.Console, statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
 	var (
 		pod     *corev1.Pod
 		podList corev1.PodList
 	)
 
 	if statusCtx.Job != nil {
-		opts := client.
-			InNamespace(r.name.Namespace).
-			MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
-		if err := r.client.List(r.ctx, opts, &podList); err != nil {
+		inNamespace := client.InNamespace(name.Namespace)
+		matchLabels := client.MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
+		if err := r.List(ctx, &podList, inNamespace, matchLabels); err != nil {
 			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}
@@ -489,29 +448,29 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 
 	statusCtx.Pod = pod
 
-	logger := getAuditLogger(r.logger, r.console, statusCtx)
-	newStatus := calculateStatus(r.console, statusCtx)
+	logger = getAuditLogger(logger, csl, statusCtx)
+	newStatus := calculateStatus(csl, statusCtx)
 
-	if r.console.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Log("event", ConsolePendingAuthorisation, "msg", "Console pending authorisation")
+	if csl.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
+		logger.Info("Console pending authorisation", "event", ConsolePendingAuthorisation)
 	}
 
 	// Console phase from Pending Authorisation
-	if r.console.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
-		logger.Log("event", ConsoleAuthorised, "msg", "Console authorised")
+	if csl.PendingAuthorisation() && newStatus.Phase != workloadsv1alpha1.ConsolePendingAuthorisation {
+		logger.Info("Console authorised", "event", ConsoleAuthorised)
 	}
 
 	// Console phase from Pending to Running
-	if r.console.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
-		logger.Log("event", ConsoleStarted, "msg", "Console started")
+	if csl.Pending() && newStatus.Phase == workloadsv1alpha1.ConsoleRunning {
+		logger.Info("Console started", "event", ConsoleStarted)
 	}
 
 	// Console phase from Running to Stopped, with a CompletionTime: the job
 	// completed successfully
-	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
+	if csl.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime != nil {
 		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Log("event", ConsoleEnded, "msg", "Console ended", "duration", duration)
+		logger.Info("Console ended", "event", ConsoleEnded, "duration", duration)
 	}
 
 	// Console phase from Running to Stopped without CompletionTime.
@@ -519,31 +478,33 @@ func (r *reconciler) generateStatusAndAuditEvents(statusCtx consoleStatusContext
 	// - The job's activeDeadlineSeconds was reached, and the job was marked as
 	//   failed and the pod deleted.
 	// - The pod ended with a non-zero exit code, and the job was marked as failed.
-	if r.console.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
+	if csl.Running() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped &&
 		newStatus.CompletionTime == nil {
-		duration := r.console.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
-		logger.Log("event", ConsoleEnded, "msg", "Console ended due to expiration", "duration", duration)
+		duration := csl.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
+		logger.Info("Console ended due to expiration", "event", ConsoleEnded, "duration", duration)
 	}
 
 	// Console phase transitioned to Stopped, but wasn't Running or Stopped beforehand.
 	// This could indicate a bug, or the console may have transitioned through
 	// more than one phase in between reconciliation loops.
-	if !r.console.Running() && !r.console.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
-		logger.Log("event", ConsoleEnded, "msg", "Console ended: duration unknown")
+	if !csl.Running() && !csl.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
+		logger.Info("Console ended: duration unknown", "event", ConsoleEnded)
 	}
 
 	// Console was in PendingAuthorisation phase, but is about to be deleted.
-	if r.console.PendingAuthorisation() && r.console.EligibleForGC() {
-		logger.Log("event", ConsoleEnded, "msg", "Console expired due to lack of authorisation")
+	if csl.PendingAuthorisation() && csl.EligibleForGC() {
+		logger.Info("Console expired due to lack of authorisation", "event", ConsoleEnded)
 	}
 
 	// Console phase has changed to destroyed (i.e. the job has been removed)
-	if !r.console.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
-		logger.Log("event", ConsoleDestroyed, "msg", "Console destroyed")
+	if !csl.Destroyed() && newStatus.Phase == workloadsv1alpha1.ConsoleDestroyed {
+		logger.Info("Console destroyed", "event", ConsoleDestroyed)
 	}
 
-	updatedCsl := r.console.DeepCopy()
+	updatedCsl := csl.DeepCopy()
 	updatedCsl.Status = newStatus
+
+	logger.Info("new console status", "status", fmt.Sprintf("%#v", newStatus))
 
 	return updatedCsl, nil
 }
@@ -600,16 +561,17 @@ func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePha
 	return workloadsv1alpha1.ConsolePending
 }
 
-func requeueAfterInterval(logger kitlog.Logger, interval time.Duration) reconcile.Result {
-	logging.WithNoRecord(logger).Log(
-		"event", recutil.EventRequeued, "msg", "Reconciliation requeued", "reconcile_after", interval,
+func requeueAfterInterval(logger logr.Logger, interval time.Duration) reconcile.Result {
+	logger = logging.WithNoRecord(logger)
+	logger.Info(
+		"Reconciliation requeued",
+		"event", recutil.EventRequeued,
+		"reconcile_after", interval,
 	)
 	return reconcile.Result{Requeue: true, RequeueAfter: interval}
 }
 
-func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
-	csl := r.console
-
+func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
 	username := strings.SplitN(csl.Spec.User, "@", 2)[0]
@@ -635,9 +597,12 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	}
 
 	if numContainers > 1 {
-		r.logger.Log(
+		err := errors.New("A console template can only contain a single container")
+		logger.Error(
+			err,
+			err.Error(),
 			"event", EventTemplateUnsupported,
-			"error", "A console template can only contain a single container",
+			"error", err.Error(),
 		)
 	}
 
@@ -654,7 +619,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	backoffLimit := int32(0)
 	jobTemplate.Spec.RestartPolicy = corev1.RestartPolicyNever
 
-	jobName := getJobName(r.name.Name)
+	jobName := getJobName(name.Name)
 
 	// Merged labels from the console template and console. In case of
 	// conflicts second label set wins.
@@ -676,7 +641,7 @@ func (r *reconciler) buildJob(template *workloadsv1alpha1.ConsoleTemplate) *batc
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
-			Namespace: r.name.Namespace,
+			Namespace: name.Namespace,
 			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
@@ -735,21 +700,21 @@ func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, sub
 	}
 }
 
-func (r *reconciler) createAuthorisationObjects(subjects []rbacv1.Subject) error {
+func (r *ConsoleReconciler) createAuthorisationObjects(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, name types.NamespacedName, subjects []rbacv1.Subject) error {
 	authorisation := &workloadsv1alpha1.ConsoleAuthorisation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.name.Name,
-			Namespace: r.name.Namespace,
-			Labels:    r.console.Labels,
+			Name:      name.Name,
+			Namespace: name.Namespace,
+			Labels:    csl.Labels,
 		},
 		Spec: workloadsv1alpha1.ConsoleAuthorisationSpec{
-			ConsoleRef:     corev1.LocalObjectReference{Name: r.name.Name},
+			ConsoleRef:     corev1.LocalObjectReference{Name: name.Name},
 			Authorisations: []rbacv1.Subject{},
 		},
 	}
 
 	// Create the consoleauthorisation
-	if err := r.createOrUpdate(authorisation, ConsoleAuthorisation, authorisationDiff); err != nil {
+	if err := r.createOrUpdate(ctx, logger, csl, authorisation, ConsoleAuthorisation, authorisationDiff); err != nil {
 		return errors.Wrap(err, "failed to create consoleauthorisation")
 	}
 
@@ -757,33 +722,33 @@ func (r *reconciler) createAuthorisationObjects(subjects []rbacv1.Subject) error
 	// the console to provide permissions on the job/pod. Therefore for the name
 	// of these objects, suffix the console name with '-authorisation'.
 	rbacName := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-%s", r.name.Name, "authorisation"),
-		Namespace: r.name.Namespace,
+		Name:      fmt.Sprintf("%s-%s", name.Name, "authorisation"),
+		Namespace: name.Namespace,
 	}
 
 	// Create the role that allows updating this consoleauthorisation
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rbacName.Name,
-			Namespace: r.name.Namespace,
+			Namespace: name.Namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
 				Verbs:         []string{"get", "patch", "update"},
 				APIGroups:     []string{"workloads.crd.gocardless.com"},
 				Resources:     []string{"consoleauthorisations"},
-				ResourceNames: []string{r.name.Name},
+				ResourceNames: []string{name.Name},
 			},
 		},
 	}
 
-	if err := r.createOrUpdate(role, Role, recutil.RoleDiff); err != nil {
+	if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
 		return errors.Wrap(err, "failed to create role for consoleauthorisation")
 	}
 
 	// Create or update the directory role binding
 	drb := buildDirectoryRoleBinding(rbacName, role, subjects)
-	if err := r.createOrUpdate(drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 		return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
 	}
 
@@ -881,21 +846,20 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 }
 
 // getAuditLogger provides a decorated logger for audit purposes
-func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) kitlog.Logger {
-	loggerCtx := logging.WithNoRecord(logger)
+func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) logr.Logger {
+	// loggerCtx := logging.WithNoRecord(logger)
 
 	// Append any label-based keys before doing anything else.
 	// This ensures that if there's duplicate keys (e.g. a `name` label on the
 	// console) then we won't clobber the keys which we explicitly set below with
 	// the values of those in the console labels, when eventually parsing the log
 	// entry.
-	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
+	// loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
 
 	cmdString, _ := json.Marshal(statusCtx.Command)
 	requiresAuth := statusCtx.AuthorisationRule != nil && statusCtx.AuthorisationRule.AuthorisationsRequired > 0
 
-	loggerCtx = kitlog.With(
-		loggerCtx,
+	logger = logger.WithValues(
 		"kind", Console,
 		"console_name", c.Name,
 		"console_user", c.Spec.User,
@@ -909,12 +873,14 @@ func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCt
 	)
 
 	if statusCtx.Pod != nil {
-		loggerCtx = kitlog.With(loggerCtx, "console_pod_name", statusCtx.Pod.Name)
+		logger = logger.WithValues("console_pod_name", statusCtx.Pod.Name)
 	}
 
 	if statusCtx.AuthorisationRule != nil {
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_rule_name", statusCtx.AuthorisationRule.Name)
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired)
+		logger = logger.WithValues(
+			"console_authorisation_rule_name", statusCtx.AuthorisationRule.Name,
+			"console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired,
+		)
 	}
 
 	if statusCtx.Authorisation != nil {
@@ -924,10 +890,10 @@ func getAuditLogger(logger kitlog.Logger, c *workloadsv1alpha1.Console, statusCt
 		}
 
 		authorisers, _ := json.Marshal(subjectNames)
-		loggerCtx = kitlog.With(loggerCtx, "console_authorisers", authorisers)
+		logger = logger.WithValues("console_authorisers", authorisers)
 	}
 
-	return loggerCtx
+	return logger
 }
 
 // Ensure that the job name (after suffixing with `-console`) does not exceed 63

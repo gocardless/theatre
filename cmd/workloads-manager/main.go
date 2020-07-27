@@ -81,6 +81,14 @@ func main() {
 		),
 	})
 
+	// priority webhook
+	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewPriorityInjector(
+			mgr.GetClient(),
+			logger.WithName("webhooks").WithName("priority-injector"),
+		),
+	})
+
 	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}

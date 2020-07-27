@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,7 +19,6 @@ import (
 
 	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
-	consolecontroller "github.com/gocardless/theatre/controllers/workloads/console"
 )
 
 var (
@@ -33,7 +31,7 @@ var (
 func TestSuite(t *testing.T) {
 	SetDefaultEventuallyTimeout(3 * time.Second)
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "controllers/workloads/integration")
+	RunSpecs(t, "apis/workloads/v1alpha1")
 }
 
 var _ = BeforeSuite(func(done Done) {
@@ -72,42 +70,15 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	// console authenticator webhook
-	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
-			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
-		),
-	})
-
-	// console authorisation webhook
-	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
-			mgr.GetClient(),
-			ctrl.Log.WithName("webhooks").WithName("console-authorisation"),
-		),
-	})
-
-	// console template webhook
-	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
-			ctrl.Log.WithName("webhooks").WithName("console-template"),
-		),
-	})
-
-	// workloads pod PriorityClass webhook
-	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewPriorityInjector(
-			mgr.GetClient(),
-			ctrl.Log.WithName("webhooks").WithName("priority-injector"),
-		),
-	})
-
-	err = (&consolecontroller.ConsoleReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(context.TODO(), mgr)
-	Expect(err).ToNot(HaveOccurred())
+	mgr.GetWebhookServer().Register(
+		"/mutate-pods",
+		&admission.Webhook{
+			Handler: workloadsv1alpha1.NewPriorityInjector(
+				mgr.GetClient(),
+				ctrl.Log.WithName("webhooks").WithName("priority-injector"),
+			),
+		},
+	)
 
 	go func() {
 		<-ctrl.SetupSignalHandler()

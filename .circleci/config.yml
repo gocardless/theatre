@@ -47,11 +47,8 @@ jobs:
       - run:
           name: Run tests
           command: |
-            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/rbac
-            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v controllers/workloads
-            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v apis/vault
-            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v apis/workloads
-            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v pkg/workloads/console/runner/integration/
+            ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v ./...
+
 
   build:
     <<: *docker_golang

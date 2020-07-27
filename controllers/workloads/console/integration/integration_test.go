@@ -177,18 +177,9 @@ var _ = Describe("Console", func() {
 			mustCreateResources()
 		})
 
-		// TODO: Webhooks are not easily tested in envtest at the moment.
-		// It("Sets console.spec.user from rbac", func() {
-		// 	By("Expect webhook was invoked")
-		// 	Eventually(whcalls, timeout).Should(
-		// 		Receive(
-		// 			integration.HandleResource(namespace, consoleName),
-		// 		),
-		// 	)
-
-		// 	By("Expect console.spec.user to be set")
-		// 	Expect(csl.Spec.User).To(Equal("system:unsecured"))
-		// })
+		It("Sets console.spec.user from rbac", func() {
+			Expect(csl.Spec.User).To(Equal("system:unsecured"))
+		})
 
 		It("Creates a job", func() {
 			By("Expect job was created")
@@ -203,11 +194,10 @@ var _ = Describe("Console", func() {
 				"failed to find associated Job for Console")
 
 			By("Expect job and pod labels are correctly populated from the console template and console")
-			// TODO: Webhooks are not easily tested in envtest at the moment.
-			// Expect(
-			// job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
-			// "job should have a user label matching the console owner",
-			// )
+			Expect(
+				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
+				"job should have a user label matching the console owner",
+			)
 			Expect(
 				job.ObjectMeta.Labels["console-name"]).To(Equal(csl.ObjectMeta.Name),
 				"job should have a label console-name matching the console name",
@@ -289,21 +279,43 @@ var _ = Describe("Console", func() {
 				"job Spec Parallelism is restored to original value")
 		})
 
-		// 	It("Only creates one job when reconciling twice", func() {
-		// 		By("Retrieving latest console object")
-		// 		updatedCsl := &workloadsv1alpha1.Console{}
-		// 		identifier, _ := client.ObjectKeyFromObject(csl)
-		// 		err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
-		// 		Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+		It("Only creates one job when reconciling twice", func() {
+			var identifier client.ObjectKey
 
-		// 		By("Reconciling again")
-		// 		updatedCsl.Spec.Reason = "a different reason"
-		// 		err = mgr.GetClient().Update(context.TODO(), updatedCsl)
-		// 		Expect(err).NotTo(HaveOccurred(), "failed to update console")
+			By("Expect job was created")
+			job := &batchv1.Job{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+			identifier.Name += "-console"
 
-		// 		waitForSuccessfulReconcile(1)
-		// 		// TODO: check that the 'already exists' event was logged
-		// 	})
+			Eventually(func() error {
+				err := mgr.GetClient().Get(context.TODO(), identifier, job)
+				return err
+			}).ShouldNot(HaveOccurred(),
+				"failed to find associated Job for Console")
+
+			By("Retrieving latest console object")
+			updatedCsl := &workloadsv1alpha1.Console{}
+			identifier, _ = client.ObjectKeyFromObject(csl)
+
+			Eventually(func() error {
+				err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
+				Expect(err).NotTo(HaveOccurred(), "failed to retrieve console")
+				updatedCsl.Spec.Reason = "a different reason"
+				err = mgr.GetClient().Update(context.TODO(), updatedCsl)
+				return err
+			}).ShouldNot(HaveOccurred(), "failed to update console")
+
+			// Wait for a second to ensure that the apiserver has time to create a job if it were to do so.
+			time.Sleep(1 * time.Second)
+
+			By("Check that only one job has been created")
+			Eventually(func() []batchv1.Job {
+				jobs := &batchv1.JobList{}
+				err := mgr.GetClient().List(context.TODO(), jobs, client.InNamespace(identifier.Namespace))
+				Expect(err).NotTo(HaveOccurred())
+				return jobs.Items
+			}).Should(HaveLen(1), "Only 1 job should be created")
+		})
 
 		It("Creates a role and directory role binding for the user", func() {
 			podName := fmt.Sprintf("%s-console-abcde", consoleName)
@@ -636,79 +648,78 @@ var _ = Describe("Console", func() {
 		})
 	})
 
-	// TODO: Webhooks are not easily tested in envtest at the moment.
-	// Describe("Validating console templates", func() {
-	// 	var (
-	// 		createErr error
-	// 	)
+	Describe("Validating console templates", func() {
+		var (
+			createErr error
+		)
 
-	// 	JustBeforeEach(func() {
-	// 		mustCreateNamespace()
-	// 		By("Creating console template")
-	// 		createErr = mgr.GetClient().Create(context.TODO(), consoleTemplate)
-	// 	})
+		JustBeforeEach(func() {
+			mustCreateNamespace()
+			By("Creating console template")
+			createErr = mgr.GetClient().Create(context.TODO(), consoleTemplate)
+		})
 
-	// 	Context("when authorisation rules are defined", func() {
-	// 		BeforeEach(func() {
-	// 			consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-	// 				{
-	// 					Name:                 "test",
-	// 					MatchCommandElements: []string{"bash"},
-	// 					ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-	// 						Subjects: []rbacv1.Subject{},
-	// 					},
-	// 				},
-	// 			}
-	// 		})
+		Context("when authorisation rules are defined", func() {
+			BeforeEach(func() {
+				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+					{
+						Name:                 "test",
+						MatchCommandElements: []string{"bash"},
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							Subjects: []rbacv1.Subject{},
+						},
+					},
+				}
+			})
 
-	// 		Context("and a default rule is not set", func() {
-	// 			BeforeEach(func() {
-	// 				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-	// 					{
-	// 						Name:                 "test",
-	// 						MatchCommandElements: []string{"bash"},
-	// 						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-	// 							Subjects: []rbacv1.Subject{},
-	// 						},
-	// 					},
-	// 				}
-	// 			})
+			Context("and a default rule is not set", func() {
+				BeforeEach(func() {
+					consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+						{
+							Name:                 "test",
+							MatchCommandElements: []string{"bash"},
+							ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+								Subjects: []rbacv1.Subject{},
+							},
+						},
+					}
+				})
 
-	// 			It("rejects the template", func() {
-	// 				Expect(createErr).To(MatchError(ContainSubstring(".spec.defaultAuthorisationRule must be set")))
-	// 			})
-	// 		})
+				It("rejects the template", func() {
+					Expect(createErr).To(MatchError(ContainSubstring(".spec.defaultAuthorisationRule must be set")))
+				})
+			})
 
-	// 		Context("and a default rule is set", func() {
-	// 			BeforeEach(func() {
-	// 				consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
-	// 					Subjects: []rbacv1.Subject{},
-	// 				}
-	// 			})
+			Context("and a default rule is set", func() {
+				BeforeEach(func() {
+					consoleTemplate.Spec.DefaultAuthorisationRule = &workloadsv1alpha1.ConsoleAuthorisers{
+						Subjects: []rbacv1.Subject{},
+					}
+				})
 
-	// 			It("accepts the template", func() {
-	// 				Expect(createErr).NotTo(HaveOccurred())
-	// 			})
-	// 		})
+				It("accepts the template", func() {
+					Expect(createErr).NotTo(HaveOccurred())
+				})
+			})
 
-	// 	})
+		})
 
-	// 	Context("when invalid auth rules are set", func() {
-	// 		BeforeEach(func() {
-	// 			consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
-	// 				{
-	// 					Name:                 "test",
-	// 					MatchCommandElements: []string{"bash", "**", "abc"},
-	// 					ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
-	// 						Subjects: []rbacv1.Subject{},
-	// 					},
-	// 				},
-	// 			}
-	// 		})
+		Context("when invalid auth rules are set", func() {
+			BeforeEach(func() {
+				consoleTemplate.Spec.AuthorisationRules = []workloadsv1alpha1.ConsoleAuthorisationRule{
+					{
+						Name:                 "test",
+						MatchCommandElements: []string{"bash", "**", "abc"},
+						ConsoleAuthorisers: workloadsv1alpha1.ConsoleAuthorisers{
+							Subjects: []rbacv1.Subject{},
+						},
+					},
+				}
+			})
 
-	// 		It("rejects the template", func() {
-	// 			Expect(createErr).To(MatchError(ContainSubstring("a double wildcard is only valid at the end of the pattern")))
-	// 		})
-	// 	})
-	// })
+			It("rejects the template", func() {
+				Expect(createErr).To(MatchError(ContainSubstring("a double wildcard is only valid at the end of the pattern")))
+			})
+		})
+	})
 })

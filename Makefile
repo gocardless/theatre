@@ -31,11 +31,7 @@ bin/%:
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	ginkgo -r controllers/rbac
-	ginkgo -r controllers/workloads
-	ginkgo -r apis/vault/v1alpha1
-	ginkgo -r apis/workloads/v1alpha1
-	ginkgo -r pkg/workloads/console/runner/integration
+	ginkgo -race -r ./...
 
 vet:
 	go vet ./cmd/rbac-manager/...

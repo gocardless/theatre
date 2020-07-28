@@ -1,12 +1,12 @@
 # Workloads
 
 This package contains the CRDs and webhooks for
-[Consoles](controllers/workloads/console/README.md) and [Default priority
+[Consoles](../../../controllers/workloads/console/README.md) and [Default priority
 classes](#default-priority-classes).
 
 ## Consoles
 
-See [Consoles controller documentation](controllers/workloads/console/README.md).
+See [Consoles controller documentation](../../../controllers/workloads/console/README.md).
 
 ## Default Priority Classes
 

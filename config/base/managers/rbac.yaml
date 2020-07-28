@@ -108,7 +108,9 @@ spec:
               name: google-application-credentials
               readOnly: true
           ports:
-            - name: metrics
+            - name: https
+              containerPort: 443
+            - name: http-metrics
               containerPort: 9525
           resources:
             limits:

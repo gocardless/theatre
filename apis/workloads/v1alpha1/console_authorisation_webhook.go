@@ -69,7 +69,7 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	}
 
 	if err := update.Validate(); err != nil {
-		logger.Error(err, "authorisation failed", "event", "authorisation.failure", "error", err)
+		logger.Info("authorisation failed", "event", "authorisation.failure", "error", err)
 		return admission.ValidationResponse(false, fmt.Sprintf("the console authorisation spec is invalid: %v", err))
 	}
 

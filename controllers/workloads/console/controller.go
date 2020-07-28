@@ -82,6 +82,7 @@ type ConsoleReconciler struct {
 }
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	logger := r.Log.WithValues("component", "Console")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workloadsv1alpha1.Console{}).
 		Watches(
@@ -107,7 +108,7 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		).
 		Complete(
 			recutil.ResolveAndReconcile(
-				ctx, r.Log, mgr, &workloadsv1alpha1.Console{},
+				ctx, logger, mgr, &workloadsv1alpha1.Console{},
 				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
 					return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
 				},
@@ -250,7 +251,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	case csl.PostRunning():
 		// Requeue for when the console has reached its after finished TTL so it can be deleted
-		res = requeueAfterInterval(r.Log, time.Until(*csl.GetGCTime()))
+		res = requeueAfterInterval(logger, time.Until(*csl.GetGCTime()))
 	}
 
 	if csl.EligibleForGC() {
@@ -362,11 +363,11 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 	default:
 		// This is only possible in case we implement new outcomes and forget to
 		// add a case here; in which case we should log a warning.
-		logger.Error(
-			err,
-			err.Error(),
+		msg := fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc)
+		logger.Info(
+			msg,
 			"event", EventUnknownOutcome,
-			"error", fmt.Sprintf("Unknown outcome %s for %s", outcome, objDesc),
+			"error", msg,
 		)
 	}
 
@@ -382,12 +383,11 @@ func (r *ConsoleReconciler) setConsoleTimeout(logger logr.Logger, console *workl
 	case console.Spec.TimeoutSeconds < 1:
 		timeout = template.Spec.DefaultTimeoutSeconds
 	case console.Spec.TimeoutSeconds > max:
-		err := fmt.Errorf("Specified timeout exceeded the template maximum; reduced to %ds", max)
-		logger.Error(
-			err,
-			err.Error(),
+		msg := fmt.Sprintf("Specified timeout exceeded the template maximum; reduced to %ds", max)
+		logger.Info(
+			msg,
 			"event", EventInvalidSpecification,
-			"error", err.Error(),
+			"error", msg,
 		)
 		timeout = max
 	default:
@@ -504,8 +504,6 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	updatedCsl := csl.DeepCopy()
 	updatedCsl.Status = newStatus
 
-	logger.Info("new console status", "status", fmt.Sprintf("%#v", newStatus))
-
 	return updatedCsl, nil
 }
 
@@ -562,8 +560,7 @@ func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePha
 }
 
 func requeueAfterInterval(logger logr.Logger, interval time.Duration) reconcile.Result {
-	logger = logging.WithNoRecord(logger)
-	logger.Info(
+	logging.WithNoRecord(logger).Info(
 		"Reconciliation requeued",
 		"event", recutil.EventRequeued,
 		"reconcile_after", interval,
@@ -597,12 +594,11 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 	}
 
 	if numContainers > 1 {
-		err := errors.New("A console template can only contain a single container")
-		logger.Error(
-			err,
-			err.Error(),
+		msg := "A console template can only contain a single container"
+		logger.Info(
+			msg,
 			"event", EventTemplateUnsupported,
-			"error", err.Error(),
+			"error", msg,
 		)
 	}
 
@@ -847,19 +843,18 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 
 // getAuditLogger provides a decorated logger for audit purposes
 func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) logr.Logger {
-	// loggerCtx := logging.WithNoRecord(logger)
-
+	loggerCtx := logging.WithNoRecord(logger)
 	// Append any label-based keys before doing anything else.
 	// This ensures that if there's duplicate keys (e.g. a `name` label on the
 	// console) then we won't clobber the keys which we explicitly set below with
 	// the values of those in the console labels, when eventually parsing the log
 	// entry.
-	// loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
+	loggerCtx = logging.WithLabels(loggerCtx, c.Labels, "console_")
 
 	cmdString, _ := json.Marshal(statusCtx.Command)
 	requiresAuth := statusCtx.AuthorisationRule != nil && statusCtx.AuthorisationRule.AuthorisationsRequired > 0
 
-	logger = logger.WithValues(
+	loggerCtx = loggerCtx.WithValues(
 		"kind", Console,
 		"console_name", c.Name,
 		"console_user", c.Spec.User,
@@ -868,16 +863,16 @@ func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx 
 		// Note that a console that does not require authorisation is considered
 		// authorised by default.
 		"console_is_authorised", statusCtx.IsAuthorised,
-		"command", cmdString,
+		"command", string(cmdString),
 		"reason", c.Spec.Reason,
 	)
 
 	if statusCtx.Pod != nil {
-		logger = logger.WithValues("console_pod_name", statusCtx.Pod.Name)
+		loggerCtx = loggerCtx.WithValues("console_pod_name", statusCtx.Pod.Name)
 	}
 
 	if statusCtx.AuthorisationRule != nil {
-		logger = logger.WithValues(
+		loggerCtx = loggerCtx.WithValues(
 			"console_authorisation_rule_name", statusCtx.AuthorisationRule.Name,
 			"console_authorisation_authorisers_required", statusCtx.AuthorisationRule.AuthorisationsRequired,
 		)
@@ -890,10 +885,10 @@ func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx 
 		}
 
 		authorisers, _ := json.Marshal(subjectNames)
-		logger = logger.WithValues("console_authorisers", authorisers)
+		loggerCtx = loggerCtx.WithValues("console_authorisers", string(authorisers))
 	}
 
-	return logger
+	return loggerCtx
 }
 
 // Ensure that the job name (after suffixing with `-console`) does not exceed 63

@@ -47,6 +47,7 @@ func (opt *commonOptions) Logger() logr.Logger {
 	logger := zap.New(
 		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{
 			CallerKey:     "caller",
+			MessageKey:    "msg",
 			StacktraceKey: "stacktrace",
 			TimeKey:       "ts",
 			EncodeCaller:  zapcore.ShortCallerEncoder,

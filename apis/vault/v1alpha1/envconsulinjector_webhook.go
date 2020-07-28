@@ -140,12 +140,12 @@ func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (
 
 	vaultConfigMap := &corev1.ConfigMap{}
 	if err := i.client.Get(ctx, i.opts.VaultConfigMapKey, vaultConfigMap); err != nil {
-		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
+		logger.Info("vault config error", "event", "vault.config", "error", err)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	vaultConfig, err := newVaultConfig(vaultConfigMap)
 	if err != nil {
-		logger.Error(err, "vault config error", "event", "vault.config", "error", err)
+		logger.Info("vault config error", "event", "vault.config", "error", err)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 

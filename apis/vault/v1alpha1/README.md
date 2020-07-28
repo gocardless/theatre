@@ -1,8 +1,8 @@
 # vault
 
 [envconsul]: https://github.com/hashicorp/envconsul
-[theatre-envconsul]: ../../cmd/theatre-envconsul
-[theatre-envconsul-acceptance]: ../../cmd/theatre-envconsul/acceptance/acceptance.go
+[theatre-envconsul]: ../../../cmd/theatre-envconsul
+[theatre-envconsul-acceptance]: ../../../cmd/theatre-envconsul/acceptance/acceptance.go
 
 This package contains any CRDs and webhooks GoCardless use to interact with
 Vault. At present, the only thing we provide is a webhook to automatically

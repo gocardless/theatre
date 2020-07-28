@@ -124,7 +124,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
           ports:
-            - name: metrics
+            - name: https
+              containerPort: 443
+            - name: http-metrics
               containerPort: 9525
           resources:
             limits:

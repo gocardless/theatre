@@ -108,6 +108,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 }
 
 func (r *DirectoryRoleBindingReconciler) SetupWithManager(mgr manager.Manager) error {
+	logger := r.Log.WithValues("component", "DirectoryRoleBinding")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&rbacv1alpha1.DirectoryRoleBinding{}).
 		Watches(
@@ -119,7 +120,7 @@ func (r *DirectoryRoleBindingReconciler) SetupWithManager(mgr manager.Manager) e
 		).
 		Complete(
 			recutil.ResolveAndReconcile(
-				r.Ctx, r.Log, mgr, &rbacv1alpha1.DirectoryRoleBinding{},
+				r.Ctx, logger, mgr, &rbacv1alpha1.DirectoryRoleBinding{},
 				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
 					return r.ReconcileObject(logger, request, obj.(*rbacv1alpha1.DirectoryRoleBinding))
 				},

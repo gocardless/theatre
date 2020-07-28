@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/go-logr/logr"
 	zaplogfmt "github.com/sykesm/zap-logfmt"
+	zapopt "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -47,13 +48,15 @@ func (opt *commonOptions) Logger() logr.Logger {
 	logger := zap.New(
 		zap.Encoder(zaplogfmt.NewEncoder(zapcore.EncoderConfig{
 			CallerKey:     "caller",
+			MessageKey:    "msg",
 			StacktraceKey: "stacktrace",
 			TimeKey:       "ts",
 			EncodeCaller:  zapcore.ShortCallerEncoder,
-			EncodeTime:    zapcore.RFC3339TimeEncoder,
+			EncodeTime:    zapcore.RFC3339NanoTimeEncoder,
 		})),
 		zap.WriteTo(os.Stderr),
 		zap.Level(logLevel),
+		zap.RawZapOpts(zapopt.AddCaller()),
 	)
 	ctrl.SetLogger(logger)
 

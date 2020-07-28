@@ -56,51 +56,6 @@ func (erl *EventRecordingLogger) WithName(name string) logr.Logger {
 	}
 }
 
-func (erl *EventRecordingLogger) V(level int) logr.InfoLogger {
-	// We should be using a logger such as zapr, which returns a logr.Logger
-	// Since we want to record events we should ensure we have a logr.Logger, and return ourself if not.
-	logger, ok := erl.Logger.V(level).(logr.Logger)
-	if !ok {
-		return erl
-	}
-
-	return &EventRecordingLogger{
-		Logger:   logger,
-		recorder: erl.recorder,
-		object:   erl.object,
-		values:   erl.values,
-	}
-}
-
-func (erl *EventRecordingLogger) Error(err error, msg string, keyvals ...interface{}) {
-	erl.Logger.Error(err, msg, keyvals...)
-
-	// Pop key values from our slice into a map so we can better access each element
-	kvs := map[string]string{}
-	for len(keyvals) > 0 {
-		if k, ok := keyvals[0].(string); ok {
-			kvs[k] = fmt.Sprintf("%v", keyvals[1])
-		}
-
-		keyvals = keyvals[2:]
-	}
-
-	var event string
-	var ok bool
-
-	if event, ok = kvs["event"]; !ok {
-		return // no event
-	}
-
-	if kvs["eventType"] == EventTypeDontRecord {
-		return // don't record this event
-	}
-
-	erl.recorder.Event(erl.object, corev1.EventTypeWarning, event, msg)
-}
-
-// WithRecorder decorates a logr.Logger so that any log entries that contain an
-// appropriate event will also log to the Kubernetes resource using events.
 func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 	erl.Logger.Info(msg, keyvals...)
 
@@ -114,7 +69,7 @@ func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 		keyvals = keyvals[2:]
 	}
 
-	var event string
+	var event, eventType, message string
 	var ok bool
 
 	if event, ok = kvs["event"]; !ok {
@@ -125,5 +80,13 @@ func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 		return // don't record this event
 	}
 
-	erl.recorder.Event(erl.object, corev1.EventTypeNormal, event, msg)
+	if err, hasError := kvs["error"]; hasError {
+		eventType = corev1.EventTypeWarning
+		message = err
+	} else {
+		eventType = corev1.EventTypeNormal
+		message = msg
+	}
+
+	erl.recorder.Event(erl.object, eventType, event, message)
 }

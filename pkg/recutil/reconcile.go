@@ -75,9 +75,9 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 				// want to pollute the object's events with transient errors which have
 				// no means of avoiding.
 				if apierrors.IsConflict(errors.Cause(err)) {
-					logger.Error(err, err.Error(), "event", EventError, "error", err)
+					logging.WithNoRecord(logger).Info(err.Error(), "event", EventError, "error", err)
 				} else {
-					logging.WithNoRecord(logger).Error(err, err.Error(), "event", EventError, "error", err)
+					logger.Info(err.Error(), "event", EventError, "error", err)
 					reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
 				}
 			} else {
@@ -89,7 +89,7 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 		if err := mgr.GetClient().Get(ctx, request.NamespacedName, obj); err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.Info("could not find event", "event", EventNotFound)
-				return res, fmt.Errorf("event not found: %w", err)
+				return res, nil
 			}
 
 			return res, err

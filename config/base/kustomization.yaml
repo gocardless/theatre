@@ -9,14 +9,18 @@ commonLabels:
   app: theatre
 
 resources:
-  - crds/rbac_v1alpha1_directoryrolebinding.yaml
-  - crds/workloads_v1alpha1_console.yaml
-  - crds/workloads_v1alpha1_consoleauthorisation.yaml
-  - crds/workloads_v1alpha1_consoletemplate.yaml
+  - crds/rbac.crd.gocardless.com_directoryrolebindings.yaml
+  - crds/workloads.crd.gocardless.com_consoles.yaml
+  - crds/workloads.crd.gocardless.com_consoleauthorisations.yaml
+  - crds/workloads.crd.gocardless.com_consoletemplates.yaml
   - managers/namespace.yaml
   - managers/rbac.yaml
   - managers/vault.yaml
   - managers/workloads.yaml
+  - webhooks/vault.yaml
+  - webhooks/workloads.yaml
+  - rbac/leader-election.yaml
+  - cert-manager/certificate.yaml
 
 vars:
   # We want our mutating webhook to ensure it only ever configures pods to use

@@ -1,14 +1,14 @@
 package logging
 
 import (
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-logr/logr"
 )
 
-// WithLabels decorates a kitlog.Logger so that any log entries contain all
+// WithLabels decorates a logr.Logger so that any log entries contain all
 // labels which keys are prefix by labelKeyPrefix
-func WithLabels(logger kitlog.Logger, labels map[string]string, labelKeyPrefix string) kitlog.Logger {
+func WithLabels(logger logr.Logger, labels map[string]string, labelKeyPrefix string) logr.Logger {
 	for key, value := range labels {
-		logger = kitlog.With(logger, labelKeyPrefix+key, value)
+		logger = logger.WithValues(labelKeyPrefix+key, value)
 	}
 
 	return logger

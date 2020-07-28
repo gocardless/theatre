@@ -1,107 +1,93 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/alecthomas/kingpin"
-
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/apis"
-	"github.com/gocardless/theatre/pkg/apis/workloads"
+	consolecontroller "github.com/gocardless/theatre/controllers/workloads/console"
 	"github.com/gocardless/theatre/pkg/signals"
-	"github.com/gocardless/theatre/pkg/workloads/console"
-	"github.com/gocardless/theatre/pkg/workloads/priority"
 )
 
 var (
-	app = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	scheme = runtime.NewScheme()
 
-	webhookName = app.Flag("webhook-name", "Kubernetes mutating webhook name").Default("theatre-workloads").String()
-	namespace   = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
-	serviceName = app.Flag("service-name", "Kubernetes webhook service name").Default("theatre-workloads-manager").String()
+	app = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(cmd.VersionStanza())
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 )
+
+func init() {
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = workloadsv1alpha1.AddToScheme(scheme)
+	_ = rbacv1alpha1.AddToScheme(scheme)
+}
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	logger := commonOpts.Logger()
 
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		app.Fatalf("failed to add schemes: %v", err)
-	}
-
-	go func() {
-		commonOpts.ListenAndServeMetrics(logger)
-	}()
-
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		Port:               443,
+		LeaderElection:     commonOpts.ManagerLeaderElection,
+		LeaderElectionID:   "workloads.crds.gocardless.com",
+		Scheme:             scheme,
+	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	opts := webhook.ServerOptions{
-		CertDir: "/tmp/theatre-workloads",
-		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName:   *webhookName,
-			ValidatingWebhookConfigName: *webhookName,
-			Service: &webhook.Service{
-				Namespace: *namespace,
-				Name:      *serviceName,
-				Selectors: map[string]string{
-					"app":   "theatre",
-					"group": workloads.GroupName,
-				},
-			},
-		},
+	// controller
+	if err = (&consolecontroller.ConsoleReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("console"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(ctx, mgr); err != nil {
+		app.Fatalf("failed to create controller: %v", err)
 	}
 
-	svr, err := webhook.NewServer("workloads", mgr, opts)
-	if err != nil {
-		app.Fatalf("failed to create admission server: %v", err)
-	}
+	// console authenticator webhook
+	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
+			logger.WithName("webhooks").WithName("console-authenticator"),
+		),
+	})
 
-	// Console controller
-	if _, err = console.Add(ctx, logger, mgr); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// console authorisation webhook
+	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
+			mgr.GetClient(),
+			logger.WithName("webhooks").WithName("console-authorisation"),
+		),
+	})
 
-	// Console authenticator webhook
-	consoleAuthenticatorWh, err := console.NewAuthenticatorWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
+	// console template webhook
+	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
+			logger.WithName("webhooks").WithName("console-template"),
+		),
+	})
 
-	// Console authorisation webhook
-	consoleAuthorisationWh, err := console.NewAuthorisationWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
-
-	// Console template webhook
-	consoleTemplateWh, err := console.NewTemplateValidationWebhook(logger, mgr)
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
-
-	priorityWh, err := priority.NewWebhook(logger, mgr, priority.InjectorOptions{})
-	if err != nil {
-		app.Fatalf(err.Error())
-	}
-
-	if err := svr.Register(consoleAuthenticatorWh, consoleAuthorisationWh, consoleTemplateWh, priorityWh); err != nil {
-		app.Fatalf(err.Error())
-	}
+	// priority webhook
+	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewPriorityInjector(
+			mgr.GetClient(),
+			logger.WithName("webhooks").WithName("priority-injector"),
+		),
+	})
 
 	if err := mgr.Start(ctx.Done()); err != nil {
 		app.Fatalf("failed to run manager: %v", err)

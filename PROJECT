@@ -1,2 +1,18 @@
 ---
 domain: crd.gocardless.com
+multigroup: true
+repo: github.com/gocardless/theatre
+resources:
+- group: rbac
+  kind: DirectoryRoleBinding
+  version: v1alpha1
+- group: workloads
+  kind: Console
+  version: v1alpha1
+- group: workloads
+  kind: ConsoleTemplate
+  version: v1alpha1
+- group: workloads
+  kind: ConsoleAuthorisation
+  version: v1alpha1
+version: "2"

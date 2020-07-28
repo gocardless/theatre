@@ -36,13 +36,13 @@ new developers.
 Extends core workload resources with new CRDs. Extensions within this group can be
 expected to create or mutate pods, deployments, etc.
 
-- [Consoles](pkg/workloads/console/README.md): Provide engineers with a temporary
+- [Consoles](controllers/workloads/console/README.md): Provide engineers with a temporary
   dedicated pod to perform operational tasks, avoiding the need to provide
   `pods/exec` permissions on production workloads.
-- [Default priority classes](pkg/workloads/priority/README.md): Mutate all pods within a
+- [Default priority classes](apis/workloads/v1alpha1/README.md): Mutate all pods within a
   namespace to set a default priority class.
 
-### [Vault](pkg/vault/README.md)
+### [Vault](apis/vault/v1alpha1/README.md)
 
 Utilities for interacting with Vault. Primarily used to inject secret material
 into pods by use of annotations.
@@ -77,14 +77,12 @@ all the necessary dependencies:
 
 ```shell
 brew cask install docker
-brew install go kubernetes-cli
-curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-darwin-amd64 \
+brew install go kubernetes-cli kustomize
+curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-darwin-amd64 \
   && chmod a+x /usr/local/bin/kind
-curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_darwin_amd64.tar.gz \
-  | tar -xvz -C /usr/local/bin
 mkdir /usr/local/kubebuilder
-curl -fsL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v1.0.7/kubebuilder_1.0.7_darwin_amd64.tar.gz \
-  | tar -xvz --strip=1 -C /usr/local/kubebuilder
+curl -fsL https://go.kubebuilder.io/dl/2.3.1/$(go env GOOS)/$(go env GOARCH) | tar -xvz --strip=1 -C /usr/local/kubebuilder
+export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
 ```
 
 Running `make` should now compile binaries into `bin`.
@@ -138,7 +136,7 @@ framework.
 
   Invoked with the `ginkgo` CLI.
 
-  [Example unit test](pkg/apis/workloads/v1alpha1/helpers_test.go).
+  [Example unit test](apis/workloads/v1alpha1/helpers_test.go).
 
 - **Integration**: Integration tests run the custom controller code and
   integrates this with a temporary Kubernetes API server, therefore providing an
@@ -152,7 +150,7 @@ framework.
 
   Invoked with the `ginkgo` CLI.
 
-  [Example integration test](pkg/workloads/priority/integration/integration_test.go).
+  [Example integration test](apis/workloads/v1alpha1/integration/priority_integration_test.go).
 
 - **Acceptance**: Acceptance is used for full end-to-end (E2E) tests,
   provisioning a fully functional Kubernetes cluster with all custom controllers
@@ -165,6 +163,6 @@ framework.
 
   Invoked with: `go run cmd/acceptance/main.go run`
 
-  [Example acceptance test](pkg/workloads/console/acceptance/acceptance.go).
+  [Example acceptance test](cmd/workloads-manager/acceptance/acceptance.go).
 
 [ginkgo]: https://onsi.github.io/ginkgo

@@ -7,6 +7,7 @@ rules:
   - apiGroups:
       - workloads.crd.gocardless.com
     resources:
+      - "*/status"
       - "*"
     verbs:
       - "*"
@@ -33,12 +34,9 @@ rules:
       - "*"
   - apiGroups:
       - ""
-      - admissionregistration.k8s.io
     resources:
       - services
       - events
-      - mutatingwebhookconfigurations
-      - validatingwebhookconfigurations
     verbs:
       - "*"
   - apiGroups:
@@ -87,6 +85,30 @@ subjects:
   - kind: ServiceAccount
     name: workloads-manager
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workloads-manager-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: theatre-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: workloads-manager
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: workloads-manager
+spec:
+  dnsNames:
+    - theatre-workloads-manager.theatre-system.svc
+  issuerRef:
+    kind: Issuer
+    name: theatre-webhooks
+  secretName: theatre-workloads-manager-certificate
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -96,6 +118,7 @@ metadata:
 spec:
   serviceName: workloads-manager
   volumeClaimTemplates: []
+  replicas: 1
   selector:
     matchLabels:
       group: workloads.crd.gocardless.com
@@ -120,9 +143,31 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
           ports:
-            - name: metrics
+            - name: https
+              containerPort: 443
+            - name: http-metrics
               containerPort: 9525
           resources:
             limits:
               cpu: 500m
               memory: 256Mi
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      volumes:
+        - name: cert
+          secret:
+            secretName: theatre-workloads-manager-certificate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workloads-manager
+spec:
+  selector:
+    app: theatre
+    group: workloads.crd.gocardless.com
+  ports:
+    - port: 443
+      targetPort: 443

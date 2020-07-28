@@ -1,0 +1,133 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.5
+  creationTimestamp: null
+  name: consoles.workloads.crd.gocardless.com
+spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.user
+    name: User
+    type: string
+  - JSONPath: .status.phase
+    name: Phase
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+  - JSONPath: .status.expiryTime
+    name: Expiry
+    type: string
+  group: workloads.crd.gocardless.com
+  names:
+    kind: Console
+    listKind: ConsoleList
+    plural: consoles
+    singular: console
+  scope: Namespaced
+  subresources: {}
+  validation:
+    openAPIV3Schema:
+      description: Console declares an instance of a console environment to be created
+        by a specific user
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: ConsoleSpec defines the desired state of Console
+          properties:
+            command:
+              description: The command and arguments to execute. If not specified
+                the command from the template specification will be used.
+              items:
+                type: string
+              type: array
+            consoleTemplateRef:
+              description: LocalObjectReference contains enough information to let
+                you locate the referenced object inside the same namespace.
+              properties:
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    TODO: Add other useful fields. apiVersion, kind, uid?'
+                  type: string
+              type: object
+            reason:
+              type: string
+            timeoutSeconds:
+              description: Number of seconds that the console should run for. If the
+                process running within the console has not exited before this timeout
+                is reached, then the console will be terminated. If this value exceeds
+                the Maximum Timeout Seconds specified in the ConsoleTemplate that
+                this console refers to, then this timeout will be clamped to that
+                value. Maximum value of 1 week (as per ConsoleTemplate.Spec.MaxTimeoutSeconds).
+              maximum: 604800
+              minimum: 0
+              type: integer
+            ttlSecondsAfterFinished:
+              description: Specifies the TTL for this Console. The Console will be
+                eligible for garbage collection TTLSecondsAfterFinished seconds after
+                it enters the Stopped or Destroyed phase. This field is modeled on
+                the TTL mechanism in Kubernetes 1.12.
+              format: int32
+              maximum: 604800
+              minimum: 0
+              type: integer
+            ttlSecondsBeforeRunning:
+              description: Specifies the TTL before running for this Console. The
+                Console will be eligible for garbage collection TTLSecondsBeforeRunning
+                seconds if it has not progressed to the Running phase. This field
+                is modeled on the TTL mechanism in Kubernetes 1.12.
+              format: int32
+              maximum: 86400
+              minimum: 0
+              type: integer
+            user:
+              type: string
+          required:
+          - consoleTemplateRef
+          - reason
+          - user
+          type: object
+        status:
+          description: ConsoleStatus defines the observed state of Console
+          properties:
+            completionTime:
+              description: Time at which the job completed successfully
+              format: date-time
+              type: string
+            expiryTime:
+              format: date-time
+              type: string
+            phase:
+              type: string
+            podName:
+              type: string
+          required:
+          - phase
+          - podName
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

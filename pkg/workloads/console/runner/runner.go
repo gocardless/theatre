@@ -14,18 +14,23 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/get"
-	"k8s.io/kubernetes/pkg/kubectl/util/term"
+	"k8s.io/kubectl/pkg/cmd/get"
+	"k8s.io/kubectl/pkg/util/term"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/pkg/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/client/clientset/versioned"
+	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
 )
 
 // Alias genericclioptions.IOStreams to avoid additional imports
@@ -33,8 +38,9 @@ type IOStreams genericclioptions.IOStreams
 
 // Runner is responsible for managing the lifecycle of a console
 type Runner struct {
-	kubeClient    kubernetes.Interface
-	theatreClient versioned.Interface
+	clientset     kubernetes.Interface
+	consoleClient dynamic.NamespaceableResourceInterface
+	kubeClient    client.Client
 }
 
 // Options defines the parameters that can be set upon a new console
@@ -54,11 +60,35 @@ type Options struct {
 }
 
 // New builds a runner
-func New(client kubernetes.Interface, theatreClient versioned.Interface) *Runner {
-	return &Runner{
-		kubeClient:    client,
-		theatreClient: theatreClient,
+func New(cfg *rest.Config) (*Runner, error) {
+	// create a client that can be used to attach to consoles pod
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	// create a client that can be used to watch a console CRD
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	consoleClient := dynClient.Resource(workloadsv1alpha1.GroupVersion.WithResource("consoles"))
+
+	// create a client that can be used for everything else
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = workloadsv1alpha1.AddToScheme(scheme)
+	_ = rbacv1alpha1.AddToScheme(scheme)
+	kubeClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Runner{
+		clientset:     clientset,
+		consoleClient: consoleClient,
+		kubeClient:    kubeClient,
+	}, nil
 }
 
 // LifecycleHook provides a communication to react to console lifecycle changes
@@ -214,15 +244,20 @@ type GetOptions struct {
 
 // Get provides a standardised method to get a console
 func (c *Runner) Get(ctx context.Context, opts GetOptions) (*workloadsv1alpha1.Console, error) {
-	csl, err := c.theatreClient.
-		WorkloadsV1alpha1().
-		Consoles(opts.Namespace).
-		Get(opts.ConsoleName, metav1.GetOptions{})
+	var csl workloadsv1alpha1.Console
+	err := c.kubeClient.Get(
+		ctx,
+		client.ObjectKey{
+			Name:      opts.ConsoleName,
+			Namespace: opts.Namespace,
+		},
+		&csl,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return csl, nil
+	return &csl, nil
 }
 
 // AttachOptions encapsulates the arguments to attach to a console
@@ -266,7 +301,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	if err := NewAttacher(c.kubeClient, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
+	if err := NewAttacher(c.clientset, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
@@ -293,7 +328,6 @@ func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName st
 		Name(pod.GetName()).
 		SubResource("attach")
 
-	req.Context(ctx)
 	req.VersionedParams(
 		&corev1.PodAttachOptions{
 			Stdin:     true,
@@ -368,14 +402,17 @@ func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
 		return err
 	}
 
-	_, err = c.theatreClient.
-		Workloads().
-		ConsoleAuthorisations(opts.Namespace).
-		Patch(
-			opts.ConsoleName,
-			types.JSONPatchType,
-			patchBytes,
-		)
+	var authz workloadsv1alpha1.ConsoleAuthorisation
+	err = c.kubeClient.Get(
+		ctx,
+		client.ObjectKey{
+			Name:      opts.ConsoleName,
+			Namespace: opts.Namespace,
+		},
+		&authz,
+	)
+
+	err = c.kubeClient.Patch(ctx, &authz, client.ConstantPatch(types.JSONPatchType, patchBytes))
 	if err != nil {
 		return err
 	}
@@ -408,6 +445,7 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 			// Let Kubernetes generate a unique name
 			GenerateName: template.Name + "-",
 			Labels:       labels.Merge(labels.Set{}, template.Labels),
+			Namespace:    namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: template.Name},
@@ -419,20 +457,25 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 		},
 	}
 
-	return c.theatreClient.WorkloadsV1alpha1().Consoles(namespace).Create(csl)
+	err := c.kubeClient.Create(
+		context.TODO(),
+		csl,
+	)
+	return csl, err
 }
 
 // FindTemplateBySelector will search for a template matching the given label
 // selector and return errors if none or multiple are found (when the selector
 // is too broad)
 func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) (*workloadsv1alpha1.ConsoleTemplate, error) {
-	client := c.theatreClient.WorkloadsV1alpha1().ConsoleTemplates(namespace)
+	var templates workloadsv1alpha1.ConsoleTemplateList
+	selectorSet, err := labels.ConvertSelectorToLabelsMap(labelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid selector: %w", err)
+	}
 
-	templates, err := client.List(
-		metav1.ListOptions{
-			LabelSelector: labelSelector,
-		},
-	)
+	opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+	err = c.kubeClient.List(context.TODO(), &templates, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list consoles templates: %w", err)
 	}
@@ -461,8 +504,8 @@ func (c *Runner) FindConsoleByName(namespace, name string) (*workloadsv1alpha1.C
 	// provided".
 	// The fake clientset generated by client-gen will not replicate this error in
 	// unit tests.
-	allConsolesInNamespace, err := c.theatreClient.WorkloadsV1alpha1().Consoles(namespace).
-		List(metav1.ListOptions{})
+	var allConsolesInNamespace workloadsv1alpha1.ConsoleList
+	err := c.kubeClient.List(context.TODO(), &allConsolesInNamespace, &client.ListOptions{Namespace: namespace})
 	if err != nil {
 		return nil, err
 	}
@@ -519,11 +562,14 @@ func (c *Runner) ListConsolesByLabelsAndUser(namespace, username, labelSelector 
 	// LabelSelector for CRD types like Console. The error message "field label
 	// not supported: spec.user" is returned by the real Kubernetes client.
 	// See https://github.com/kubernetes/kubernetes/issues/53459.
-	csls, err := c.theatreClient.WorkloadsV1alpha1().Consoles(namespace).
-		List(metav1.ListOptions{LabelSelector: labelSelector})
+	var csls workloadsv1alpha1.ConsoleList
+	selectorSet, err := labels.ConvertSelectorToLabelsMap(labelSelector)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid selector: %w", err)
 	}
+
+	opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
+	err = c.kubeClient.List(context.TODO(), &csls, opts)
 
 	var filtered []workloadsv1alpha1.Console
 	for _, csl := range csls.Items {
@@ -572,9 +618,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 	}
 
 	listOptions := metav1.SingleObject(createdCsl.ObjectMeta)
-	client := c.theatreClient.WorkloadsV1alpha1().Consoles(createdCsl.Namespace)
-
-	w, err := client.Watch(listOptions)
+	w, err := c.consoleClient.Namespace(createdCsl.Namespace).Watch(ctx, listOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error watching console: %w", err)
 	}
@@ -582,7 +626,9 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 	// Get the console, because watch will only give us an event when something
 	// is changed, and the phase could have already stabilised before the watch
 	// is set up.
-	csl, err := client.Get(createdCsl.Name, metav1.GetOptions{})
+	csl := &workloadsv1alpha1.Console{}
+
+	err = c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("error retrieving console: %w", err)
 	}
@@ -610,7 +656,9 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return nil, errors.New("watch channel closed")
 			}
 
-			csl = event.Object.(*workloadsv1alpha1.Console)
+			obj := event.Object.(*unstructured.Unstructured)
+			runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+
 			if isRunning(csl) {
 				return csl, nil
 			}
@@ -630,8 +678,8 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	rbClient := c.kubeClient.RbacV1().RoleBindings(csl.Namespace)
-	watcher, err := rbClient.Watch(metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
+	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
+	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
 	if err != nil {
 		return fmt.Errorf("error watching rolebindings: %w", err)
 	}
@@ -644,7 +692,7 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	// subsequent loop would block forever.
 	// If the associated RoleBinding exists and has the console user in its
 	// subject list, return early.
-	rb, err := rbClient.Get(csl.Name, metav1.GetOptions{})
+	rb, err := rbClient.Get(context.TODO(), csl.Name, metav1.GetOptions{})
 	if err == nil && rbHasSubject(rb, csl.Spec.User) {
 		return nil
 	}
@@ -681,7 +729,8 @@ func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {
 
 // GetAttachablePod returns an attachable pod for the given console
 func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, string, error) {
-	pod, err := c.kubeClient.CoreV1().Pods(csl.Namespace).Get(csl.Status.PodName, metav1.GetOptions{})
+	pod := &corev1.Pod{}
+	err := c.kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: csl.Namespace, Name: csl.Status.PodName}, pod)
 	if err != nil {
 		return nil, "", err
 	}

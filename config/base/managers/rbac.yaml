@@ -51,6 +51,18 @@ subjects:
   - kind: ServiceAccount
     name: rbac-manager
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rbac-manager-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: theatre-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: rbac-manager
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -59,6 +71,7 @@ metadata:
     group: rbac.crd.gocardless.com
 spec:
   serviceName: rbac-manager
+  replicas: 1
   volumeClaimTemplates: []
   selector:
     matchLabels:
@@ -95,7 +108,9 @@ spec:
               name: google-application-credentials
               readOnly: true
           ports:
-            - name: metrics
+            - name: https
+              containerPort: 443
+            - name: http-metrics
               containerPort: 9525
           resources:
             limits:

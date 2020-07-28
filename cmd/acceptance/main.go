@@ -12,21 +12,19 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog"
-
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gocardless/theatre/pkg/signals"
-
-	theatreEnvconsulAcceptance "github.com/gocardless/theatre/cmd/theatre-envconsul/acceptance"
-	consoleAcceptance "github.com/gocardless/theatre/pkg/workloads/console/acceptance"
-
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
+
+	vaultManagerAcceptance "github.com/gocardless/theatre/cmd/vault-manager/acceptance"
+	workloadsManagerAcceptance "github.com/gocardless/theatre/cmd/workloads-manager/acceptance"
 )
 
 var (
@@ -52,8 +50,8 @@ var (
 //
 // In future, we'll make this more ginkgo native. For now, this will do.
 var Runners = []runner{
-	&theatreEnvconsulAcceptance.Runner{},
-	&consoleAcceptance.Runner{},
+	&vaultManagerAcceptance.Runner{},
+	&workloadsManagerAcceptance.Runner{},
 }
 
 type runner interface {
@@ -90,7 +88,7 @@ func main() {
 				logLevel = 5
 			}
 
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
+			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--image", "kindest/node:v1.16.9", "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}
@@ -116,24 +114,46 @@ func main() {
 			app.Fatalf("failed to load image into control plane: %v", err)
 		}
 
-		logger.Log("msg", "generating installation manifests")
-		manifests, err := exec.CommandContext(ctx, "kustomize", "build", "config/overlays/acceptance").Output()
+		logger.Log("msg", "generating setup manifests")
+		setupManifests, err := exec.CommandContext(ctx, "kustomize", "build", "config/acceptance/setup").Output()
 		if err != nil {
-			app.Fatalf("failed to kustomize installation: %v", err)
+			app.Fatalf("failed to kustomize setup manifests: %v", err)
 		}
 
-		logger.Log("msg", "installing manager into cluster")
+		logger.Log("msg", "installing setup resources into cluster")
 		applyCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "apply", "-f", "-")
+		applyCmd.Stdin = bytes.NewReader(setupManifests)
+
+		if err := pipeOutput(applyCmd).Run(); err != nil {
+			app.Fatalf("failed to install setup manifests into cluster: %v", err)
+		}
+
+		logger.Log("msg", "waiting for setup resources to run")
+		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
+
+		if err := pipeOutput(waitCmd).Run(); err != nil {
+			app.Fatalf("not all setup resources are running: %v", err)
+		}
+
+		logger.Log("msg", "generating theatre manifests")
+		manifests, err := exec.CommandContext(ctx, "kustomize", "build", "config/acceptance").Output()
+		if err != nil {
+			app.Fatalf("failed to kustomize theatre manifests: %v", err)
+		}
+
+		logger.Log("msg", "installing theatre into cluster")
+		applyCmd = exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "apply", "-f", "-")
 		applyCmd.Stdin = bytes.NewReader(manifests)
 
 		if err := pipeOutput(applyCmd).Run(); err != nil {
-			app.Fatalf("failed to install manager: %v", err)
+			app.Fatalf("failed to install theatre manifests into cluster: %v", err)
 		}
 
-		config := mustClusterConfig()
+		cfg := mustClusterConfig()
+
 		for _, runner := range Runners {
 			logger.Log("msg", "running prepare", "runner", reflect.TypeOf(runner).Elem().Name())
-			if err := runner.Prepare(logger, config); err != nil {
+			if err := runner.Prepare(logger, cfg); err != nil {
 				app.Fatalf("failed to execute runner prepare: %v", err)
 			}
 		}
@@ -158,7 +178,7 @@ func main() {
 		}
 
 		logger := kitlog.NewLogfmtLogger(GinkgoWriter)
-		config := mustClusterConfig()
+		cfg := mustClusterConfig()
 
 		var _ = Describe("Acceptance", func() {
 			for _, runner := range Runners {
@@ -171,7 +191,7 @@ func main() {
 				}
 
 				if shouldRun {
-					runner.Run(logger, config)
+					runner.Run(logger, cfg)
 				}
 			}
 		})
@@ -185,7 +205,7 @@ func main() {
 }
 
 func mustClusterConfig() *rest.Config {
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{
 			CurrentContext: fmt.Sprintf("kind-%s", *clusterName),
@@ -195,7 +215,7 @@ func mustClusterConfig() *rest.Config {
 		app.Fatalf("failed to authenticate against kind cluster", err)
 	}
 
-	return config
+	return cfg
 }
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

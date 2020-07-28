@@ -1,4 +1,14 @@
-# priority
+# Workloads
+
+This package contains the CRDs and webhooks for
+[Consoles](controllers/workloads/console/README.md) and [Default priority
+classes](#default-priority-classes).
+
+## Consoles
+
+See [Consoles controller documentation](controllers/workloads/console/README.md).
+
+## Default Priority Classes
 
 Priority classes can be really useful to separate critical from optional
 workloads. It's normal for all workloads within a particular namespace to have

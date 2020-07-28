@@ -43,6 +43,12 @@ webhooks:
       matchExpressions:
         - key: control-plane
           operator: DoesNotExist
+          # Only run the webhook when the namespace has the necessary label. It
+          # prevents running the mutating webhook for critical namespaces like
+          # kube-system and theatre-system so the system can recover
+          # automatically if the workload controller goes down.
+        - key: theatre-priority-injector
+          operator: Exists
     rules:
       - apiGroups:
           - ''

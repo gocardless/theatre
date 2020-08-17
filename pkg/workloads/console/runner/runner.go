@@ -345,8 +345,20 @@ func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName st
 	}
 
 	streamOptions, safe := CreateInteractiveStreamOptions(streams)
+	interactive := false
 
-	return safe(func() error { return remoteExecutor.Stream(streamOptions) })
+	if interactive == true {
+		return safe(func() error { return remoteExecutor.Stream(streamOptions) })
+	} else {
+		streamOptions = remotecommand.StreamOptions{
+			Stderr: streams.ErrOut,
+			Stdout: streams.Out,
+			Stdin:  streams.In,
+			Tty:    false,
+		}
+
+		return safe(func() error { return remoteExecutor.Stream(streamOptions) })
+	}
 }
 
 // CreateInteractiveStreamOptions constructs streaming configuration that

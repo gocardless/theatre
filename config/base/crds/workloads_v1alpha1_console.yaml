@@ -52,6 +52,13 @@ spec:
               type: array
             consoleTemplateRef:
               type: object
+            interactive:
+              description:
+                Enable TTY and STDIN on the underlying container, so clients
+                can attach interactively. This should usually be set to true; however,
+                in certain situations, enabling the TTY on a container in the console
+                causes breakage - in Tekton steps, for example.
+              type: boolean
             reason:
               type: string
             timeoutSeconds:

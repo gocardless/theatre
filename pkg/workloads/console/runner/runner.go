@@ -50,7 +50,7 @@ type Options struct {
 	// expect a TTY to not be present?
 	// However with these types of consoles it will not be possible to send input to them
 	// when reattaching, e.g. attempting to send a SIGINT to cancel the running process.
-	// Interactive bool
+	Interactive bool
 }
 
 // New builds a runner
@@ -117,12 +117,13 @@ func (d DefaultLifecycleHook) TemplateFound(c *workloadsv1alpha1.ConsoleTemplate
 
 // CreateOptions encapsulates the arguments to create a console
 type CreateOptions struct {
-	Namespace string
-	Selector  string
-	Timeout   time.Duration
-	Reason    string
-	Command   []string
-	Attach    bool
+	Namespace   string
+	Selector    string
+	Timeout     time.Duration
+	Reason      string
+	Command     []string
+	Attach      bool
+	Interactive bool
 
 	// Options only used when Attach is true
 	KubeConfig *rest.Config
@@ -157,7 +158,7 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
-	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason}
+	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason, Interactive: opts.Interactive}
 	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
 	if err != nil {
 		return nil, err
@@ -420,6 +421,7 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 			TimeoutSeconds: opts.Timeout,
 			Command:        opts.Cmd,
 			Reason:         opts.Reason,
+			Interactive:    opts.Interactive,
 		},
 	}
 

@@ -761,14 +761,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:274f67cb6fed9588ea2521ecdac05a6d62a8c51c074c1fccc6a49a40ba80e925"
-  name = "github.com/satori/go.uuid"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
-  version = "v1.2.0"
-
-[[projects]]
   digest = "1:0599141a8403114d34f1e546604ad6c5361b70dfa80e80c635f438cdbf71b43a"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1573,6 +1565,7 @@
     "github.com/alecthomas/kingpin",
     "github.com/go-kit/kit/log",
     "github.com/go-kit/kit/log/level",
+    "github.com/google/uuid",
     "github.com/hashicorp/go-multierror",
     "github.com/hashicorp/vault/api",
     "github.com/mitchellh/mapstructure",
@@ -1585,7 +1578,6 @@
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promauto",
     "github.com/prometheus/client_golang/prometheus/promhttp",
-    "github.com/satori/go.uuid",
     "golang.org/x/oauth2/google",
     "gomodules.xyz/jsonpatch/v3",
     "google.golang.org/api/admin/directory/v1",

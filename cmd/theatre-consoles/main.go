@@ -29,7 +29,6 @@ var (
 	cli = kingpin.New("consoles", "Manages theatre consoles").Version(cmd.VersionStanza())
 
 	cliContext = cli.Flag("context", "Kubernetes context to target. If not provided defaults to current context").
-			Short('c').
 			Envar("KUBERNETES_CONTEXT").
 			String()
 	cliNamespace = cli.Flag("namespace", "Kubernetes namespace to target. If not provided defaults to target allnamespaces").

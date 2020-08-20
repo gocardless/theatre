@@ -312,13 +312,42 @@ var _ = Describe("Console", func() {
 				"job's pod restartPolicy should always be set to 'Never'",
 			)
 			Expect(
-				job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
-				"job's first container should have stdin true",
+				job.Spec.Template.Spec.Containers[0].Stdin).To(BeFalse(),
+				"job's first container should have stdin false",
 			)
 			Expect(
-				job.Spec.Template.Spec.Containers[0].TTY).To(BeTrue(),
-				"job's first container should have tty true",
+				job.Spec.Template.Spec.Containers[0].TTY).To(BeFalse(),
+				"job's first container should have tty false",
 			)
+		})
+
+		Context("with Interactive = true", func() {
+			BeforeEach(func() {
+				csl.Spec.Interactive = true
+			})
+
+			It("Creates a job", func() {
+				By("Expect job was created")
+				job := &batchv1.Job{}
+
+				Eventually(func() error {
+					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier.Name += "-console"
+					err := mgr.GetClient().Get(context.TODO(), identifier, job)
+					return err
+				}).ShouldNot(HaveOccurred(),
+					"failed to find associated Job for Console")
+
+				By("Expect containers to have TTY and Stdin enabled")
+				Expect(
+					job.Spec.Template.Spec.Containers[0].Stdin).To(BeTrue(),
+					"job's first container should have stdin true",
+				)
+				Expect(
+					job.Spec.Template.Spec.Containers[0].TTY).To(BeTrue(),
+					"job's first container should have tty true",
+				)
+			})
 		})
 
 		It("Triggers a reconcile when updating a job", func() {

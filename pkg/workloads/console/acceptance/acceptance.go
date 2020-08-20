@@ -230,12 +230,13 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					defer GinkgoRecover()
 
 					_, createError = consoleRunner.Create(context.TODO(), runner.CreateOptions{
-						Namespace: namespace,
-						Selector:  "app=acceptance",
-						Timeout:   6 * time.Second,
-						Reason:    "",
-						Command:   []string{"sleep", "666"},
-						Attach:    false,
+						Namespace:   namespace,
+						Selector:    "app=acceptance",
+						Timeout:     6 * time.Second,
+						Reason:      "",
+						Command:     []string{"sleep", "666"},
+						Attach:      false,
+						Interactive: true,
 					})
 
 					Expect(createError).To(BeNil())
@@ -478,6 +479,7 @@ func buildConsole() *workloadsv1alpha1.Console {
 			Command:            []string{"sleep", "30"},
 			ConsoleTemplateRef: corev1.LocalObjectReference{Name: templateName},
 			TimeoutSeconds:     6,
+			Interactive:        true,
 		},
 	}
 }

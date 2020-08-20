@@ -250,6 +250,35 @@ var _ = Describe("Console", func() {
 			)
 		})
 
+		Context("with Noninteractive = true", func() {
+			BeforeEach(func() {
+				csl.Spec.Noninteractive = true
+			})
+
+			It("Creates a job", func() {
+				By("Expect job was created")
+				job := &batchv1.Job{}
+
+				Eventually(func() error {
+					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier.Name += "-console"
+					err := mgr.GetClient().Get(context.TODO(), identifier, job)
+					return err
+				}).ShouldNot(HaveOccurred(),
+					"failed to find associated Job for Console")
+
+				By("Expect containers to have TTY and Stdin disabled")
+				Expect(
+					job.Spec.Template.Spec.Containers[0].Stdin).To(BeFalse(),
+					"job's first container should have stdin false",
+				)
+				Expect(
+					job.Spec.Template.Spec.Containers[0].TTY).To(BeFalse(),
+					"job's first container should have tty false",
+				)
+			})
+		})
+
 		It("Triggers a reconcile when updating a job", func() {
 			parallelism := int32(20)
 			defaultParallelism := int32(1)

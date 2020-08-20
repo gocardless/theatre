@@ -43,6 +43,8 @@ var (
 			Duration()
 	createReason = create.Flag("reason", "Reason for creating console").
 			String()
+	createNoninteractive = create.Flag("noninteractive", "Do not enable TTY and STDIN on console container").
+				Bool()
 	createAttach = create.Flag("attach", "Attach to the console if it starts successfully").
 			Bool()
 	createCommand = create.Arg("command", "Command to run in console").
@@ -109,13 +111,14 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 		_, err = consoleRunner.Create(
 			ctx,
 			runner.CreateOptions{
-				Namespace:  *cliNamespace,
-				Selector:   *createSelector,
-				Timeout:    *createTimeout,
-				Reason:     *createReason,
-				Command:    *createCommand,
-				Attach:     *createAttach,
-				KubeConfig: config,
+				Namespace:      *cliNamespace,
+				Selector:       *createSelector,
+				Timeout:        *createTimeout,
+				Reason:         *createReason,
+				Command:        *createCommand,
+				Attach:         *createAttach,
+				Noninteractive: *createNoninteractive,
+				KubeConfig:     config,
 				IO: runner.IOStreams{
 					In:     os.Stdin,
 					Out:    os.Stdout,

@@ -64,7 +64,7 @@ spec:
                     TODO: Add other useful fields. apiVersion, kind, uid?'
                   type: string
               type: object
-            interactive:
+            noninteractive:
               description: Disable TTY and STDIN on the underlying container. This
                 should usually be set to false so clients can attach interactively;
                 however, in certain situations, enabling the TTY on a container in

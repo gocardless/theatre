@@ -49,7 +49,7 @@ type ConsoleSpec struct {
 	// be set to false so clients can attach interactively; however, in certain
 	// situations, enabling the TTY on a container in the console causes
 	// breakage - in Tekton steps, for example.
-	Noninteractive bool `json:"interactive,omitempty"`
+	Noninteractive bool `json:"noninteractive,omitempty"`
 }
 
 // ConsoleStatus defines the observed state of Console

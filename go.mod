@@ -1,4 +1,4 @@
-module github.com/gocardless/theatre
+module github.com/gocardless/theatre/v2
 
 go 1.14
 
@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/go-kit/kit v0.8.0
 	github.com/go-logr/logr v0.1.0
+	github.com/gocardless/theatre v1.0.3
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/hashicorp/vault/api v1.0.4

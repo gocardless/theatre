@@ -48,15 +48,10 @@ type Options struct {
 	Cmd     []string
 	Timeout int
 	Reason  string
-
-	// TODO: For now we assume that all consoles are interactive, i.e. we setup a TTY on
-	// them when spawning them. This does not enforce a requirement to attach to the console
-	// though.
-	// Later on we may need to implement non-interactive consoles, for processes which
-	// expect a TTY to not be present?
-	// However with these types of consoles it will not be possible to send input to them
-	// when reattaching, e.g. attempting to send a SIGINT to cancel the running process.
-	// Interactive bool
+	// Whether or not to enable a TTY for the console. Typically this
+	// should be set to false but some execution environments, eg
+	// Tekton, do not like attaching to TTY-enabled pods.
+	Noninteractive bool
 }
 
 // New builds a runner
@@ -147,12 +142,13 @@ func (d DefaultLifecycleHook) TemplateFound(c *workloadsv1alpha1.ConsoleTemplate
 
 // CreateOptions encapsulates the arguments to create a console
 type CreateOptions struct {
-	Namespace string
-	Selector  string
-	Timeout   time.Duration
-	Reason    string
-	Command   []string
-	Attach    bool
+	Namespace      string
+	Selector       string
+	Timeout        time.Duration
+	Reason         string
+	Command        []string
+	Attach         bool
+	Noninteractive bool
 
 	// Options only used when Attach is true
 	KubeConfig *rest.Config
@@ -187,7 +183,7 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
-	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason}
+	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason, Noninteractive: opts.Noninteractive}
 	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
 	if err != nil {
 		return nil, err
@@ -235,6 +231,67 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	}
 
 	return csl, nil
+}
+
+func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Console) error {
+	isRunning := func(pod *corev1.Pod) bool {
+		return pod != nil && pod.Status.Phase == corev1.PodRunning
+	}
+
+	succeeded := func(pod *corev1.Pod) bool {
+		return pod != nil && pod.Status.Phase == corev1.PodSucceeded
+	}
+
+	pod, _, err := c.GetAttachablePod(csl)
+	if err != nil {
+		return err
+	}
+
+	listOptions := metav1.SingleObject(pod.ObjectMeta)
+	w, err := c.clientset.CoreV1().Pods(pod.Namespace).Watch(ctx, listOptions)
+	if err != nil {
+		return fmt.Errorf("error watching pod: %w", err)
+	}
+
+	// We need to fetch the pod again now we have a watcher to avoid a race
+	// where the pod completed before we were listening for watch events
+	pod, _, err = c.GetAttachablePod(csl)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error retrieving pod: %w", err)
+	}
+
+	if succeeded(pod) {
+		return nil
+	}
+
+	if !isRunning(pod) {
+		return fmt.Errorf("Pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
+	}
+
+	status := w.ResultChan()
+	defer w.Stop()
+
+	for {
+		select {
+		case event, ok := <-status:
+			// If our channel is closed, exit with error, as we'll otherwise assume
+			// we were successful when we never reached this state.
+			if !ok {
+				return errors.New("watch channel closed")
+			}
+
+			pod := event.Object.(*corev1.Pod)
+
+			if succeeded(pod) {
+				return nil
+			}
+			if !isRunning(pod) {
+				return fmt.Errorf("Pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("pod's last phase was: %v: %w", pod.Status.Phase, ctx.Err())
+		}
+	}
 }
 
 type GetOptions struct {
@@ -301,27 +358,38 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	if err := NewAttacher(c.clientset, opts.KubeConfig).Attach(ctx, pod, containerName, opts.IO); err != nil {
+	var attacher Attacher
+	if !csl.Spec.Noninteractive {
+		attacher = newInteractiveAttacher(c.clientset, opts.KubeConfig)
+	} else {
+		attacher = newNoninteractiveAttacher(c.clientset, opts.KubeConfig)
+	}
+
+	if err := attacher.Attach(ctx, pod, containerName, opts.IO); err != nil {
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
-	return nil
+	return c.waitForSuccess(ctx, csl)
 }
 
-func NewAttacher(clientset kubernetes.Interface, restconfig *rest.Config) *Attacher {
-	return &Attacher{clientset, restconfig}
+func newInteractiveAttacher(clientset kubernetes.Interface, restconfig *rest.Config) Attacher {
+	return &interactiveAttacher{clientset, restconfig}
 }
 
-// Attacher knows how to attach to stdio of an existing container, relaying io
+type Attacher interface {
+	Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error
+}
+
+// interactiveAttacher knows how to attach to stdio of an existing container, relaying io
 // to the parent process file descriptors.
-type Attacher struct {
+type interactiveAttacher struct {
 	clientset  kubernetes.Interface
 	restconfig *rest.Config
 }
 
-// Attach will interactively attach to a containers output, creating a new TTY
+// Attach will interactively attach to a container's output, creating a new TTY
 // and hooking this into the current processes file descriptors.
-func (a *Attacher) Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error {
+func (a *interactiveAttacher) Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error {
 	req := a.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Namespace(pod.GetNamespace()).
@@ -376,6 +444,51 @@ func CreateInteractiveStreamOptions(streams IOStreams) (remotecommand.StreamOpti
 		Tty:               true,
 		TerminalSizeQueue: sizeQueue,
 	}, tty.Safe
+}
+
+// noninteractiveAttacher knows how to attach to stdout/err of an existing container, without
+// opening a TTY session or passing STDIN from the parent process.
+type noninteractiveAttacher struct {
+	clientset  kubernetes.Interface
+	restconfig *rest.Config
+}
+
+func newNoninteractiveAttacher(clientset kubernetes.Interface, restconfig *rest.Config) Attacher {
+	return &noninteractiveAttacher{clientset, restconfig}
+}
+
+// Attach will attach to a container's output.
+func (a *noninteractiveAttacher) Attach(ctx context.Context, pod *corev1.Pod, containerName string, streams IOStreams) error {
+	req := a.clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Namespace(pod.GetNamespace()).
+		Name(pod.GetName()).
+		SubResource("attach")
+
+	req.VersionedParams(
+		&corev1.PodAttachOptions{
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+			Container: containerName,
+		},
+		scheme.ParameterCodec,
+	)
+
+	remoteExecutor, err := remotecommand.NewSPDYExecutor(a.restconfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("failed to create SPDY executor: %w", err)
+	}
+
+	streamOptions := remotecommand.StreamOptions{
+		Stderr: streams.ErrOut,
+		Stdout: streams.Out,
+		Stdin:  nil,
+		Tty:    false,
+	}
+
+	return remoteExecutor.Stream(streamOptions)
 }
 
 type AuthoriseOptions struct {
@@ -454,6 +567,7 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 			TimeoutSeconds: opts.Timeout,
 			Command:        opts.Cmd,
 			Reason:         opts.Reason,
+			Noninteractive: opts.Noninteractive,
 		},
 	}
 
@@ -735,7 +849,16 @@ func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, 
 		return nil, "", err
 	}
 
-	for _, c := range pod.Spec.Containers {
+	containers := pod.Spec.Containers
+	if len(containers) == 0 {
+		return nil, "", errors.New("no attachable pod found")
+	}
+
+	if csl.Spec.Noninteractive {
+		return pod, containers[0].Name, nil
+	}
+
+	for _, c := range containers {
 		if c.TTY {
 			return pod, c.Name, nil
 		}

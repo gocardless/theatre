@@ -4,6 +4,7 @@ apiVersion: workloads.crd.gocardless.com/v1alpha1
 spec:
   user: user@example.com
   reason: some-reason
+  noninteractive: false
   command: ["/bin/sh"]
   timeoutSeconds: 300
   consoleTemplateRef:

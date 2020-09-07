@@ -587,10 +587,12 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 			container.Args = csl.Spec.Command[1:]
 		}
 
-		// Set these properties to ensure that it's possible to send input to the
-		// container when attaching
-		container.Stdin = true
-		container.TTY = true
+		if !csl.Spec.Noninteractive {
+			// Set these properties to ensure that it's possible to send input to the
+			// container when attaching
+			container.Stdin = true
+			container.TTY = true
+		}
 	}
 
 	if numContainers > 1 {

@@ -44,6 +44,12 @@ type ConsoleSpec struct {
 	// The command and arguments to execute. If not specified the command from
 	// the template specification will be used.
 	Command []string `json:"command,omitempty"`
+
+	// Disable TTY and STDIN on the underlying container. This should usually
+	// be set to false so clients can attach interactively; however, in certain
+	// situations, enabling the TTY on a container in the console causes
+	// breakage - in Tekton steps, for example.
+	Noninteractive bool `json:"interactive,omitempty"`
 }
 
 // ConsoleStatus defines the observed state of Console

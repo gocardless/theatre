@@ -21,11 +21,11 @@ require (
 	google.golang.org/api v0.4.0
 	gopkg.in/h2non/gock.v1 v1.0.15
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/api v0.18.6
-	k8s.io/apimachinery v0.18.6
-	k8s.io/cli-runtime v0.18.6
-	k8s.io/client-go v0.18.6
+	k8s.io/api v0.18.9
+	k8s.io/apimachinery v0.18.9
+	k8s.io/cli-runtime v0.18.9
+	k8s.io/client-go v0.18.9
 	k8s.io/klog v1.0.0
-	k8s.io/kubectl v0.18.6
+	k8s.io/kubectl v0.18.9
 	sigs.k8s.io/controller-runtime v0.6.1
 )

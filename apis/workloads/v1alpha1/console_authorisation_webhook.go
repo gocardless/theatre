@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	rbacutils "github.com/gocardless/theatre/pkg/rbac"
+	rbacutils "github.com/gocardless/theatre/v2/pkg/rbac"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"

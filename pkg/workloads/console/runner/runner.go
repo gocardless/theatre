@@ -29,8 +29,8 @@ import (
 	"k8s.io/kubectl/pkg/util/term"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
+	rbacv1alpha1 "github.com/gocardless/theatre/v2/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v2/apis/workloads/v1alpha1"
 )
 
 // Alias genericclioptions.IOStreams to avoid additional imports

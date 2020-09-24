@@ -24,8 +24,8 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
 
-	"github.com/gocardless/theatre/cmd"
-	"github.com/gocardless/theatre/pkg/signals"
+	"github.com/gocardless/theatre/v2/cmd"
+	"github.com/gocardless/theatre/v2/pkg/signals"
 )
 
 var logger logr.Logger

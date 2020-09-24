@@ -28,10 +28,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/logging"
-	"github.com/gocardless/theatre/pkg/recutil"
+	rbacv1alpha1 "github.com/gocardless/theatre/v2/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v2/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v2/pkg/logging"
+	"github.com/gocardless/theatre/v2/pkg/recutil"
 )
 
 const (

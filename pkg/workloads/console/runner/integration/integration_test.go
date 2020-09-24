@@ -12,8 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/pkg/workloads/console/runner"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v2/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v2/pkg/workloads/console/runner"
 )
 
 func newNamespace(name string) corev1.Namespace {

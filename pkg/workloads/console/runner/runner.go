@@ -578,6 +578,24 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 	return csl, err
 }
 
+// MultipleConsoleTemplateError is returned whenever our selector was too broad, and
+// matched more than one ConsoleTemplate resource.
+type MultipleConsoleTemplateError struct {
+	ConsoleTemplates []workloadsv1alpha1.ConsoleTemplate
+}
+
+func (e MultipleConsoleTemplateError) Error() string {
+	identifiers := []string{}
+	for _, item := range e.ConsoleTemplates {
+		identifiers = append(identifiers, item.Namespace+"/"+item.Name)
+	}
+
+	return fmt.Sprintf(
+		"expected to discover 1 console template, but actually found: %s",
+		identifiers,
+	)
+}
+
 // FindTemplateBySelector will search for a template matching the given label
 // selector and return errors if none or multiple are found (when the selector
 // is too broad)
@@ -595,15 +613,7 @@ func (c *Runner) FindTemplateBySelector(namespace string, labelSelector string) 
 	}
 
 	if len(templates.Items) != 1 {
-		identifiers := []string{}
-		for _, item := range templates.Items {
-			identifiers = append(identifiers, item.Namespace+"/"+item.Name)
-		}
-
-		return nil, fmt.Errorf(
-			"expected to discover 1 console template, but actually found: %s",
-			identifiers,
-		)
+		return nil, MultipleConsoleTemplateError{templates.Items}
 	}
 
 	template := templates.Items[0]

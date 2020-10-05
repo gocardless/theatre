@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"text/tabwriter"
 	"time"
 
@@ -280,7 +281,20 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 				return errors.New("watch channel closed")
 			}
 
-			pod := event.Object.(*corev1.Pod)
+			// We can receive *metav1.Status events in the situation where there's an error, in
+			// which case we should exit early.
+			if status, ok := event.Object.(*metav1.Status); ok {
+				return fmt.Errorf("received failure from Kubernetes: %w", status.Reason)
+			}
+
+			// We should be safe now, as a watcher should return either Status or the type we
+			// asked it for. But we've been wrong before, and it wasn't easy to figure out what
+			// happened when we didn't print the type of the event.
+			pod, ok := event.Object.(*corev1.Pod)
+			if !ok {
+				return fmt.Errorf("received an event that didn't reference a pod, which is unexpected: %v",
+					reflect.TypeOf(event.Object))
+			}
 
 			if succeeded(pod) {
 				return nil

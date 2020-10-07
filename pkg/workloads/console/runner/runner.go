@@ -243,7 +243,7 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 		return pod != nil && pod.Status.Phase == corev1.PodSucceeded
 	}
 
-	pod, _, err := c.GetAttachablePod(csl)
+	pod, _, err := c.GetAttachablePod(ctx, csl)
 	if err != nil {
 		return err
 	}
@@ -256,8 +256,17 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 
 	// We need to fetch the pod again now we have a watcher to avoid a race
 	// where the pod completed before we were listening for watch events
-	pod, _, err = c.GetAttachablePod(csl)
-	if err != nil && !apierrors.IsNotFound(err) {
+	pod, _, err = c.GetAttachablePod(ctx, csl)
+	if err != nil {
+		// If we can't find the pod, then we should assume it finished successfully. Otherwise
+		// we might race against the operator to access a pod it wants to delete, and cause
+		// our runner to exit with error when all is fine.
+		//
+		// TODO: It may be better to recheck the console and look in its status?
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
 		return fmt.Errorf("error retrieving pod: %w", err)
 	}
 
@@ -362,7 +371,7 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return err
 	}
 
-	pod, containerName, err := c.GetAttachablePod(csl)
+	pod, containerName, err := c.GetAttachablePod(ctx, csl)
 	if err != nil {
 		return fmt.Errorf("could not find pod to attach to: %w", err)
 	}
@@ -866,9 +875,9 @@ func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {
 }
 
 // GetAttachablePod returns an attachable pod for the given console
-func (c *Runner) GetAttachablePod(csl *workloadsv1alpha1.Console) (*corev1.Pod, string, error) {
+func (c *Runner) GetAttachablePod(ctx context.Context, csl *workloadsv1alpha1.Console) (*corev1.Pod, string, error) {
 	pod := &corev1.Pod{}
-	err := c.kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: csl.Namespace, Name: csl.Status.PodName}, pod)
+	err := c.kubeClient.Get(ctx, client.ObjectKey{Namespace: csl.Namespace, Name: csl.Status.PodName}, pod)
 	if err != nil {
 		return nil, "", err
 	}

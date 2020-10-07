@@ -257,7 +257,16 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 	// We need to fetch the pod again now we have a watcher to avoid a race
 	// where the pod completed before we were listening for watch events
 	pod, _, err = c.GetAttachablePod(ctx, csl)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil {
+		// If we can't find the pod, then we should assume it finished successfully. Otherwise
+		// we might race against the operator to access a pod it wants to delete, and cause
+		// our runner to exit with error when all is fine.
+		//
+		// TODO: It may be better to recheck the console and look in its status?
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
 		return fmt.Errorf("error retrieving pod: %w", err)
 	}
 

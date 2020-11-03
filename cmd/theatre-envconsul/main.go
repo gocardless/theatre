@@ -238,8 +238,25 @@ func mainError(ctx context.Context, command string) (err error) {
 				os.Setenv(key, value)
 			}
 
+			command := (*execCommand)[0]
+			binary, err := execpkg.LookPath(command)
+			if err != nil {
+				return fmt.Errorf("failed to find application %s in path: %w", command, err)
+			}
+
+			logger.Info(
+				"executing wrapped application",
+				"event", "theatre_envconsul.exec",
+				"binary", binary,
+			)
+
+			args := []string{command}
+			for _, arg := range (*execCommand)[1:] {
+				args = append(args, arg)
+			}
+
 			// Run the command directly
-			if err := syscall.Exec((*execCommand)[0], (*execCommand)[1:], os.Environ()); err != nil {
+			if err := syscall.Exec(binary, args, os.Environ()); err != nil {
 				return errors.Wrap(err, "failed to execute envconsul")
 			}
 		}

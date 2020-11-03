@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -285,6 +286,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	// Create pod from fixture, verify that pod runs successfully and resolves the secret
 	// environment variable
 	expectResolvesEnvVariables := func() {
+		ctx := context.Background()
 		decoder := scheme.Codecs.UniversalDeserializer()
 		obj, _, err := decoder.Decode([]byte(podFixtureYAML), nil, nil)
 		Expect(err).NotTo(HaveOccurred(), "invalid pod spec")
@@ -293,11 +295,11 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		podsClient := clientset.CoreV1().Pods("staging")
 
 		By("creating pod")
-		pod, err := podsClient.Create(podFixture)
+		pod, err := podsClient.Create(ctx, podFixture, metav1.CreateOptions{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create pod")
 
 		getPodPhase := func() corev1.PodPhase {
-			pod, err := podsClient.Get(pod.Name, metav1.GetOptions{})
+			pod, err := podsClient.Get(ctx, pod.Name, metav1.GetOptions{})
 			if err != nil {
 				return ""
 			}
@@ -312,7 +314,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 		By("checking pod logs for secret value")
 		req := podsClient.GetLogs(pod.Name, &corev1.PodLogOptions{})
-		logs, err := req.Stream()
+		logs, err := req.Stream(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		defer logs.Close()
 

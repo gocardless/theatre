@@ -49,6 +49,7 @@ var (
 	execInstallPath             = exec.Flag("install-path", "Path containing installed binaries").Default(defaultInstallPath).String()
 	execTheatreEnvconsulBinary  = exec.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
 	execServiceAccountTokenFile = exec.Flag("service-account-token-file", "Path to Kubernetes service account token file").String()
+	execLease                   = exec.Flag("lease", "Lease secrets using envconsul").Default("false").Bool()
 	execCommand                 = exec.Arg("command", "Command to execute").Required().Strings()
 
 	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
@@ -144,42 +145,103 @@ func mainError(ctx context.Context, command string) (err error) {
 			}
 		}
 
-		envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execTheatreEnvconsulBinary, *execCommand)
-		configJSONContents, err := json.Marshal(envconsulConfig)
-		if err != nil {
-			return err
-		}
+		if *execLease {
+			envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execTheatreEnvconsulBinary, *execCommand)
+			configJSONContents, err := json.Marshal(envconsulConfig)
+			if err != nil {
+				return err
+			}
 
-		tempConfigFile, err := ioutil.TempFile("", "envconsul-config-*.json")
-		if err != nil {
-			return errors.Wrap(err, "failed to create temporary file for envconsul")
-		}
+			tempConfigFile, err := ioutil.TempFile("", "envconsul-config-*.json")
+			if err != nil {
+				return errors.Wrap(err, "failed to create temporary file for envconsul")
+			}
 
-		logger.Info(
-			"creating envconsul config file",
-			"event", "envconsul_config_file.create",
-			"path", tempConfigFile.Name(),
-		)
-		if err := ioutil.WriteFile(tempConfigFile.Name(), configJSONContents, 0444); err != nil {
-			return errors.Wrap(err, "failed to write temporary file for envconsul")
-		}
+			logger.Info(
+				"creating envconsul config file",
+				"event", "envconsul_config_file.create",
+				"path", tempConfigFile.Name(),
+			)
+			if err := ioutil.WriteFile(tempConfigFile.Name(), configJSONContents, 0444); err != nil {
+				return errors.Wrap(err, "failed to write temporary file for envconsul")
+			}
 
-		// Set all our environment variables which will proxy through to our exec'd process
-		for key, value := range env {
-			os.Setenv(key, value)
-		}
+			// Set all our environment variables which will proxy through to our exec'd process
+			for key, value := range env {
+				os.Setenv(key, value)
+			}
 
-		envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
-		envconsulArgs := []string{envconsulBinaryPath, "-once", "-config", tempConfigFile.Name()}
+			envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
+			envconsulArgs := []string{envconsulBinaryPath, "-once", "-config", tempConfigFile.Name()}
 
-		logger.Info(
-			"executing envconsul",
-			"event", "envconsul.exec",
-			"binary", envconsulBinaryPath,
-			"path", tempConfigFile.Name(),
-		)
-		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
-			return errors.Wrap(err, "failed to execute envconsul")
+			logger.Info(
+				"executing envconsul",
+				"event", "envconsul.exec",
+				"binary", envconsulBinaryPath,
+				"path", tempConfigFile.Name(),
+			)
+			if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
+				return errors.Wrap(err, "failed to execute envconsul")
+			}
+		} else {
+			envconsulConfig := execVaultOptions.EnvconsulConfig(
+				secretEnv, vaultToken, *execTheatreEnvconsulBinary,
+				[]string{*execTheatreEnvconsulBinary, "env"},
+			)
+			configJSONContents, err := json.Marshal(envconsulConfig)
+			if err != nil {
+				return err
+			}
+
+			tempConfigFile, err := ioutil.TempFile("", "envconsul-config-*.json")
+			if err != nil {
+				return errors.Wrap(err, "failed to create temporary file for envconsul")
+			}
+
+			logger.Info(
+				"creating envconsul config file",
+				"event", "envconsul_config_file.create",
+				"path", tempConfigFile.Name(),
+			)
+			if err := ioutil.WriteFile(tempConfigFile.Name(), configJSONContents, 0444); err != nil {
+				return errors.Wrap(err, "failed to write temporary file for envconsul")
+			}
+
+			// Set all our environment variables which will proxy through to our exec'd process
+			for key, value := range env {
+				os.Setenv(key, value)
+			}
+
+			envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
+			envconsulArgs := []string{"-once", "-config", tempConfigFile.Name()}
+
+			logger.Info(
+				"executing envconsul",
+				"event", "envconsul.exec",
+				"binary", envconsulBinaryPath,
+				"path", tempConfigFile.Name(),
+			)
+
+			output, err := execpkg.CommandContext(ctx, envconsulBinaryPath, envconsulArgs...).Output()
+			if err != nil {
+				return errors.Wrap(err, "failed to get envconsul environment variables")
+			}
+
+			envMap := map[string]string{}
+			err = json.Unmarshal(output, &envMap)
+			if err != nil {
+				return errors.Wrap(err, "failed to decode envconsul environment variables")
+			}
+
+			// Update the environment variables based on updated environment variables
+			for key, value := range envMap {
+				os.Setenv(key, value)
+			}
+
+			// Run the command directly
+			if err := syscall.Exec((*execCommand)[0], (*execCommand)[1:], os.Environ()); err != nil {
+				return errors.Wrap(err, "failed to execute envconsul")
+			}
 		}
 
 	// Hidden command that allows us to exec a command using base64 encoded arguments. As

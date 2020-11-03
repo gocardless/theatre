@@ -53,6 +53,8 @@ var (
 
 	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
 	base64ExecCommand = base64Exec.Arg("base64-command", "Command to execute").Required().Strings()
+
+	envCmd = app.Command("env", "Output environment as JSON").Hidden()
 )
 
 func main() {
@@ -206,6 +208,16 @@ func mainError(ctx context.Context, command string) (err error) {
 
 		if err := syscall.Exec(args[0], args, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute decoded arguments")
+		}
+	case envCmd.FullCommand():
+		envMap := map[string]string{}
+		for _, envEntry := range os.Environ() {
+			vals := strings.Split(envEntry, "=")
+			envMap[vals[0]] = vals[1]
+		}
+		err := json.NewEncoder(os.Stdout).Encode(envMap)
+		if err != nil {
+			return fmt.Errorf("failed to encode environment: %w", err)
 		}
 
 	default:

@@ -155,4 +155,9 @@ rules:
       - list
       - get
       - watch
+  - apiGroups: [""]
+    resources: 
+      - pods
+    verbs:
+      - watch
 ```

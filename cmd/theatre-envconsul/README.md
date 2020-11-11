@@ -23,8 +23,8 @@ application environments. This is a shim around Hashicorp's `envconsul`, and it:
   account token for a Vault token
 - Renders a Hashicorp `envconsul` configuration file with the Vault token,
   specifying the command the `envconsul` should run and how to find Vault, etc.
-- Exec's into `envconsul` with the rendered configuration file, leaving
-  `envconsul` to run the command
+- Exec's into `envconsul` with the rendered configuration file to obtain secrets
+- Runs the command providing the fetched secrets in the processes environment
 
 ## `base64-exec`
 

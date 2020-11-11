@@ -53,6 +53,8 @@ var (
 
 	base64Exec        = app.Command("base64-exec", "Decode base64 encoded args and exec them").Hidden()
 	base64ExecCommand = base64Exec.Arg("base64-command", "Command to execute").Required().Strings()
+
+	envCmd = app.Command("env", "Output environment as JSON").Hidden()
 )
 
 func main() {
@@ -79,7 +81,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			*installTheatreEnvconsulBinary: "theatre-envconsul",
 		}
 
-		logger.Info("msg", "copying files into install path", "file_path", *installPath)
+		logger.Info("copying files into install path", "file_path", *installPath)
 		for src, dstName := range files {
 			if err := copyExecutable(src, path.Join(*installPath, dstName)); err != nil {
 				return errors.Wrap(err, "error copying file")
@@ -142,7 +144,10 @@ func mainError(ctx context.Context, command string) (err error) {
 			}
 		}
 
-		envconsulConfig := execVaultOptions.EnvconsulConfig(secretEnv, vaultToken, *execTheatreEnvconsulBinary, *execCommand)
+		envconsulConfig := execVaultOptions.EnvconsulConfig(
+			secretEnv, vaultToken, *execTheatreEnvconsulBinary,
+			[]string{*execTheatreEnvconsulBinary, "env"},
+		)
 		configJSONContents, err := json.Marshal(envconsulConfig)
 		if err != nil {
 			return err
@@ -168,7 +173,7 @@ func mainError(ctx context.Context, command string) (err error) {
 		}
 
 		envconsulBinaryPath := path.Join(*execInstallPath, "envconsul")
-		envconsulArgs := []string{envconsulBinaryPath, "-once", "-config", tempConfigFile.Name()}
+		envconsulArgs := []string{"-once", "-config", tempConfigFile.Name()}
 
 		logger.Info(
 			"executing envconsul",
@@ -176,7 +181,42 @@ func mainError(ctx context.Context, command string) (err error) {
 			"binary", envconsulBinaryPath,
 			"path", tempConfigFile.Name(),
 		)
-		if err := syscall.Exec(envconsulBinaryPath, envconsulArgs, os.Environ()); err != nil {
+
+		output, err := execpkg.CommandContext(ctx, envconsulBinaryPath, envconsulArgs...).Output()
+		if err != nil {
+			return errors.Wrap(err, "failed to get envconsul environment variables")
+		}
+
+		envMap := map[string]string{}
+		err = json.Unmarshal(output, &envMap)
+		if err != nil {
+			return errors.Wrap(err, "failed to decode envconsul environment variables")
+		}
+
+		// Update the environment variables based on updated environment variables
+		for key, value := range envMap {
+			os.Setenv(key, value)
+		}
+
+		command := (*execCommand)[0]
+		binary, err := execpkg.LookPath(command)
+		if err != nil {
+			return fmt.Errorf("failed to find application %s in path: %w", command, err)
+		}
+
+		logger.Info(
+			"executing wrapped application",
+			"event", "theatre_envconsul.exec",
+			"binary", binary,
+		)
+
+		args := []string{command}
+		for _, arg := range (*execCommand)[1:] {
+			args = append(args, arg)
+		}
+
+		// Run the command directly
+		if err := syscall.Exec(binary, args, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute envconsul")
 		}
 
@@ -206,6 +246,16 @@ func mainError(ctx context.Context, command string) (err error) {
 
 		if err := syscall.Exec(args[0], args, os.Environ()); err != nil {
 			return errors.Wrap(err, "failed to execute decoded arguments")
+		}
+	case envCmd.FullCommand():
+		envMap := map[string]string{}
+		for _, envEntry := range os.Environ() {
+			vals := strings.Split(envEntry, "=")
+			envMap[vals[0]] = vals[1]
+		}
+		err := json.NewEncoder(os.Stdout).Encode(envMap)
+		if err != nil {
+			return fmt.Errorf("failed to encode environment: %w", err)
 		}
 
 	default:

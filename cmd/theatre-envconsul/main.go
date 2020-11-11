@@ -81,7 +81,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			*installTheatreEnvconsulBinary: "theatre-envconsul",
 		}
 
-		logger.Info("msg", "copying files into install path", "file_path", *installPath)
+		logger.Info("copying files into install path", "file_path", *installPath)
 		for src, dstName := range files {
 			if err := copyExecutable(src, path.Join(*installPath, dstName)); err != nil {
 				return errors.Wrap(err, "error copying file")

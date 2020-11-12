@@ -250,7 +250,7 @@ func mainError(ctx context.Context, command string) (err error) {
 	case envCmd.FullCommand():
 		envMap := map[string]string{}
 		for _, envEntry := range os.Environ() {
-			vals := strings.Split(envEntry, "=")
+			vals := strings.SplitN(envEntry, "=", 2)
 			envMap[vals[0]] = vals[1]
 		}
 		err := json.NewEncoder(os.Stdout).Encode(envMap)

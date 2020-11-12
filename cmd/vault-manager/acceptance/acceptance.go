@@ -27,7 +27,9 @@ import (
 const (
 	AuthBackendMountPath = "kubernetes"
 	AuthBackendRole      = "default"
-	SentinelSecretValue  = "eats-the-world"
+	// use "=" characters in the secret to test the string splitting code in
+	// theatre-envconsol is correct
+	SentinelSecretValue = "eats=the=world"
 )
 
 type Runner struct{}

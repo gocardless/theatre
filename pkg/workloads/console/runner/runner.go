@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -388,10 +389,38 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		attacher = newNoninteractiveAttacher(c.clientset, opts.KubeConfig)
 	}
 
-	if err := attacher.Attach(ctx, pod, containerName, opts.IO); err != nil {
+	err = attacher.Attach(ctx, pod, containerName, opts.IO)
+	if err != nil {
+		// If this is true, it is likely that the pod has already terminated for whatever
+		// reason - very often because a command has run so quickly that by the time waitForConsole
+		// is done the script has run to completion. We don't necessarily want to error out
+		// (only if the pod exited unsuccessfully).
+		if strings.Contains(err.Error(), fmt.Sprintf("container %s not found in pod %s", containerName, pod.Name)) {
+			return c.extractLogs(ctx, csl, pod, containerName, opts.IO)
+		}
+
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
+	return c.waitForSuccess(ctx, csl)
+}
+
+func (c *Runner) extractLogs(ctx context.Context, csl *workloadsv1alpha1.Console, pod *corev1.Pod, containerName string, streams IOStreams) error {
+	pods := c.clientset.CoreV1().Pods(pod.Namespace)
+
+	logs, err := pods.GetLogs(pod.Name, &corev1.PodLogOptions{Container: containerName}).Stream(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer logs.Close()
+
+	_, err = io.Copy(streams.Out, logs)
+	if err != nil {
+		return err
+	}
+
+	// Propagate the exit status of the pod as though we had actually attached.
 	return c.waitForSuccess(ctx, csl)
 }
 
@@ -747,7 +776,6 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 
 var (
 	consolePendingAuthorisationError = errors.New("console pending authorisation")
-	consoleStoppedError              = errors.New("console is stopped")
 	consoleNotFoundError             = errors.New("console not found")
 )
 
@@ -787,8 +815,10 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 	if isPendingAuthorisation(csl) {
 		return csl, consolePendingAuthorisationError
 	}
+	// If the console has already stopped it may have already run to
+	// completion, so let's return it
 	if isStopped(csl) {
-		return nil, consoleStoppedError
+		return csl, nil
 	}
 
 	status := w.ResultChan()
@@ -812,8 +842,10 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 			if isPendingAuthorisation(csl) {
 				return csl, consolePendingAuthorisationError
 			}
+			// If the console has already stopped it may have already run to
+			// completion, so let's return it
 			if isStopped(csl) {
-				return nil, consoleStoppedError
+				return csl, nil
 			}
 		case <-ctx.Done():
 			if csl == nil {
@@ -825,6 +857,10 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
+	if csl.Status.Phase == workloadsv1alpha1.ConsoleStopped {
+		return nil
+	}
+
 	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
 	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
 	if err != nil {

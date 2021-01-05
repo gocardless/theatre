@@ -66,7 +66,7 @@ func main() {
 	defer cancel()
 
 	if err := mainError(ctx, command); err != nil {
-		logger.Error(err, "exiting with error", "error", err)
+		logger.Error(err, "exiting with error")
 		os.Exit(1)
 	}
 }

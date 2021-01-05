@@ -273,6 +273,36 @@ spec:
         - env
 `
 
+const annotatedNonRootPodYAMLFiles = `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: read-a-secret-
+  namespace: staging # provisioned by the acceptance kustomize overlay
+  annotations:
+    envconsul-injector.vault.crd.gocardless.com/configs: app
+spec:
+  serviceAccountName: secret-reader
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: theatre:latest
+      imagePullPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      env:
+        - name: VAULT_FILE_RESOLVED_KEY
+          value: vault-file:jimmy:/tmp/jimmy
+        - name: VAULT_TMP_FILE_RESOLVED_KEY
+          value: vault-file:jimmy
+      command:
+        - bash
+        - -c
+        - 'echo -n "file:" && cat $(echo $VAULT_FILE_RESOLVED_KEY) && echo -n " tmp:" && cat $(echo $VAULT_TMP_FILE_RESOLVED_KEY)'
+        `
+
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	var (
 		clientset      *kubernetes.Clientset
@@ -287,7 +317,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 	// Create pod from fixture, verify that pod runs successfully and resolves the secret
 	// environment variable
-	expectResolvesEnvVariables := func() {
+	expectResolvesEnvVariables := func(expects func(buffer bytes.Buffer)) {
 		ctx := context.Background()
 		decoder := scheme.Codecs.UniversalDeserializer()
 		obj, _, err := decoder.Decode([]byte(podFixtureYAML), nil, nil)
@@ -324,25 +354,51 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		_, err = io.Copy(&buffer, logs)
 
 		Expect(err).NotTo(HaveOccurred())
+		expects(buffer)
+	}
+
+	expectsFunc := func(buffer bytes.Buffer) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("VAULT_RESOLVED_KEY=%s", SentinelSecretValue)),
 		)
+		return
+	}
+
+	expectsFuncFiles := func(buffer bytes.Buffer) {
+		Expect(buffer.String()).To(
+			ContainSubstring(fmt.Sprintf("file:%s", SentinelSecretValue)),
+		)
+		Expect(buffer.String()).To(
+			ContainSubstring(fmt.Sprintf("tmp:%s", SentinelSecretValue)),
+		)
+		return
 	}
 
 	Describe("theatre-envconsul", func() {
 		BeforeEach(func() { podFixtureYAML = rawPodYAML })
 
-		It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+		It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
 
 		Context("As configured by the vault envconsul-injector webhook", func() {
 			BeforeEach(func() { podFixtureYAML = annotatedPodYAML })
 
-			It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+			It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
 
 			Context("With a non-root user", func() {
 				BeforeEach(func() { podFixtureYAML = annotatedNonRootPodYAML })
 
-				It("Resolves env variables into the pod command", expectResolvesEnvVariables)
+				It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
+			})
+		})
+	})
+
+	Describe("theatre-envconsul files", func() {
+		Context("As configured by the vault envconsul-injector webhook", func() {
+
+			Context("With a non-root user", func() {
+				BeforeEach(func() { podFixtureYAML = annotatedNonRootPodYAMLFiles })
+
+				It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFuncFiles) })
 			})
 		})
 	})

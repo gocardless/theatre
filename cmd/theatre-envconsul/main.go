@@ -217,7 +217,11 @@ func mainError(ctx context.Context, command string) (err error) {
 
 		output, err := execpkg.CommandContext(ctx, envconsulBinaryPath, envconsulArgs...).Output()
 		if err != nil {
-			return errors.Wrap(err, "failed to get envconsul environment variables")
+			if ee, ok := err.(*execpkg.ExitError); ok {
+				output = ee.Stderr
+			}
+
+			return errors.Wrapf(err, "failed to get envconsul environment variables: %s", output)
 		}
 
 		envMap := map[string]string{}

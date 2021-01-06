@@ -11,6 +11,7 @@ import (
 	"os"
 	execpkg "os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -65,7 +66,7 @@ func main() {
 	defer cancel()
 
 	if err := mainError(ctx, command); err != nil {
-		logger.Error(err, "exiting with error", "error", err)
+		logger.Error(err, "exiting with error")
 		os.Exit(1)
 	}
 }
@@ -133,6 +134,38 @@ func mainError(ctx context.Context, command string) (err error) {
 			}
 		}
 
+		var filePaths = environment{}
+
+		// Rewrite 'vault-file:' prefixed env vars to 'vault:' prefixed env vars. Store the
+		// paths to which they should be written to in filePaths. When no path is
+		// provided, use "" as a placeholder.
+		//
+		// For reference, the expected formats are 'vault-file:tls-key/2021010100' and
+		// 'vault-file:ssh-key/2021010100:/home/user/.ssh/id_rsa'
+		for key, value := range env {
+			if strings.HasPrefix(value, "vault-file:") {
+				trimmed := strings.TrimSpace(
+					strings.TrimPrefix(value, "vault-file:"),
+				)
+				if len(trimmed) == 0 {
+					return fmt.Errorf("empty vault-file env var: %v", value)
+				}
+
+				split := strings.SplitN(trimmed, ":", 2)
+
+				// determine if we define a path at which to place the file. For SplitN,
+				// N=2 so we only have two cases
+				switch len(split) {
+				case 2: // path and key
+					filePaths[key] = split[1]
+					env[key] = fmt.Sprintf("vault:%s", split[0])
+				case 1: // just key
+					filePaths[key] = ""
+					env[key] = fmt.Sprintf("vault:%s", trimmed)
+				}
+			}
+		}
+
 		var secretEnv = environment{}
 
 		// For all the environment values that look like they should be vault references, we
@@ -184,13 +217,51 @@ func mainError(ctx context.Context, command string) (err error) {
 
 		output, err := execpkg.CommandContext(ctx, envconsulBinaryPath, envconsulArgs...).Output()
 		if err != nil {
-			return errors.Wrap(err, "failed to get envconsul environment variables")
+			if ee, ok := err.(*execpkg.ExitError); ok {
+				output = ee.Stderr
+			}
+
+			return errors.Wrapf(err, "failed to get envconsul environment variables: %s", output)
 		}
 
 		envMap := map[string]string{}
 		err = json.Unmarshal(output, &envMap)
 		if err != nil {
 			return errors.Wrap(err, "failed to decode envconsul environment variables")
+		}
+
+		// For every file reference in filePaths, write the value resolved by envconsul to
+		// the path in filePaths. Returns the path of the written file in the env var that
+		// requested it.
+		for key, path := range filePaths {
+			if path == "" {
+				// generate file path prefixed by key
+				tempFilePath, err := ioutil.TempFile("", fmt.Sprintf("%s-*", key))
+				if err != nil {
+					return errors.Wrap(err, fmt.Sprintf("failed to write temporary file for key %s", key))
+				}
+
+				path = tempFilePath.Name()
+			}
+			// ensure the path structure is available
+			err := os.MkdirAll(filepath.Dir(path), 0600)
+			if err != nil {
+				return fmt.Errorf("failed to ensure path structure is available: %s", err.Error())
+			}
+
+			logger.Info(
+				"creating vault secret file",
+				"event", "envconsul_secret_file.create",
+				"path", path,
+			)
+			// write file with value of envMap[key]
+			if err := ioutil.WriteFile(path, []byte(envMap[key]), 0600); err != nil {
+				return errors.Wrap(err,
+					fmt.Sprintf("failed to write file with key %s to path %s", key, path))
+			}
+
+			// update the env with the location of the file we've written
+			envMap[key] = path
 		}
 
 		// Update the environment variables based on updated environment variables

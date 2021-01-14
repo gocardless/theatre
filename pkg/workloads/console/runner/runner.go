@@ -399,10 +399,42 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 			return c.extractLogs(ctx, csl, pod, containerName, opts.IO)
 		}
 
+		// Check the pod health
+		healthy, reason, checkErr := c.getPodHealth(ctx, pod)
+		if checkErr != nil {
+			return fmt.Errorf("failed to check pod status: %w", checkErr)
+		}
+		if !healthy {
+			return fmt.Errorf("pod not in healthy state: %s", reason)
+		}
+
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
 	return c.waitForSuccess(ctx, csl)
+}
+
+func (c *Runner) getPodHealth(ctx zcontext.Context, pod *corev1.Pod) (bool, string, error) {
+	// Try and get the pod status
+	pod, err := c.clientset.
+		CoreV1().
+		Pods(pod.GetNamespace()).
+		Get(ctx, pod.GetName(), metav1.GetOptions{})
+	if err != nil {
+		return false, "failed to get pod", err
+	}
+
+	if pod.Status.Phase != "Running" {
+		return false, fmt.Sprintf("pod is not running; current phase: %s", pod.Status.Phase), nil
+	}
+
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == "Ready" && condition.Status == "False" {
+			return false, condition.Message, nil
+		}
+	}
+
+	return true, "", nil
 }
 
 func (c *Runner) extractLogs(ctx context.Context, csl *workloadsv1alpha1.Console, pod *corev1.Pod, containerName string, streams IOStreams) error {

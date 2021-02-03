@@ -118,8 +118,6 @@ var _ = Describe("PodInjector", func() {
 							}),
 							"Args": Equal([]string{
 								"exec",
-								"--install-path",
-								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
 								"--vault-path-prefix",
@@ -231,8 +229,6 @@ var _ = Describe("PodInjector", func() {
 							}),
 							"Args": Equal([]string{
 								"exec",
-								"--install-path",
-								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
 								"--vault-path-prefix",

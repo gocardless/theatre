@@ -320,7 +320,6 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 	c := &reference
 
 	args := []string{"exec"}
-	args = append(args, "--install-path", i.InstallPath)
 	args = append(args, "--vault-address", i.Address)
 	args = append(args, "--vault-path-prefix", secretMountPathPrefix)
 	args = append(args, "--auth-backend-mount-path", i.AuthMountPath)

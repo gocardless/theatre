@@ -20,6 +20,9 @@ import (
 )
 
 const SecretsInjectorFQDN = "secrets-injector.vault.crd.gocardless.com"
+const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
+
+var FQDNArray = []string{SecretsInjectorFQDN, EnvconsulInjectorFQDN}
 
 type SecretsInjector struct {
 	client  client.Client
@@ -117,7 +120,7 @@ func (i *SecretsInjector) Handle(ctx context.Context, req admission.Request) (re
 	// path for all pod creation. We need to exit for pods that don't have the
 	// annotation on them here so they can start uninterrupted in the event
 	// code futher along returns an error.
-	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", SecretsInjectorFQDN)]; !ok {
+	if _, ok := getFQDNConfig(pod.Annotations, FQDNArray); !ok {
 		logger.Info("skipping pod with no annotation", "event", "pod.skipped", "msg", "no annotation found")
 		skipTotal.With(labels).Inc()
 		return admission.Allowed("no annotation found")
@@ -270,7 +273,7 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 // If no config file is specified, we inject theatre-secrets but don't load
 // configuration from files, relying solely on environment variables.
 func parseContainerConfigs(pod corev1.Pod) map[string]string {
-	configString, ok := pod.Annotations[fmt.Sprintf("%s/configs", SecretsInjectorFQDN)]
+	configString, ok := getFQDNConfig(pod.Annotations, FQDNArray)
 	if !ok {
 		return nil
 	}
@@ -356,4 +359,21 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 	)
 
 	return *c
+}
+
+// getFQDNConfig takes a set of pod annotations (map[string]string), and an
+// array of FQDNs to check for. If any are found under key 'FQDN/configs' then
+// return the config and a true bool
+//
+// This is a temporary measure to support two FQDNs whilst we migrate away from
+// the envconsul name
+func getFQDNConfig(podAnnotations map[string]string, FQDNArray []string) (string, bool) {
+	for _, name := range FQDNArray {
+		data, ok := podAnnotations[fmt.Sprintf("%s/configs", name)]
+		if !ok {
+			continue
+		}
+		return data, ok
+	}
+	return "", false
 }

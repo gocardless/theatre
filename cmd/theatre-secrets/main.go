@@ -29,18 +29,18 @@ import (
 var logger logr.Logger
 
 var (
-	app = kingpin.New("theatre-envconsul", "Kubernetes container vault support using envconsul").Version(cmd.VersionStanza())
+	app = kingpin.New("theatre-secrets", "Kubernetes container vault support using secrets").Version(cmd.VersionStanza())
 
 	commonOpts = cmd.NewCommonOptions(app)
 
-	defaultInstallPath             = "/var/theatre-vault"
-	defaultTheatreEnvconsulPath, _ = os.Executable()
+	defaultInstallPath           = "/var/theatre-vault"
+	defaultTheatreSecretsPath, _ = os.Executable()
 
-	install                       = app.Command("install", "Install binaries into path")
-	installPath                   = install.Flag("path", "Path to install theatre binaries").Default(defaultInstallPath).String()
-	installTheatreEnvconsulBinary = install.Flag("theatre-envconsul-binary", "Path to theatre-envconsul binary").Default(defaultTheatreEnvconsulPath).String()
+	install                     = app.Command("install", "Install binaries into path")
+	installPath                 = install.Flag("path", "Path to install theatre binaries").Default(defaultInstallPath).String()
+	installTheatreSecretsBinary = install.Flag("theatre-secrets-binary", "Path to theatre-secrets binary").Default(defaultTheatreSecretsPath).String()
 
-	exec                        = app.Command("exec", "Authenticate with vault and exec envconsul")
+	exec                        = app.Command("exec", "Authenticate with vault and exec secrets")
 	execVaultOptions            = newVaultOptions(exec)
 	execConfigFile              = exec.Flag("config-file", "App config file").String()
 	execServiceAccountTokenFile = exec.Flag("service-account-token-file", "Path to Kubernetes service account token file").String()
@@ -73,7 +73,7 @@ func mainError(ctx context.Context, command string) (err error) {
 	// and pull secrets.
 	case install.FullCommand():
 		files := map[string]string{
-			*installTheatreEnvconsulBinary: "theatre-envconsul",
+			*installTheatreSecretsBinary: "theatre-secrets",
 		}
 
 		logger.Info("copying files into install path", "file_path", *installPath)
@@ -270,7 +270,7 @@ func mainError(ctx context.Context, command string) (err error) {
 
 		logger.Info(
 			"executing wrapped application",
-			"event", "theatre_envconsul.exec",
+			"event", "theatre_secrets.exec",
 			"binary", binary,
 		)
 

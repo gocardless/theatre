@@ -7,7 +7,7 @@ kind: Namespace
 metadata:
   name: staging
   labels:
-    theatre-envconsul-injector: enabled
+    theatre-secrets-injector: enabled
 ---
 apiVersion: v1
 kind: ServiceAccount

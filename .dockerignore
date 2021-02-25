@@ -7,5 +7,5 @@ config/
 
 # Acceptance test suites don't need recompiling into our docker image
 cmd/acceptance/
-cmd/theatre-envconsul/acceptance/
+cmd/theatre-secrets/acceptance/
 pkg/workloads/console/acceptance/

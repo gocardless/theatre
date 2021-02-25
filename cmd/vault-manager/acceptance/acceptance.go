@@ -28,7 +28,7 @@ const (
 	AuthBackendMountPath = "kubernetes"
 	AuthBackendRole      = "default"
 	// use "=" characters in the secret to test the string splitting code in
-	// theatre-envconsul is correct
+	// theatre-secrets is correct
 	SentinelSecretValue          = "eats=the=world"
 	SentinelSecretFileValue      = "value\x00with\x00nulls"
 	SentinelSecretValueNonASCII  = "valueΣwithλnonσASCIIμ"
@@ -218,7 +218,7 @@ spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
   volumes:
-    - name: theatre-envconsul-serviceaccount
+    - name: theatre-secrets-serviceaccount
       projected:
         sources:
         - serviceAccountToken:
@@ -234,7 +234,7 @@ spec:
         - name: VAULT_TEST_SHELLWORD
           value: vault:shellword
       command:
-        - /usr/local/bin/theatre-envconsul
+        - /usr/local/bin/theatre-secrets
       args:
         - exec
         - --vault-address=http://vault.vault.svc.cluster.local:8200
@@ -244,11 +244,11 @@ spec:
         - --
         - env
       volumeMounts:
-        - name: theatre-envconsul-serviceaccount
+        - name: theatre-secrets-serviceaccount
           mountPath: /var/run/secrets/kubernetes.io/vault
 `
 
-// This pod tests that our mutating webhook injects theatre-envconsul. We'll verify the
+// This pod tests that our mutating webhook injects theatre-secrets. We'll verify the
 // environment is set correctly.
 const annotatedPodYAML = `
 ---
@@ -258,7 +258,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -285,7 +285,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -313,7 +313,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -418,12 +418,12 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		return
 	}
 
-	Describe("theatre-envconsul", func() {
+	Describe("theatre-secrets", func() {
 		BeforeEach(func() { podFixtureYAML = rawPodYAML })
 
 		It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
 
-		Context("As configured by the vault envconsul-injector webhook", func() {
+		Context("As configured by the vault secrets-injector webhook", func() {
 			BeforeEach(func() { podFixtureYAML = annotatedPodYAML })
 
 			It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
@@ -436,8 +436,8 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		})
 	})
 
-	Describe("theatre-envconsul files", func() {
-		Context("As configured by the vault envconsul-injector webhook", func() {
+	Describe("theatre-secrets files", func() {
+		Context("As configured by the vault secrets-injector webhook", func() {
 
 			Context("With a non-root user", func() {
 				BeforeEach(func() { podFixtureYAML = annotatedNonRootPodYAMLFiles })

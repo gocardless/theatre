@@ -19,29 +19,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
+const SecretsInjectorFQDN = "secrets-injector.vault.crd.gocardless.com"
 
-type EnvconsulInjector struct {
+type SecretsInjector struct {
 	client  client.Client
 	logger  logr.Logger
 	decoder *admission.Decoder
-	opts    EnvconsulInjectorOptions
+	opts    SecretsInjectorOptions
 }
 
-func NewEnvconsulInjector(c client.Client, logger logr.Logger, opts EnvconsulInjectorOptions) *EnvconsulInjector {
-	return &EnvconsulInjector{
+func NewSecretsInjector(c client.Client, logger logr.Logger, opts SecretsInjectorOptions) *SecretsInjector {
+	return &SecretsInjector{
 		client: c,
 		logger: logger,
 		opts:   opts,
 	}
 }
 
-func (e *EnvconsulInjector) InjectDecoder(d *admission.Decoder) error {
+func (e *SecretsInjector) InjectDecoder(d *admission.Decoder) error {
 	e.decoder = d
 	return nil
 }
 
-type EnvconsulInjectorOptions struct {
+type SecretsInjectorOptions struct {
 	Image                       string           // image of theatre to use when constructing pod
 	InstallPath                 string           // location of vault installation directory
 	NamespaceLabel              string           // namespace label that enables webhook to operate on
@@ -55,28 +55,28 @@ var (
 	podLabels   = []string{"pod_namespace"}
 	handleTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_vault_envconsul_injector_handle_total",
+			Name: "theatre_vault_secrets_injector_handle_total",
 			Help: "Count of requests handled by the webhook",
 		},
 		podLabels,
 	)
 	mutateTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_vault_envconsul_injector_mutate_total",
+			Name: "theatre_vault_secrets_injector_mutate_total",
 			Help: "Count of pods mutated by the webhook",
 		},
 		podLabels,
 	)
 	skipTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_vault_envconsul_injector_skip_total",
+			Name: "theatre_vault_secrets_injector_skip_total",
 			Help: "Count of pods skipped by the webhook, as they lack annotations",
 		},
 		podLabels,
 	)
 	errorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_vault_envconsul_injector_errors_total",
+			Name: "theatre_vault_secrets_injector_errors_total",
 			Help: "Count of not-allowed responses from webhook",
 		},
 		podLabels,
@@ -88,7 +88,7 @@ func init() {
 	metrics.Registry.MustRegister(handleTotal, mutateTotal, skipTotal, errorsTotal)
 }
 
-func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
+func (i *SecretsInjector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
 	labels := prometheus.Labels{"pod_namespace": req.Namespace}
 	logger := i.logger.WithValues("uuid", string(req.UID))
 	logger.Info("starting request", "event", "request.start")
@@ -117,7 +117,7 @@ func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (
 	// path for all pod creation. We need to exit for pods that don't have the
 	// annotation on them here so they can start uninterrupted in the event
 	// code futher along returns an error.
-	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]; !ok {
+	if _, ok := pod.Annotations[fmt.Sprintf("%s/configs", SecretsInjectorFQDN)]; !ok {
 		logger.Info("skipping pod with no annotation", "event", "pod.skipped", "msg", "no annotation found")
 		skipTotal.With(labels).Inc()
 		return admission.Allowed("no annotation found")
@@ -149,7 +149,7 @@ func (i *EnvconsulInjector) Handle(ctx context.Context, req admission.Request) (
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	mutatedPod := podInjector{EnvconsulInjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
+	mutatedPod := podInjector{SecretsInjectorOptions: i.opts, vaultConfig: vaultConfig}.Inject(*pod)
 	if mutatedPod == nil {
 		logger.Info("no annotation found during inject - this should never occur", "event", "pod.skipped", "msg")
 		return admission.Allowed("no annotation found")
@@ -179,15 +179,15 @@ func newVaultConfig(cfgmap *corev1.ConfigMap) (vaultConfig, error) {
 	return cfg, mapstructure.Decode(cfgmap.Data, &cfg)
 }
 
-// podInjector isolates the logic around injecting theatre-envconsul away from anything to
+// podInjector isolates the logic around injecting theatre-secrets away from anything to
 // do with mutating webhooks. This makes it easy to unit test without getting tangled in
 // webhook noise.
 type podInjector struct {
-	EnvconsulInjectorOptions
+	SecretsInjectorOptions
 	vaultConfig
 }
 
-// Inject configures the given pod to use theatre-envconsul. If it returns nil, it's
+// Inject configures the given pod to use theatre-secrets. If it returns nil, it's
 // because the pod isn't configured for injection.
 func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 	containerConfigs := parseContainerConfigs(pod)
@@ -203,7 +203,7 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 		mutatedPod.Spec.Volumes,
 		// Installation directory for theatre binaries, used as a scratch installation path
 		corev1.Volume{
-			Name: "theatre-envconsul-install",
+			Name: "theatre-secrets-install",
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -211,7 +211,7 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 		// Projected service account tokens that are automatically rotated, unlike the default
 		// service account tokens Kubernetes normally mounts.
 		corev1.Volume{
-			Name: "theatre-envconsul-serviceaccount",
+			Name: "theatre-secrets-serviceaccount",
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
 					// Ensure this token is readable by whatever user the container might run in, as
@@ -260,17 +260,17 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 // parseContainerConfigs extracts the pod annotation and parses that configuration
 // required for this container.
 //
-//   envconsul-injector.vault.crd.gocardless.com/configs: app:config.yaml,sidecar
+//   secrets-injector.vault.crd.gocardless.com/configs: app:config.yaml,sidecar
 //
 // Valid values for the annotation are:
 //
 //   annotation ::= container_config | ',' annotation
 //   container_config ::= container_name ( ':' config_file )?
 //
-// If no config file is specified, we inject theatre-envconsul but don't load
+// If no config file is specified, we inject theatre-secrets but don't load
 // configuration from files, relying solely on environment variables.
 func parseContainerConfigs(pod corev1.Pod) map[string]string {
-	configString, ok := pod.Annotations[fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN)]
+	configString, ok := pod.Annotations[fmt.Sprintf("%s/configs", SecretsInjectorFQDN)]
 	if !ok {
 		return nil
 	}
@@ -290,13 +290,13 @@ func parseContainerConfigs(pod corev1.Pod) map[string]string {
 
 func (i podInjector) buildInitContainer() corev1.Container {
 	return corev1.Container{
-		Name:            "theatre-envconsul-injector",
+		Name:            "theatre-secrets-injector",
 		Image:           i.Image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"theatre-envconsul", "install", "--path", i.InstallPath},
+		Command:         []string{"theatre-secrets", "install", "--path", i.InstallPath},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "theatre-envconsul-install",
+				Name:      "theatre-secrets-install",
 				MountPath: i.InstallPath,
 				ReadOnly:  false,
 			},
@@ -314,8 +314,8 @@ func (i podInjector) buildInitContainer() corev1.Container {
 	}
 }
 
-// configureContainer returns a copy with the command modified to run theatre-envconsul,
-// along with a volume mount that will contain the envconsul binaries.
+// configureContainer returns a copy with the command modified to run theatre-secrets,
+// along with a volume mount that will contain the secrets binaries.
 func (i podInjector) configureContainer(reference corev1.Container, containerConfigPath, secretMountPathPrefix string) corev1.Container {
 	c := &reference
 
@@ -335,7 +335,7 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 	execCommand = append(execCommand, reference.Args...)
 	args = append(args, execCommand...)
 
-	c.Command = []string{path.Join(i.InstallPath, "theatre-envconsul")}
+	c.Command = []string{path.Join(i.InstallPath, "theatre-secrets")}
 	c.Args = args
 
 	c.VolumeMounts = append(
@@ -343,13 +343,13 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 		// Mount the binaries from our installation, ensuring we can run the command in this
 		// container
 		corev1.VolumeMount{
-			Name:      "theatre-envconsul-install",
+			Name:      "theatre-secrets-install",
 			MountPath: i.InstallPath,
 			ReadOnly:  true,
 		},
 		// Explicitly mount service account tokens from the projected volume
 		corev1.VolumeMount{
-			Name:      "theatre-envconsul-serviceaccount",
+			Name:      "theatre-secrets-serviceaccount",
 			MountPath: path.Dir(i.ServiceAccountTokenFile),
 			ReadOnly:  true,
 		},

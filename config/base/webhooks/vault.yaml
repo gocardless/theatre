@@ -14,10 +14,10 @@ webhooks:
         namespace: theatre-system
         path: /mutate-pods
         port: 443
-    name: envconsul-injector.vault.crd.gocardless.com
+    name: secrets-injector.vault.crd.gocardless.com
     namespaceSelector:
       matchExpressions:
-        - key: theatre-envconsul-injector
+        - key: theatre-secrets-injector
           operator: In
           values:
             - enabled

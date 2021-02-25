@@ -47,8 +47,8 @@ expected to create or mutate pods, deployments, etc.
 Utilities for interacting with Vault. Primarily used to inject secret material
 into pods by use of annotations.
 
-- `envconsul-injector.vault.crd.gocardless.com` webhook for injecting the
-  `theatre-envconsul` tool to populate a container's environment with secrets
+- `secrets-injector.vault.crd.gocardless.com` webhook for injecting the
+  `theatre-secrets` tool to populate a container's environment with secrets
   from Vault before executing.
 
 ## Command line interfaces
@@ -63,11 +63,11 @@ list, attach to and authorise [consoles](#workloads).
 
 Run: `go run cmd/theatre-consoles/main.go`
 
-### theatre-envconsul
+### theatre-secrets
 
-See the [command README](cmd/theatre-envconsul/README.md) for further details.
+See the [command README](cmd/theatre-secrets/README.md) for further details.
 
-Run: `go run cmd/theatre-envconsul/main.go`
+Run: `go run cmd/theatre-secrets/main.go`
 
 ## Getting Started
 

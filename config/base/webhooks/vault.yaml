@@ -21,6 +21,10 @@ webhooks:
           operator: In
           values:
             - enabled
+        - key: envconsul-secrets-injector
+          operator: In
+          values:
+            - enabled
     rules:
       - apiGroups:
           - ""

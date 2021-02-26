@@ -47,7 +47,7 @@ func (e *SecretsInjector) InjectDecoder(d *admission.Decoder) error {
 type SecretsInjectorOptions struct {
 	Image                       string           // image of theatre to use when constructing pod
 	InstallPath                 string           // location of vault installation directory
-	NamespaceLabel              string           // namespace label that enables webhook to operate on
+	NamespaceLabel              []string         // namespace label that enables webhook to operate on
 	VaultConfigMapKey           client.ObjectKey // reference to the vault config configMap
 	ServiceAccountTokenFile     string           // mount path of our projected service account token
 	ServiceAccountTokenExpiry   time.Duration    // Kubelet expiry for the service account token

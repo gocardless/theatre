@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kingpin"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
@@ -25,7 +26,7 @@ var (
 	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
 	theatreImage            = app.Flag("theatre-image", "Set to the same image as current binary").Required().String()
 	installPath             = app.Flag("install-path", "Location to install theatre binaries").Default("/var/run/theatre").String()
-	namespaceLabel          = app.Flag("namespace-label", "Namespace label that enables webhook to operate on").Default("theatre-secrets-injector").String()
+	namespaceLabel          = app.Flag("namespace-label", "Namespace label that enables webhook to operate on").Default("envconsul-secrets-injector,theatre-secrets-injector").String()
 	vaultConfigMapName      = app.Flag("vault-configmap-name", "Vault configMap name containing vault configuration").Default("vault-config").String()
 	vaultConfigMapNamespace = app.Flag("vault-configmap-namespace", "Namespace of vault configMap").Default("vault-system").String()
 
@@ -63,7 +64,7 @@ func main() {
 	injectorOpts := vaultv1alpha1.SecretsInjectorOptions{
 		Image:          *theatreImage,
 		InstallPath:    *installPath,
-		NamespaceLabel: *namespaceLabel,
+		NamespaceLabel: strings.Split(*namespaceLabel, ","),
 		VaultConfigMapKey: client.ObjectKey{
 			Namespace: *vaultConfigMapNamespace,
 			Name:      *vaultConfigMapName,

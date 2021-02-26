@@ -26,7 +26,7 @@ vars:
   # We want our mutating webhook to ensure it only ever configures pods to use
   # the same image as it is running itself. If we ensure this, we don't need to
   # worry about maintaining compatibility between versions of the webhook and
-  # theatre-envconsul, as both will use the same version and be deployed
+  # theatre-secrets, as both will use the same version and be deployed
   # atomically.
   - name: THEATRE_IMAGE
     objref:

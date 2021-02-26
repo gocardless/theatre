@@ -5,7 +5,7 @@ metadata:
   name: app
   namespace: staging
   annotations: {
-    "envconsul-injector.vault.crd.gocardless.com/configs": "app:config/app.yaml"
+    "secrets-injector.vault.crd.gocardless.com/configs": "app:config/app.yaml"
   }
 spec:
   serviceAccountName: secret-reader

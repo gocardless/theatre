@@ -24,9 +24,9 @@ builds:
       - CGO_ENABLED=0
 
   - <<: *commonBuildConfig
-    id: theatre-envconsul
-    binary: theatre-envconsul
-    main: cmd/theatre-envconsul/main.go
+    id: theatre-secrets
+    binary: theatre-secrets
+    main: cmd/theatre-secrets/main.go
 
   - <<: *commonBuildConfig
     id: vault-manager

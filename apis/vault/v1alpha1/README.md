@@ -1,8 +1,7 @@
 # vault
 
-[envconsul]: https://github.com/hashicorp/envconsul
-[theatre-envconsul]: ../../../cmd/theatre-envconsul
-[theatre-envconsul-acceptance]: ../../../cmd/theatre-envconsul/acceptance/acceptance.go
+[theatre-secrets]: ../../../cmd/theatre-secrets
+[theatre-secrets-acceptance]: ../../../cmd/theatre-secrets/acceptance/acceptance.go
 
 This package contains any CRDs and webhooks GoCardless use to interact with
 Vault. At present, the only thing we provide is a webhook to automatically
@@ -24,7 +23,7 @@ supported by the Vault ecosystem.
 Instead, we've built a webhook that listens for pods with an annotations like:
 
 ```
-envconsul-injector.vault.crd.gocardless.com/configs: app:config/env.yaml
+secrets-injector.vault.crd.gocardless.com/configs: app:config/env.yaml
 ```
 
 When our webhook sees this annotation, it tries configuring the `app` container
@@ -32,10 +31,10 @@ to pull secrets from Vault, using the configuration from the `config/env.yaml`
 file within the container. It resolves these secrets and sets them as
 environment variables, finally running the original container process.
 
-The webhook makes use of the [`theatre-envconsul`][theatre-envconsul] command to
+The webhook makes use of the [`theatre-secrets`][theatre-secrets] command to
 perform an authentication dance with Vault. Once we've acquired a Vault token,
 we translate our simple [configuration file format](#config) into a Hashicorp
-[envconsul][envconsul] config file, then use envconsul to perform the fetching
+[secrets][secrets] config file, then use secrets to perform the fetching
 and lease-management of the secret values.
 
 ## Configuring Vault
@@ -49,14 +48,32 @@ authentication exchange works as follows:
   review request against the API server configured on this auth backend. If the
   request succeeds, we know the token is valid, and we permit the login
 
-The theatre-envconsul acceptance tests verify this flow against a Vault server.
-If anything is unclear, look at the [Prepare][theatre-envconsul-acceptance]
+The theatre-secrets acceptance tests verify this flow against a Vault server.
+If anything is unclear, look at the [Prepare][theatre-secrets-acceptance]
 method for how we configure the test Vault server.
 
 ## How does the webhook work
 
 Once installed, the webhook will listen for containers with a specific
 annotation:
+
+```yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+  annotations:
+    "secrets-injector.vault.crd.gocardless.com/configs": "app"
+    "envconsul-injector.vault.crd.gocardless.com/configs": "app"
+spec:
+  containers:
+    - name: app
+      command:
+        - env
+```
+Currently we still support the now deprecated envconsul-injector annotation as
+well. The two should not be used together.
 
 ```yaml
 ---
@@ -77,14 +94,11 @@ We will modify this pod to do the following...
 
 ### 1. Install binaries
 
-Add an init container that installs `theatre-envconsul` and the Hashicorp
-[envconsul][envconsul] tool into a temporary installation path volume. We use
-a default storage medium (likely a physical disk backed root filesystem) for
-storage, as the sum of these injected binaries can become quite large.
-
-This installation volume will be mounted into any of the containers that are
-targeted by the `envconsul-injector.vault.crd.gocardless.com/configs`
-annotation. In our example, this means the `app` container is the only target.
+Add an init container that installs the `theatre-secrets` tool into a temporary
+installation path volume. We use a default storage medium. This installation
+volume will be mounted into any of the containers that are targeted by the
+`secrets-injector.vault.crd.gocardless.com/configs` annotation. In our example,
+this means the `app` container is the only target.
 
 ```yaml
 ---
@@ -93,26 +107,26 @@ kind: Pod
 metadata:
   name: app
   annotations:
-    "envconsul-injector.vault.crd.gocardless.com/configs": "app"
+    "secrets-injector.vault.crd.gocardless.com/configs": "app"
 spec:
   initContainers:
-    - name: theatre-envconsul-injector
+    - name: theatre-secrets-injector
       image: theatre:latest
       imagePullPolicy: IfNotPresent
       command:
-        - theatre-envconsul
+        - theatre-secrets
         - install
         - --path
         - /var/run/theatre
       volumeMounts:
         - mountPath: /var/run/theatre
-          name: theatre-envconsul-install
+          name: theatre-secrets-install
   containers:
     - name: app
       command:
         - env
   volumes:
-    - name: theatre-envconsul-install
+    - name: theatre-secrets-install
       emptyDir: {}
 ```
 
@@ -134,7 +148,7 @@ kind: Pod
 metadata:
   name: app
   annotations:
-    "envconsul-injector.vault.crd.gocardless.com/configs": "app"
+    "secrets-injector.vault.crd.gocardless.com/configs": "app"
 spec:
   initContainers: ...
   containers:
@@ -142,12 +156,12 @@ spec:
       command:
         - env
       volumeMounts:
-        - name: theatre-envconsul-serviceaccount
+        - name: theatre-secrets-serviceaccount
           mountPath: /var/run/secrets/kubernetes.io/vault
   volumes:
-    - name: theatre-envconsul-install
+    - name: theatre-secrets-install
       emptyDir: {}
-    - name: theatre-envconsul-serviceaccount
+    - name: theatre-secrets-serviceaccount
       projected:
         sources:
           - serviceAccountToken:
@@ -155,12 +169,12 @@ spec:
               expirationSeconds: 900
 ```
 
-### 3. Prepend theatre-envconsul inject
+### 3. Prepend theatre-secrets inject
 
 The container must resolve secrets before we run the original command. We use
-theatre-envconsul to perform the resolution, then exec the original container
+theatre-secrets to perform the resolution, then exec the original container
 command. The application container has access to the theatre binaries via the
-init container, having installed them in the `theatre-envconsul-install` volume:
+init container, having installed them in the `theatre-secrets-install` volume:
 
 ```yaml
 ---
@@ -169,13 +183,13 @@ kind: Pod
 metadata:
   name: app
   annotations:
-    "envconsul-injector.vault.crd.gocardless.com/configs": "app"
+    "secrets-injector.vault.crd.gocardless.com/configs": "app"
 spec:
   initContainers: ...
   containers:
     - name: app
       command:
-        - /var/run/theatre/theatre-envconsul
+        - /var/run/theatre/theatre-secrets
       args:
         - exec
         - --vault-address=http://vault.vault.svc.cluster.local:8200
@@ -185,14 +199,14 @@ spec:
         - --
         - env
       volumeMounts:
-        - name: theatre-envconsul-install
+        - name: theatre-secrets-install
           mountPath: /var/run/theatre
-        - name: theatre-envconsul-serviceaccount
+        - name: theatre-secrets-serviceaccount
           mountPath: /var/run/secrets/kubernetes.io/vault
   volumes:
-    - name: theatre-envconsul-install
+    - name: theatre-secrets-install
       emptyDir: {}
-    - name: theatre-envconsul-serviceaccount
+    - name: theatre-secrets-serviceaccount
       projected:
         sources:
           - serviceAccountToken:

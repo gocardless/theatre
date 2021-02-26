@@ -28,8 +28,11 @@ const (
 	AuthBackendMountPath = "kubernetes"
 	AuthBackendRole      = "default"
 	// use "=" characters in the secret to test the string splitting code in
-	// theatre-envconsol is correct
-	SentinelSecretValue = "eats=the=world"
+	// theatre-secrets is correct
+	SentinelSecretValue          = "eats=the=world"
+	SentinelSecretFileValue      = "value\x00with\x00nulls"
+	SentinelSecretValueNonASCII  = "valueΣwithλnonσASCIIμ"
+	SentinelSecretValueShellword = "echo $(env)"
 )
 
 type Runner struct{}
@@ -174,6 +177,30 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 		return err
 	}
 
+	secretPath = "secret/data/kubernetes/staging/secret-reader/shellword"
+	secretData = map[string]interface{}{"data": map[string]interface{}{"data": SentinelSecretValueShellword}}
+
+	logger.Log("msg", "writing shellword sentinel secret value", "path", secretPath)
+	if _, err := client.Logical().Write(secretPath, secretData); err != nil {
+		return err
+	}
+
+	secretFilePath := "secret/data/kubernetes/staging/secret-reader/file-with-binary-contents"
+	secretFileData := map[string]interface{}{"data": map[string]interface{}{"data": SentinelSecretFileValue}}
+
+	logger.Log("msg", "writing sentinel secret file", "path", secretFilePath)
+	if _, err := client.Logical().Write(secretFilePath, secretFileData); err != nil {
+		return err
+	}
+
+	secretFilePath = "secret/data/kubernetes/staging/secret-reader/file-non-ascii"
+	secretFileData = map[string]interface{}{"data": map[string]interface{}{"data": SentinelSecretValueNonASCII}}
+
+	logger.Log("msg", "writing non ascii sentinel secret file", "path", secretFilePath)
+	if _, err := client.Logical().Write(secretFilePath, secretFileData); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -191,7 +218,7 @@ spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
   volumes:
-    - name: theatre-envconsul-serviceaccount
+    - name: theatre-secrets-serviceaccount
       projected:
         sources:
         - serviceAccountToken:
@@ -204,23 +231,24 @@ spec:
       env:
         - name: VAULT_RESOLVED_KEY
           value: vault:jimmy
+        - name: VAULT_TEST_SHELLWORD
+          value: vault:shellword
       command:
-        - /usr/local/bin/theatre-envconsul
+        - /usr/local/bin/theatre-secrets
       args:
         - exec
         - --vault-address=http://vault.vault.svc.cluster.local:8200
         - --vault-path-prefix=secret/data/kubernetes/staging/secret-reader
         - --no-vault-use-tls
-        - --install-path=/usr/local/bin
         - --service-account-token-file=/var/run/secrets/kubernetes.io/vault/token
         - --
         - env
       volumeMounts:
-        - name: theatre-envconsul-serviceaccount
+        - name: theatre-secrets-serviceaccount
           mountPath: /var/run/secrets/kubernetes.io/vault
 `
 
-// This pod tests that our mutating webhook injects theatre-envconsul. We'll verify the
+// This pod tests that our mutating webhook injects theatre-secrets. We'll verify the
 // environment is set correctly.
 const annotatedPodYAML = `
 ---
@@ -230,7 +258,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -241,6 +269,8 @@ spec:
       env:
         - name: VAULT_RESOLVED_KEY
           value: vault:jimmy
+        - name: VAULT_TEST_SHELLWORD
+          value: vault:shellword
       command:
         - env
 `
@@ -255,7 +285,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -269,6 +299,8 @@ spec:
       env:
         - name: VAULT_RESOLVED_KEY
           value: vault:jimmy
+        - name: VAULT_TEST_SHELLWORD
+          value: vault:shellword
       command:
         - env
 `
@@ -281,7 +313,7 @@ metadata:
   generateName: read-a-secret-
   namespace: staging # provisioned by the acceptance kustomize overlay
   annotations:
-    envconsul-injector.vault.crd.gocardless.com/configs: app
+    secrets-injector.vault.crd.gocardless.com/configs: app
 spec:
   serviceAccountName: secret-reader
   restartPolicy: Never
@@ -296,12 +328,16 @@ spec:
         - name: VAULT_FILE_RESOLVED_KEY
           value: vault-file:jimmy:/tmp/jimmy
         - name: VAULT_TMP_FILE_RESOLVED_KEY
-          value: vault-file:jimmy
+          value: vault-file:file-with-binary-contents
+        - name: VAULT_NON_ASCII_FILE 
+          value: vault-file:file-non-ascii
       command:
         - bash
         - -c
-        - 'echo -n "file:" && cat $(echo $VAULT_FILE_RESOLVED_KEY) && echo -n " tmp:" && cat $(echo $VAULT_TMP_FILE_RESOLVED_KEY)'
-        `
+        - 'echo -n "file:" && cat $(echo $VAULT_FILE_RESOLVED_KEY) &&
+           echo -n " tmp:" && cat $(echo $VAULT_TMP_FILE_RESOLVED_KEY) &&
+           echo -n " ascii:" && cat $(echo $VAULT_NON_ASCII_FILE)'
+`
 
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	var (
@@ -353,6 +389,8 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		var buffer bytes.Buffer
 		_, err = io.Copy(&buffer, logs)
 
+		fmt.Fprint(GinkgoWriter, buffer.String())
+
 		Expect(err).NotTo(HaveOccurred())
 		expects(buffer)
 	}
@@ -360,6 +398,9 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	expectsFunc := func(buffer bytes.Buffer) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("VAULT_RESOLVED_KEY=%s", SentinelSecretValue)),
+		)
+		Expect(buffer.String()).To(
+			ContainSubstring(fmt.Sprintf("VAULT_TEST_SHELLWORD=%s", SentinelSecretValueShellword)),
 		)
 		return
 	}
@@ -369,17 +410,20 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			ContainSubstring(fmt.Sprintf("file:%s", SentinelSecretValue)),
 		)
 		Expect(buffer.String()).To(
-			ContainSubstring(fmt.Sprintf("tmp:%s", SentinelSecretValue)),
+			ContainSubstring(fmt.Sprintf("tmp:%s", strings.Split(SentinelSecretFileValue, "\n")[0])),
+		)
+		Expect(buffer.String()).To(
+			ContainSubstring(fmt.Sprintf("ascii:%s", strings.Split(SentinelSecretValueNonASCII, "\n")[0])),
 		)
 		return
 	}
 
-	Describe("theatre-envconsul", func() {
+	Describe("theatre-secrets", func() {
 		BeforeEach(func() { podFixtureYAML = rawPodYAML })
 
 		It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
 
-		Context("As configured by the vault envconsul-injector webhook", func() {
+		Context("As configured by the vault secrets-injector webhook", func() {
 			BeforeEach(func() { podFixtureYAML = annotatedPodYAML })
 
 			It("Resolves env variables into the pod command", func() { expectResolvesEnvVariables(expectsFunc) })
@@ -392,8 +436,8 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		})
 	})
 
-	Describe("theatre-envconsul files", func() {
-		Context("As configured by the vault envconsul-injector webhook", func() {
+	Describe("theatre-secrets files", func() {
+		Context("As configured by the vault secrets-injector webhook", func() {
 
 			Context("With a non-root user", func() {
 				BeforeEach(func() { podFixtureYAML = annotatedNonRootPodYAMLFiles })

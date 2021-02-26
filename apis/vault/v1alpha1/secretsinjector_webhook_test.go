@@ -40,9 +40,9 @@ var _ = Describe("PodInjector", func() {
 				AuthRole:              "default",
 				SecretMountPathPrefix: "secret/data/kubernetes",
 			},
-			EnvconsulInjectorOptions: EnvconsulInjectorOptions{
+			SecretsInjectorOptions: SecretsInjectorOptions{
 				Image:       "theatre:latest",
-				InstallPath: "/var/run/theatre-envconsul",
+				InstallPath: "/var/run/theatre-secrets",
 				VaultConfigMapKey: client.ObjectKey{
 					Namespace: "vault-system",
 					Name:      "vault-config",
@@ -74,10 +74,10 @@ var _ = Describe("PodInjector", func() {
 				ContainElement(
 					MatchFields(
 						IgnoreExtras, Fields{
-							"Name":  Equal("theatre-envconsul-injector"),
+							"Name":  Equal("theatre-secrets-injector"),
 							"Image": Equal("theatre:latest"),
 							"Command": Equal([]string{
-								"theatre-envconsul", "install", "--path", "/var/run/theatre-envconsul",
+								"theatre-secrets", "install", "--path", "/var/run/theatre-secrets",
 							}),
 						},
 					),
@@ -89,7 +89,7 @@ var _ = Describe("PodInjector", func() {
 			var projection *corev1.ServiceAccountTokenProjection
 
 			for _, volume := range pod.Spec.Volumes {
-				if volume.Name != "theatre-envconsul-serviceaccount" {
+				if volume.Name != "theatre-secrets-serviceaccount" {
 					continue
 				}
 
@@ -107,19 +107,17 @@ var _ = Describe("PodInjector", func() {
 			)
 		})
 
-		It("Modifies command to prefix theatre-envconsul", func() {
+		It("Modifies command to prefix theatre-secrets", func() {
 			Expect(pod.Spec.Containers).To(
 				ContainElement(
 					MatchFields(
 						IgnoreExtras, Fields{
 							"Name": Equal("app"),
 							"Command": Equal([]string{
-								"/var/run/theatre-envconsul/theatre-envconsul",
+								"/var/run/theatre-secrets/theatre-secrets",
 							}),
 							"Args": Equal([]string{
 								"exec",
-								"--install-path",
-								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
 								"--vault-path-prefix",
@@ -159,7 +157,7 @@ var _ = Describe("PodInjector", func() {
 			)
 		})
 
-		It("Adds theatre-envconsul-install volumeMount", func() {
+		It("Adds theatre-secrets-install volumeMount", func() {
 			Expect(pod.Spec.Containers).To(
 				ContainElement(
 					MatchFields(
@@ -167,8 +165,8 @@ var _ = Describe("PodInjector", func() {
 							"Name": Equal("app"),
 							"VolumeMounts": ContainElement(
 								corev1.VolumeMount{
-									Name:      "theatre-envconsul-install",
-									MountPath: "/var/run/theatre-envconsul",
+									Name:      "theatre-secrets-install",
+									MountPath: "/var/run/theatre-secrets",
 									ReadOnly:  true,
 								},
 							),
@@ -186,7 +184,7 @@ var _ = Describe("PodInjector", func() {
 							"Name": Equal("app"),
 							"VolumeMounts": ContainElement(
 								corev1.VolumeMount{
-									Name:      "theatre-envconsul-serviceaccount",
+									Name:      "theatre-secrets-serviceaccount",
 									MountPath: "/var/run/secrets/kubernetes.io/vault",
 									ReadOnly:  true,
 								},
@@ -220,19 +218,17 @@ var _ = Describe("PodInjector", func() {
 			fixture = mustPodFixture("./testdata/app_with_config_pod.yaml")
 		})
 
-		It("Modifies command to prefix theatre-envconsul with config path", func() {
+		It("Modifies command to prefix theatre-secrets with config path", func() {
 			Expect(pod.Spec.Containers).To(
 				ContainElement(
 					MatchFields(
 						IgnoreExtras, Fields{
 							"Name": Equal("app"),
 							"Command": Equal([]string{
-								"/var/run/theatre-envconsul/theatre-envconsul",
+								"/var/run/theatre-secrets/theatre-secrets",
 							}),
 							"Args": Equal([]string{
 								"exec",
-								"--install-path",
-								"/var/run/theatre-envconsul",
 								"--vault-address",
 								"https://vault.example.com",
 								"--vault-path-prefix",
@@ -275,7 +271,7 @@ var _ = Describe("parseContainerConfigs", func() {
 
 		Context("With app with no config path", func() {
 			BeforeEach(func() {
-				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN): "app"}
+				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", SecretsInjectorFQDN): "app"}
 			})
 
 			It("Returns app with no config path", func() {
@@ -285,7 +281,7 @@ var _ = Describe("parseContainerConfigs", func() {
 
 		Context("With app with config path", func() {
 			BeforeEach(func() {
-				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN): "app:path/to/config.yaml"}
+				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", SecretsInjectorFQDN): "app:path/to/config.yaml"}
 			})
 
 			It("Returns app with config path", func() {
@@ -295,7 +291,7 @@ var _ = Describe("parseContainerConfigs", func() {
 
 		Context("With app with spaces in config path", func() {
 			BeforeEach(func() {
-				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN): " app : path/to/config.yaml"}
+				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", SecretsInjectorFQDN): " app : path/to/config.yaml"}
 			})
 
 			It("Returns app with config path with spaces stripped", func() {
@@ -305,7 +301,7 @@ var _ = Describe("parseContainerConfigs", func() {
 
 		Context("With multiple apps with and without config", func() {
 			BeforeEach(func() {
-				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", EnvconsulInjectorFQDN): "app: path/to/config.yaml, app2, app3: path/to/config3.yaml"}
+				fixture.ObjectMeta.Annotations = map[string]string{fmt.Sprintf("%s/configs", SecretsInjectorFQDN): "app: path/to/config.yaml, app2, app3: path/to/config3.yaml"}
 			})
 
 			It("Returns multiple apps with and without config", func() {

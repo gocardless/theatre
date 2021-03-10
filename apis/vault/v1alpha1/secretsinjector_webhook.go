@@ -325,6 +325,7 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 	args := []string{"exec"}
 	args = append(args, "--vault-address", i.Address)
 	args = append(args, "--vault-path-prefix", secretMountPathPrefix)
+	args = append(args, "--vault-http-timeout", "30s")
 	args = append(args, "--auth-backend-mount-path", i.AuthMountPath)
 	args = append(args, "--auth-backend-role", i.AuthRole)
 	args = append(args, "--service-account-token-file", i.ServiceAccountTokenFile)

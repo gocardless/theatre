@@ -643,7 +643,7 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
-			Template:              *jobTemplate,
+			Template:              corev1.PodTemplateSpec(*jobTemplate),
 			Completions:           &completions,
 			Parallelism:           &parallelism,
 			ActiveDeadlineSeconds: &timeout,

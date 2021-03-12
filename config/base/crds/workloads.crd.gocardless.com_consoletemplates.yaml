@@ -154,11 +154,12 @@ spec:
                 minimum: 0
                 type: integer
               template:
-                description: PodTemplateSpec describes the data a pod should have when created from a template
+                description: PodTemplatePreserveMetadataSpec describes the data a pod should have when created from a template
                 properties:
                   metadata:
                     description: 'Standard object''s metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata'
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   spec:
                     description: 'Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status'
                     properties:

@@ -59,7 +59,7 @@ var _ = Describe("Console", func() {
 					{Kind: "User", Name: "add-user@example.com"},
 					{Kind: "GoogleGroup", Name: "group@example.com"},
 				},
-				Template: corev1.PodTemplateSpec{
+				Template: workloadsv1alpha1.PodTemplatePreserveMetadataSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							corev1.Container{

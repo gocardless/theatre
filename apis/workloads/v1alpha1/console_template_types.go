@@ -39,9 +39,19 @@ type ConsoleAuthorisers struct {
 	Subjects []rbacv1.Subject `json:"subjects"`
 }
 
+// PodTemplatePreserveMetadataSpec describes the data a pod should have when created from a template
+type PodTemplatePreserveMetadataSpec struct {
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	Spec corev1.PodSpec `json:"spec,omitempty"`
+}
+
 // ConsoleTemplateSpec defines the desired state of ConsoleTemplate
 type ConsoleTemplateSpec struct {
-	Template corev1.PodTemplateSpec `json:"template"`
+	Template PodTemplatePreserveMetadataSpec `json:"template"`
 
 	// Default time, in seconds, that a Console will be created for.
 	// Maximum value of 1 week (as per MaxTimeoutSeconds).

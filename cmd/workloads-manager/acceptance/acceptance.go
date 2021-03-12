@@ -497,7 +497,7 @@ func buildConsoleTemplate(TTLBeforeRunning, TTLAfterFinished *int32, authorised 
 			AdditionalAttachSubjects:       []rbacv1.Subject{{Kind: "User", Name: "add-user@example.com"}},
 			AuthorisationRules:             authorisationRules,
 			DefaultAuthorisationRule:       defaultAuthorisation,
-			Template: corev1.PodTemplateSpec{
+			Template: workloadsv1alpha1.PodTemplatePreserveMetadataSpec{
 				Spec: corev1.PodSpec{
 					// Set the grace period to 0, to ensure quick cleanup.
 					TerminationGracePeriodSeconds: new(int64),

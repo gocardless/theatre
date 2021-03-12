@@ -35,7 +35,7 @@ func newConsoleTemplate(namespace, name string, labels map[string]string) worklo
 			Labels:    labels,
 		},
 		Spec: workloadsv1alpha1.ConsoleTemplateSpec{
-			Template: corev1.PodTemplateSpec{
+			Template: workloadsv1alpha1.PodTemplatePreserveMetadataSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						corev1.Container{

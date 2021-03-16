@@ -396,8 +396,12 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		// is done the script has run to completion. We don't necessarily want to error out
 		// (only if the pod exited unsuccessfully).
 		if strings.Contains(err.Error(), fmt.Sprintf("container %s not found in pod %s", containerName, pod.Name)) {
+			// Dump the pod logs and propagate the pod's exit code, in case it just completed quickly
 			return c.extractLogs(ctx, csl, pod, containerName, opts.IO)
 		}
+
+		// Dump the pod logs but don't propagate the pod's exit code, as we have a genuine issue attaching that we want pass back
+		c.extractLogs(ctx, csl, pod, containerName, opts.IO)
 
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}

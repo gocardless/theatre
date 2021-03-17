@@ -203,7 +203,18 @@ func mainError(ctx context.Context, command string) (err error) {
 		for key := range keysToFetch {
 			path := path.Join(execVaultOptions.PathPrefix, key)
 
+			start := time.Now()
 			resp, err := client.Logical().Read(path)
+
+			// Use verbosity 1, which is equal to debug level
+			logger.V(1).Info(
+				"vault request finished",
+				"event", "vault_kv_request.finished",
+				"path", path,
+				"duration", time.Since(start).Seconds(),
+				"outcome", outcome(err),
+			)
+
 			if err != nil {
 				return errors.Wrap(err, "failed to retrieve secret value from Vault")
 			}
@@ -373,7 +384,8 @@ func (o *vaultOptions) Client() (*api.Client, error) {
 
 	// By default the Vault library uses a retryable HTTP client, but we probably
 	// don't want to use the default timeout of 60 seconds as this will
-	// significantly slow the container start time.
+	// significantly slow the effective container start time if Vault is actually
+	// responding consistently slowly.
 	cfg.Timeout = o.Timeout
 
 	transport := cfg.HttpClient.Transport.(*http.Transport)
@@ -421,7 +433,17 @@ func (o *vaultOptions) Login(jwt string) (string, error) {
 		"role": o.AuthBackendRole,
 	})
 
+	start := time.Now()
 	resp, err := client.RawRequest(req)
+
+	// Use verbosity 1, which is equal to debug level
+	logger.V(1).Info(
+		"Vault login finished",
+		"event", "vault_login_request.finished",
+		"duration", time.Since(start).Seconds(),
+		"outcome", outcome(err),
+	)
+
 	if err != nil {
 		return "", errors.Wrap(err, "failed to perform login POST request against Vault auth backend mount")
 	}
@@ -462,4 +484,13 @@ func loadConfigFromFile(configFile string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Helper for setting the `outcome` field in a log entry.
+func outcome(err error) string {
+	if err != nil {
+		return "failure"
+	}
+
+	return "success"
 }

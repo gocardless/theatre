@@ -402,6 +402,12 @@ func (c *Runner) Attach(ctx context.Context, opts AttachOptions) error {
 		return fmt.Errorf("failed to attach to console: %w", err)
 	}
 
+	// We have either terminated or detached from a running console so nothing to do
+	if !csl.Spec.Noninteractive {
+		return nil
+	}
+
+	// We are attached to a non-interactive console (streaming logs) so keep streaming until the pod completes or errors
 	return c.waitForSuccess(ctx, csl)
 }
 

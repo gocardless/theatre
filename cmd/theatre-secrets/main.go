@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/gocardless/theatre/v2/cmd"
-	"github.com/gocardless/theatre/v2/pkg/signals"
+	"github.com/gocardless/theatre/v3/cmd"
+	"github.com/gocardless/theatre/v3/pkg/signals"
 )
 
 var logger logr.Logger

@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v2/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v2/apis/workloads/v1alpha1"
+	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
 )
 
 var (

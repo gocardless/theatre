@@ -14,10 +14,10 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v2/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/v2/cmd"
-	directoryrolebinding "github.com/gocardless/theatre/v2/controllers/rbac/directoryrolebinding"
-	"github.com/gocardless/theatre/v2/pkg/signals"
+	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
+	"github.com/gocardless/theatre/v3/cmd"
+	directoryrolebinding "github.com/gocardless/theatre/v3/controllers/rbac/directoryrolebinding"
+	"github.com/gocardless/theatre/v3/pkg/signals"
 )
 
 var (

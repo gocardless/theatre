@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	rbacutils "github.com/gocardless/theatre/v2/pkg/rbac"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	rbacutils "github.com/gocardless/theatre/v3/pkg/rbac"
 )
 
 // +kubebuilder:object:generate=false

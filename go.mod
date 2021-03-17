@@ -1,4 +1,4 @@
-module github.com/gocardless/theatre/v2
+module github.com/gocardless/theatre/v3
 
 go 1.14
 

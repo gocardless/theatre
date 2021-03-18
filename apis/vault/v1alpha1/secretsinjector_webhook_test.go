@@ -50,6 +50,8 @@ var _ = Describe("PodInjector", func() {
 				ServiceAccountTokenFile:     "/var/run/secrets/kubernetes.io/vault/token",
 				ServiceAccountTokenExpiry:   15 * time.Minute,
 				ServiceAccountTokenAudience: "",
+				Timeout:                     99 * time.Second,
+				Debug:                       true,
 			},
 		}
 	})
@@ -118,8 +120,11 @@ var _ = Describe("PodInjector", func() {
 							}),
 							"Args": Equal([]string{
 								"exec",
+								"--debug",
 								"--vault-address",
 								"https://vault.example.com",
+								"--vault-http-timeout",
+								"1m39s",
 								"--vault-path-prefix",
 								"secret/data/kubernetes/staging/secret-reader",
 								"--auth-backend-mount-path",
@@ -229,8 +234,11 @@ var _ = Describe("PodInjector", func() {
 							}),
 							"Args": Equal([]string{
 								"exec",
+								"--debug",
 								"--vault-address",
 								"https://vault.example.com",
+								"--vault-http-timeout",
+								"1m39s",
 								"--vault-path-prefix",
 								"secret/data/kubernetes/staging/secret-reader",
 								"--auth-backend-mount-path",

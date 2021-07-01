@@ -201,6 +201,39 @@ var _ = Describe("Helpers", func() {
 				Expect(result.AuthorisationsRequired).To(Equal(defaultRuleAuths))
 			})
 		})
+
+		Context("with a matching rule that isn't the first or last match", func() {
+			BeforeEach(func() {
+				template.Spec.AuthorisationRules = []ConsoleAuthorisationRule{
+					{
+						Name:                 "python",
+						MatchCommandElements: []string{"python"},
+					},
+					{
+						Name:                 "perl",
+						MatchCommandElements: []string{"perl"},
+						ConsoleAuthorisers: ConsoleAuthorisers{
+							AuthorisationsRequired: 7,
+						},
+					},
+					{
+						Name:                 "php",
+						MatchCommandElements: []string{"php"},
+					},
+				}
+				command = []string{"perl"}
+			})
+
+			It("matches successfully", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns the name of the matching rule", func() {
+				Expect(result.Name).To(Equal("perl"))
+			})
+			It("has the correct authorisations required", func() {
+				Expect(result.AuthorisationsRequired).To(Equal(7))
+			})
+		})
 	})
 
 	Describe("ConsoleTemplate Validate", func() {

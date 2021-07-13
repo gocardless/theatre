@@ -163,11 +163,11 @@ matchRule:
 		// element of the command is optional as well as anything following it.
 		if rule.MatchCommandElements[numMatchers-1] == "**" {
 			if len(command) < numMatchers-1 {
-				break matchRule
+				continue matchRule
 			}
 		} else {
 			if len(command) != numMatchers {
-				break matchRule
+				continue matchRule
 			}
 		}
 

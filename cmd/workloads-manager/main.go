@@ -51,11 +51,12 @@ func main() {
 	}
 
 	// controller
-	if err = (&consolecontroller.ConsoleReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(ctx, mgr); err != nil {
+	ctrl := consolecontroller.NewConsoleReconciler(
+		mgr.GetClient(),
+		ctrl.Log.WithName("controllers").WithName("console"),
+		mgr.GetScheme(),
+	)
+	if err = ctrl.SetupWithManager(ctx, mgr); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}
 
@@ -89,7 +90,7 @@ func main() {
 		),
 	})
 
-	if err := mgr.Start(ctx.Done()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
 }

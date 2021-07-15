@@ -294,7 +294,7 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 			// We can receive *metav1.Status events in the situation where there's an error, in
 			// which case we should exit early.
 			if status, ok := event.Object.(*metav1.Status); ok {
-				return fmt.Errorf("received failure from Kubernetes: %w", status.Reason)
+				return fmt.Errorf("received failure from Kubernetes: %s", status.Reason)
 			}
 
 			// We should be safe now, as a watcher should return either Status or the type we
@@ -587,7 +587,7 @@ func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
 		&authz,
 	)
 
-	err = c.kubeClient.Patch(ctx, &authz, client.ConstantPatch(types.JSONPatchType, patchBytes))
+	err = c.kubeClient.Patch(ctx, &authz, client.RawPatch(types.JSONPatchType, patchBytes))
 	if err != nil {
 		return err
 	}

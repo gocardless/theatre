@@ -86,7 +86,7 @@ func main() {
 		),
 	})
 
-	if err := mgr.Start(ctx.Done()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
 }

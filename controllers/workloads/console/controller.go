@@ -77,12 +77,24 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 
 type ConsoleReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	log    logr.Logger
+	scheme *runtime.Scheme
+}
+
+func NewConsoleReconciler(client client.Client, log logr.Logger, scheme *runtime.Scheme) ConsoleReconciler {
+	return ConsoleReconciler{
+		Client: client,
+		log:    log,
+		scheme: scheme,
+	}
+}
+
+func (r *ConsoleReconciler) Scheme() *runtime.Scheme {
+	return r.scheme
 }
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	logger := r.Log.WithValues("component", "Console")
+	logger := r.log.WithValues("component", "Console")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workloadsv1alpha1.Console{}).
 		Watches(
@@ -127,7 +139,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 
 	// Set the template as owner of the console
 	// This means the console will be deleted if the template is deleted
-	csl, err = setConsoleOwner(csl, tpl, r.Scheme)
+	csl, err = setConsoleOwner(csl, tpl, r.Scheme())
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to set controller reference on console object")
 	}
@@ -336,7 +348,7 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 	// If operating on the console itself, don't attempt to set the controller
 	// reference, as this isn't valid.
 	if kind != Console {
-		if err := controllerutil.SetControllerReference(csl, expected, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(csl, expected, r.Scheme()); err != nil {
 			return err
 		}
 	}

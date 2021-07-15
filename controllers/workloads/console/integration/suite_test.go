@@ -102,11 +102,11 @@ var _ = BeforeSuite(func(done Done) {
 		),
 	})
 
-	err = (&consolecontroller.ConsoleReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(context.TODO(), mgr)
+	err = (&consolecontroller.NewConsoleReconciler(
+		mgr.GetClient(),
+		ctrl.Log.WithName("controllers").WithName("console"),
+		mgr.GetScheme(),
+	)).SetupWithManager(context.TODO(), mgr)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {

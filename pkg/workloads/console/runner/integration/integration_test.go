@@ -27,6 +27,10 @@ func newNamespace(name string) corev1.Namespace {
 	}
 }
 
+const (
+	shortTimeout time.Duration = 30 * time.Millisecond
+)
+
 func newConsoleTemplate(namespace, name string, labels map[string]string) workloadsv1alpha1.ConsoleTemplate {
 	return workloadsv1alpha1.ConsoleTemplate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -276,7 +280,7 @@ var _ = Describe("Runner", func() {
 
 		Context("When console phase is Pending", func() {
 			It("Fails with a timeout waiting", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
@@ -431,7 +435,7 @@ var _ = Describe("Runner", func() {
 					rb.Subjects = nil
 					mustCreateRoleBinding(rb)
 
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
@@ -482,7 +486,7 @@ var _ = Describe("Runner", func() {
 						},
 					)
 
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 

@@ -72,7 +72,7 @@ jobs:
           name: Install tooling
           command: |
             sudo bash <<EOF
-            curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-linux-amd64
+            curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.11.1/kind-linux-amd64
             curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.8.1/kustomize_v3.8.1_linux_amd64.tar.gz \
               | tar xfz -
             mv -v kustomize /usr/local/bin/kustomize

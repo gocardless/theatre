@@ -75,29 +75,67 @@ Theatre assumes developers have several tools installed to provide development
 and testing capabilities. The following will configure a macOS environment with
 all the necessary dependencies:
 
+1. Install Docker Desktop for macOS from https://www.docker.com/get-started
+
+2. Install Go, kubectl, kustomize, and kind via Homebrew
 ```shell
-brew cask install docker
-brew install go kubernetes-cli kustomize
-curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-darwin-amd64 \
-  && chmod a+x /usr/local/bin/kind
-mkdir /usr/local/kubebuilder
-curl -fsL https://go.kubebuilder.io/dl/2.3.1/$(go env GOOS)/$(go env GOARCH) | tar -xvz --strip=1 -C /usr/local/kubebuilder
+brew install go kubernetes-cli kustomize kind
+```
+
+Note: kubectl is already included with Docker Desktop, so you might get a message
+about the command getting installed by Homebrew but not linked.
+
+3. (Optional) Download and install Kubebuilder
+
+This step is not required for running acceptance tests. It is only required
+for writing new Kubernetes operators.
+
+We are using an older version of Kubebuilder, which doesn't have pre-built
+binaries for Apple silicon. Therefore, if your workstation is an ARM64 Mac
+then you can either run the x86 binaries (which will run in emulation mode on
+Rosetta) or you can build Kubebuidler from sources.
+
+- Option A: pre-built binaries (for Intel Macs or in emulation mode on M1 Macs)
+```shell
+sudo mkdir /usr/local/kubebuilder
+curl -fLs https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.1/kubebuilder_2.3.1_darwin_amd64.tar.gz | \
+  sudo tar x --strip=1 -C /usr/local/kubebuilder
+```
+
+- Option B: build form source (suitable for both Intel and M1 Macs)
+```shell
+git clone https://github.com/kubernetes-sigs/kubebuilder.git
+cd kubebuilder
+git checkout v2.3.1
+make build
+sudo mv bin /usr/local/kubebuilder/
+```
+
+After the installation, set environment variable for Kubebuilder:
+```shell
 export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
 ```
 
-Running `make` should now compile binaries into `bin`.
-
 ## Local development environment
+
+Running `make` will compile binaries into `bin`
+  
+```shell
+git clone git@github.com:gocardless/theatre.git
+cd theatre
+make
+```
 
 For developing changes, you can make use of the acceptance testing
 infrastructure to install the code into a local Kubernetes-in-Docker
 ([Kind][kind]) cluster.
+
 Ensure `kind` is installed (as per the [getting started
-steps][#getting-started]) and then run the following:
+steps][#getting-started]) and then run the following, which
+launchs a Kubernetes in Kind and installs Theatre.
 
-
-```
-go run cmd/acceptance/main.go prepare # prepare the cluster, install theatre
+```shell
+go run cmd/acceptance/main.go prepare
 ```
 
 At this point a development cluster has been provisioned. Your current local
@@ -105,12 +143,16 @@ Kubernetes context will have been changed to point to the test cluster. You
 should see the following if you inspect kubernetes:
 
 ```console
-$ kubectl get pods --all-namespaces | grep -v kube-system
-NAMESPACE        NAME                                        READY   STATUS    RESTARTS   AGE
-theatre-system   theatre-rbac-manager-0                      1/1     Running   0          5m
-theatre-system   theatre-vault-manager-0                     1/1     Running   0          5m
-theatre-system   theatre-workloads-manager-0                 1/1     Running   0          5m
-vault            vault-0                                     1/1     Running   0          5m
+$ kubectl --context kind-e2e get pods --all-namespaces | grep -v kube-system
+NAMESPACE            NAME                                        READY   STATUS    RESTARTS   AGE
+cert-manager         cert-manager-9b8969d86-ktp2m                1/1     Running   0          45s
+cert-manager         cert-manager-cainjector-8545fdf87c-vt8s7    1/1     Running   0          45s
+cert-manager         cert-manager-webhook-8c5db9fb6-74jz2        1/1     Running   0          45s
+local-path-storage   local-path-provisioner-5bf465b47d-8ngbh     1/1     Running   0          114s
+theatre-system       theatre-rbac-manager-0                      1/1     Running   0          5s
+theatre-system       theatre-vault-manager-0                     1/1     Running   0          5s
+theatre-system       theatre-workloads-manager-0                 1/1     Running   0          5s
+vault                vault-0                                     1/1     Running   0          45s
 ```
 
 All of the controllers and webhooks, built from the local working copy of the
@@ -122,6 +164,11 @@ to use the custom resources defined in theatre, e.g. creating a `Console`.
 
 If changes are made to the code, then you must re-run the `prepare` step in
 order to update the cluster with images built from the new binaries.
+
+After you are done, you can tear down the cluster with:
+```shell
+go run cmd/acceptance/main.go destroy
+```
 
 [kind]: https://github.com/kubernetes-sigs/kind
 

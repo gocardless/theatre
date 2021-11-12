@@ -89,7 +89,7 @@ func main() {
 				logLevel = 5
 			}
 
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--image", "kindest/node:v1.16.9", "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
+			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--image", "kindest/node:v1.16.15", "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}

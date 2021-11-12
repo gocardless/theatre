@@ -11,12 +11,12 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-.PHONY: build build-darwin build-linux build-all test generate manifests deploy clean docker-build docker-pull docker-push docker-tag controller-gen
+.PHONY: build build-darwin-amd64 build-darwin-arm64 build-linux test generate manifests deploy clean docker-build docker-pull docker-push docker-tag controller-gen
 
 build: $(PROG)
-build-darwin: $(PROG:=.darwin_amd64)
+build-darwin-amd64: $(PROG:=.darwin_amd64)
+build-darwin-arm64: $(PROG:=.darwin_arm64)
 build-linux: $(PROG:=.linux_amd64)
-build-all: build-darwin build-linux
 
 # Specific linux build target, making it easy to work with the docker acceptance
 # tests on OSX
@@ -26,8 +26,11 @@ bin/%.linux_amd64:
 bin/%.darwin_amd64:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
 
+bin/%.darwin_arm64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(BUILD_COMMAND) -a -o $@ ./cmd/$*/.
+
 bin/%:
-	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
+	CGO_ENABLED=0 GOARCH=$(shell go env GOARCH) $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:

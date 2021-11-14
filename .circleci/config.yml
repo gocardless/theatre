@@ -17,7 +17,7 @@ jobs:
           command: |
             curl -sL https://deb.nodesource.com/setup_10.x > setup-node_10.x
             chmod +x setup-node_10.x && ./setup-node_10.x
-            apt install nodejs
+            apt install -y nodejs npm
             npm install -g prettier
       - run:
           name: Ensure generated CRDs and manifests are up to date

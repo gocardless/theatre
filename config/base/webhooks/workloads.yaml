@@ -117,3 +117,28 @@ webhooks:
           - consoletemplates
         scope: '*'
     sideEffects: None
+  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-workloads-manager
+        namespace: theatre-system
+        path: /observe-console-attach
+        port: 443
+    name: console-attach-observer.workloads.crd.gocardless.com
+    namespaceSelector:
+      matchExpressions:
+        - key: control-plane
+          operator: DoesNotExist
+    rules:
+      - apiGroups:
+          - ''
+        apiVersions:
+          - v1
+        operations:
+          - CONNECT
+        resources:
+          - pods/attach
+        scope: '*'
+    sideEffects: NoneOnDryRun
+    failurePolicy: Ignore # Ignore failures as we want to record attachment, but not at the cost of blocking connections

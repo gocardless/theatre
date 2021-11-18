@@ -1,0 +1,132 @@
+package v1alpha1
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/gocardless/theatre/v3/pkg/logging"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+// +kubebuilder:object:generate=false
+type ConsoleAttachObserverWebhook struct {
+	client         client.Client
+	recorder       record.EventRecorder
+	logger         logr.Logger
+	decoder        *admission.Decoder
+	requestTimeout time.Duration
+}
+
+func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, logger logr.Logger, requestTimeout time.Duration) *ConsoleAttachObserverWebhook {
+	return &ConsoleAttachObserverWebhook{
+		client:         c,
+		recorder:       recorder,
+		logger:         logger,
+		requestTimeout: requestTimeout,
+	}
+}
+
+func (c *ConsoleAttachObserverWebhook) InjectDecoder(d *admission.Decoder) error {
+	c.decoder = d
+	return nil
+}
+
+func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
+	logger := c.logger.WithValues(
+		"uuid", string(req.UID),
+		"pod", req.Name,
+		"namespace", req.Namespace,
+		"user", req.UserInfo.Username,
+	)
+	logger.Info("starting request", "event", "request.start")
+	defer func(start time.Time) {
+		logging.WithNoRecord(logger).Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
+	}(time.Now())
+
+	attachOptions := &corev1.PodAttachOptions{}
+	if err := c.decoder.Decode(req, attachOptions); err != nil {
+		logger.Error(err, "failed to decode attach options")
+		return admission.Errored(http.StatusBadRequest, err)
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+
+	// Get the associated pod. This will have the same name, and
+	// exist in the same namespace as the pod attach options we
+	// receive in the request.
+	pod := &corev1.Pod{}
+	if err := c.client.Get(rctx, client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      req.Name,
+	}, pod); err != nil {
+		logger.Error(err, "failed to get pod")
+		return admission.Errored(http.StatusBadRequest, err)
+	}
+
+	// Skip the rest of our lookups if we're not in a console.  We
+	// can determine this by looking for a "console-name" in the
+	// pod labels.
+	if _, ok := pod.Labels["console-name"]; !ok {
+		return admission.Allowed("not a console; skipping observation")
+	}
+
+	rctx, cancel = context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+
+	// Get the console associated to publish events
+	csl := &Console{}
+	if err := c.client.Get(rctx, client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      pod.Labels["console-name"],
+	}, csl); err != nil {
+		logger.Error(
+			err, "failed to get console",
+			"console", pod.Labels["console-name"],
+		)
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	logger.WithValues(
+		"pod", pod.Name,
+		"namespace", pod.Namespace,
+		"user", req.UserInfo.Username,
+		"console", csl.Name,
+		"event", "console.attach",
+	)
+
+	// If performing a dry-run we only want to log the attachment.
+	if *req.DryRun {
+		// Log an event observing the attachment
+		logger.Info(
+			fmt.Sprintf(
+				"observed dry-run attach for pod %s/%s by user %s",
+				pod.Namespace, pod.Name, req.UserInfo.Username,
+			),
+			"console", csl.Name,
+			"dry-run", true,
+		)
+		return admission.Allowed("dry-run set; skipping attachment observation")
+	}
+
+	// Attach an event recorder to the logger, based on the
+	// associated pod
+	logger = logging.WithEventRecorder(logger, c.recorder, pod)
+
+	// Log an event observing the attachment
+	logger.Info(
+		fmt.Sprintf(
+			"observed attach to pod %s/%s by user %s",
+			pod.Namespace, pod.Name, req.UserInfo.Username,
+		),
+		"event", "ConsoleAttach",
+	)
+
+	return admission.Allowed("attachment observed")
+}

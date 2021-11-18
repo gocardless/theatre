@@ -11,6 +11,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -310,6 +311,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 				})
 				Expect(err).NotTo(HaveOccurred(), "could not authorise console")
 
+				var pod *corev1.Pod
 				By("Expect a pod has been created")
 				Eventually(func() ([]corev1.Pod, error) {
 					selectorSet, err := labels.ConvertSelectorToLabelsMap("console-name=" + console.Name)
@@ -319,6 +321,11 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					opts := &client.ListOptions{Namespace: namespace, LabelSelector: labels.SelectorFromSet(selectorSet)}
 					podList := &corev1.PodList{}
 					kubeClient.List(context.TODO(), podList, opts)
+
+					// Save a reference to the pod for later
+					if len(podList.Items) == 1 {
+						pod = &podList.Items[0]
+					}
 
 					return podList.Items, err
 				}).Should(HaveLen(1), "expected to find a single pod")
@@ -330,14 +337,44 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleRunning))
 
+				By("Attach to the console")
+				go consoleRunner.Attach(context.TODO(), runner.AttachOptions{
+					Namespace:  console.Namespace,
+					KubeConfig: config,
+					Name:       console.Name,
+					IO: runner.IOStreams{
+						In:     nil,
+						Out:    nil,
+						ErrOut: nil,
+					},
+					Hook: nil,
+				})
+
+				By("Expect that the attachment is observed")
+				Eventually(func() []corev1.Event {
+					events := &corev1.EventList{}
+					err := kubeClient.List(
+						context.TODO(), events,
+						client.InNamespace(namespace),
+						client.MatchingFieldsSelector{
+							Selector: fields.AndSelectors(
+								fields.OneTermEqualSelector("reason", "ConsoleAttach"),
+								fields.OneTermEqualSelector("involvedObject.name", pod.Name),
+								fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID)),
+							),
+						},
+					)
+					Expect(err).ToNot(HaveOccurred())
+
+					return events.Items
+				}).Should(HaveLen(1))
+
 				By("Expect the console phase eventually changes to Stopped")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {
 					err = kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: console.Name}, console)
 					Expect(err).NotTo(HaveOccurred(), "could not find console")
 					return console.Status.Phase
 				}).Should(Equal(workloadsv1alpha1.ConsoleStopped))
-
-				// TODO: attach to pod
 
 				By("Expect that the console is deleted shortly after stopping, due to its TTL")
 				Eventually(func() error {

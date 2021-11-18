@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/alecthomas/kingpin"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,6 +87,16 @@ func main() {
 		Handler: workloadsv1alpha1.NewPriorityInjector(
 			mgr.GetClient(),
 			logger.WithName("webhooks").WithName("priority-injector"),
+		),
+	})
+
+	// console attach webhook
+	mgr.GetWebhookServer().Register("/observe-console-attach", &admission.Webhook{
+		Handler: workloadsv1alpha1.NewConsoleAttachObserverWebhook(
+			mgr.GetClient(),
+			mgr.GetEventRecorderFor("console-attach-observer"),
+			logger.WithName("webhooks").WithName("console-attach-observer"),
+			10*time.Second,
 		),
 	})
 

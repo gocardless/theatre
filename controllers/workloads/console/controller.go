@@ -244,6 +244,10 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 			tpl.Spec.AdditionalAttachSubjects,
 			rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
 		)
+		// Append all the authorising users to allow them to attach
+		if authorisation != nil {
+			subjects = append(subjects, authorisation.Spec.Authorisations...)
+		}
 
 		drb := buildDirectoryRoleBinding(req.NamespacedName, role, subjects)
 		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {

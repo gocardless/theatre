@@ -23,11 +23,11 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/cmd/get"
+	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util/term"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -276,7 +276,7 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 	}
 
 	if !isRunning(pod) {
-		return fmt.Errorf("Pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
+		return fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
 	}
 
 	status := w.ResultChan()
@@ -294,7 +294,7 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 			// We can receive *metav1.Status events in the situation where there's an error, in
 			// which case we should exit early.
 			if status, ok := event.Object.(*metav1.Status); ok {
-				return fmt.Errorf("received failure from Kubernetes: %w", status.Reason)
+				return fmt.Errorf("received failure from Kubernetes: %s", status.Reason)
 			}
 
 			// We should be safe now, as a watcher should return either Status or the type we
@@ -310,7 +310,7 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 				return nil
 			}
 			if !isRunning(pod) {
-				return fmt.Errorf("Pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
+				return fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
 			}
 		case <-ctx.Done():
 			return fmt.Errorf("pod's last phase was: %v: %w", pod.Status.Phase, ctx.Err())
@@ -557,9 +557,30 @@ type AuthoriseOptions struct {
 	Namespace   string
 	ConsoleName string
 	Username    string
+	Attach      bool
+
+	// Options only used when Attach is true
+	KubeConfig *rest.Config
+	IO         IOStreams
+
+	// Lifecycle hook to notify when the state of the console changes
+	Hook LifecycleHook
+}
+
+// WithDefaults sets any unset options to defaults
+func (opts AuthoriseOptions) WithDefaults() AuthoriseOptions {
+	if opts.Hook == nil {
+		opts.Hook = DefaultLifecycleHook{}
+	}
+
+	return opts
 }
 
 func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
+
+	// Get options with any unset values defaulted
+	opts = opts.WithDefaults()
+
 	patch := []jsonpatch.Operation{
 		jsonpatch.NewOperation(
 			"add",
@@ -586,10 +607,42 @@ func (c *Runner) Authorise(ctx context.Context, opts AuthoriseOptions) error {
 		},
 		&authz,
 	)
-
-	err = c.kubeClient.Patch(ctx, &authz, client.ConstantPatch(types.JSONPatchType, patchBytes))
 	if err != nil {
 		return err
+	}
+
+	err = c.kubeClient.Patch(ctx, &authz, client.RawPatch(types.JSONPatchType, patchBytes))
+	if err != nil {
+		return err
+	}
+
+	if opts.Attach {
+		// Wait for the console to enter a ready state
+		csl, err := c.Get(ctx, GetOptions{
+			Namespace:   opts.Namespace,
+			ConsoleName: opts.ConsoleName,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = c.WaitUntilReady(ctx, *csl, true)
+		if err != nil {
+			return err
+		}
+		err = opts.Hook.ConsoleReady(csl)
+		if err != nil {
+			return err
+		}
+		return c.Attach(
+			ctx,
+			AttachOptions{
+				Namespace:  opts.Namespace,
+				KubeConfig: opts.KubeConfig,
+				Name:       opts.ConsoleName,
+				IO:         opts.IO,
+				Hook:       opts.Hook,
+			},
+		)
 	}
 
 	return nil

@@ -42,7 +42,7 @@ func newConsoleTemplate(namespace, name string, labels map[string]string) worklo
 			Template: workloadsv1alpha1.PodTemplatePreserveMetadataSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						corev1.Container{
+						{
 							Image: "alpine:latest",
 							Name:  "console-container-0",
 						},
@@ -306,7 +306,7 @@ var _ = Describe("Runner", func() {
 			})
 		})
 
-		Context("When consle phase is updated to non-Running", func() {
+		Context("When console phase is updated to non-Running", func() {
 			It("Returns with a failure before the timeout", func() {
 				time.AfterFunc(timeout/2,
 					func() {

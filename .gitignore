@@ -3,3 +3,4 @@
 .kube/
 *.coverprofile
 /dist/
+.vscode

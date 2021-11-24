@@ -71,6 +71,8 @@ var (
 	authoriseName = authorise.Flag("name", "Console to authorise").
 			Required().
 			String()
+	authoriseAttach = authorise.Flag("attach", "Attach to the console if it starts successfully").
+			Bool()
 )
 
 func main() {
@@ -161,8 +163,16 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 				Namespace:   *cliNamespace,
 				ConsoleName: *authoriseName,
 				Username:    *authoriseUser,
+				Attach:      *authoriseAttach,
+				KubeConfig:  config,
+				IO: runner.IOStreams{
+					In:     os.Stdin,
+					Out:    os.Stdout,
+					ErrOut: os.Stderr,
+				},
 			},
 		)
+		return err
 	}
 
 	return nil

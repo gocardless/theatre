@@ -29,15 +29,16 @@ bin/%.darwin_amd64:
 bin/%:
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
-# go get -u github.com/onsi/ginkgo/ginkgo
+# go install github.com/onsi/ginkgo/ginkgo@v1.16.5
 test:
 	ginkgo -race -r ./...
 
 vet:
 	go vet ./cmd/rbac-manager/...
-	go vet ./cmd/vault-manager/...
-	go vet ./cmd/workload-manager/...
+	go vet ./cmd/theatre-consoles/...
 	go vet ./cmd/theatre-secrets/...
+	go vet ./cmd/vault-manager/...
+	go vet ./cmd/workloads-manager/...
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object paths="./apis/rbac/..."
@@ -77,7 +78,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen

@@ -77,7 +77,7 @@ subjects:
   - kind: ServiceAccount
     name: vault-manager
 ---
-apiVersion: cert-manager.io/v1alpha2
+apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: vault-manager

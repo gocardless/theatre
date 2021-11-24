@@ -33,11 +33,12 @@ var (
 	clusterName = app.Flag("cluster-name", "Name of Kubernetes context to against").Default("e2e").String()
 	logger      = kitlog.NewLogfmtLogger(os.Stderr)
 
-	prepare           = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareImage      = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
-	prepareConfigFile = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
-	prepareDockerfile = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
-	prepareVerbose    = prepare.Flag("verbose", "Use a higher log level when creating the cluster").Short('v').Bool()
+	prepare              = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
+	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
+	prepareConfigFile    = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
+	prepareDockerfile    = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
+	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.21.1").String()
+	prepareVerbose       = prepare.Flag("verbose", "Use a higher log level when creating the cluster").Short('v').Bool()
 
 	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
 
@@ -89,7 +90,10 @@ func main() {
 				logLevel = 5
 			}
 
-			if err = pipeOutput(exec.CommandContext(ctx, "kind", "create", "cluster", "--name", *clusterName, "--config", *prepareConfigFile, "--image", "kindest/node:v1.16.9", "--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
+			if err = pipeOutput(exec.CommandContext(ctx,
+				"kind", "create", "cluster", "--name", *clusterName,
+				"--config", *prepareConfigFile, "--image", *prepareKindNodeImage,
+				"--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 			}
 		}

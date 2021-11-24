@@ -77,9 +77,7 @@ all the necessary dependencies:
 
 ```shell
 brew cask install docker
-brew install go kubernetes-cli kustomize
-curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-darwin-amd64 \
-  && chmod a+x /usr/local/bin/kind
+brew install go kubernetes-cli kustomize kind
 mkdir /usr/local/kubebuilder
 curl -fsL https://go.kubebuilder.io/dl/2.3.1/$(go env GOOS)/$(go env GOARCH) | tar -xvz --strip=1 -C /usr/local/kubebuilder
 export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin

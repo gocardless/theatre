@@ -14,6 +14,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -65,6 +66,12 @@ const (
 
 	DefaultTTLBeforeRunning = 1 * time.Hour
 	DefaultTTLAfterFinished = 24 * time.Hour
+
+	// Console session recording
+	SessionRecVolMount    = "/var/log/session"
+	SessionRecVolName     = "session-data"
+	SidewrapShutdownDelay = 60
+	SidewrapGracePeriod   = 30
 )
 
 type IgnoreCreatePredicate struct {
@@ -80,6 +87,16 @@ type ConsoleReconciler struct {
 	LifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
 	Log               logr.Logger
 	Scheme            *runtime.Scheme
+	// Enable injection of console session recording using tlog
+	EnableSessionRecording bool
+	// The image reference for the sidecar to inject to stream session
+	// recording data (if Session Recording is enabled)
+	SessionSidecarImage string
+	// The Google project ID containing the Pub/Sub topic that the session
+	// recording data should be sent to
+	SessionPubsubProjectId string
+	// The Pub/Sub topic ID that the session recording data should be sent to
+	SessionPubsubTopicId string
 }
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -115,6 +132,62 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 				},
 			),
 		)
+}
+
+func (r *ConsoleReconciler) createOrUpdateUserRbac(logger logr.Logger, ctx context.Context, tpl *workloadsv1alpha1.ConsoleTemplate, req ctrl.Request, csl *workloadsv1alpha1.Console, authorisation *workloadsv1alpha1.ConsoleAuthorisation) error {
+
+	// Create or update the user role
+	role := buildUserRole(req.NamespacedName, csl.Status.PodName)
+	if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
+		return err
+	}
+
+	// Create or update the directory role binding
+	subjects := append(
+		tpl.Spec.AdditionalAttachSubjects,
+		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
+	)
+	// Append all the authorising users to allow them to attach
+	if authorisation != nil {
+		subjects = append(subjects, authorisation.Spec.Authorisations...)
+	}
+
+	drb := buildUserDirectoryRoleBinding(req.NamespacedName, role, subjects)
+	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx context.Context, tpl *workloadsv1alpha1.ConsoleTemplate, req ctrl.Request, csl *workloadsv1alpha1.Console, authorisation *workloadsv1alpha1.ConsoleAuthorisation) error {
+
+	// This function creates a role which grants access to read pod information for the specific pod belonging to this
+	// console. It also creates a rolebinding which binds to the service account associated with the console. The intended
+	// result is to allow the console pod to read information about itself, which is required by our wrapper so that it can
+	// exit the sidecar when the main console container exits.
+
+	// We already create roles and directory rolebindings with the same name as
+	// the console to provide permissions on the job/pod. Therefore for the name
+	// of these objects, suffix the console name with '-svc'.
+	rbacName := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-%s", req.Name, "svc"),
+		Namespace: req.Namespace,
+	}
+
+	// Create or update the service role
+	role := buildServiceRole(rbacName, csl.Status.PodName)
+	if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
+		return err
+	}
+
+	// Create or update the service rolebinding
+	drb := buildServiceRoleBinding(rbacName, role, tpl.Spec.Template.Spec.ServiceAccountName)
+	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
@@ -251,27 +324,19 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		// pods resource and triggering reconciliations via that.
 		res = requeueAfterInterval(logger, time.Second)
 	case csl.Running():
-		// Create or update the role
+		// Create or update the user role and rolebinding
 		// Role grants permissions for a specific resource name, we need to
 		// wait until the Pod is running to know the resource name
-		role := buildRole(req.NamespacedName, csl.Status.PodName)
-		if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
-			return res, err
-		}
-
-		// Create or update the directory role binding
-		subjects := append(
-			tpl.Spec.AdditionalAttachSubjects,
-			rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
-		)
-		// Append all the authorising users to allow them to attach
-		if authorisation != nil {
-			subjects = append(subjects, authorisation.Spec.Authorisations...)
-		}
-
-		drb := buildDirectoryRoleBinding(req.NamespacedName, role, subjects)
-		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+		if err := r.createOrUpdateUserRbac(logger, ctx, tpl, req, csl, authorisation); err != nil {
 			return ctrl.Result{}, err
+		}
+		// Create or update the service role
+		// This is only required if we're using session recording as the sidecar
+		// needs to be able read its own container statuses
+		if r.EnableSessionRecording {
+			if err := r.createOrUpdateServiceRbac(logger, ctx, tpl, req, csl, authorisation); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	case csl.PostRunning():
 		// Requeue for when the console has reached its after finished TTL so it can be deleted
@@ -592,6 +657,121 @@ func requeueAfterInterval(logger logr.Logger, interval time.Duration) reconcile.
 	return reconcile.Result{Requeue: true, RequeueAfter: interval}
 }
 
+func sessionRecordFileName(ix int) string {
+	return fmt.Sprintf("%s/output%0d", SessionRecVolMount, ix)
+}
+
+func (r *ConsoleReconciler) buildSidecarContainer() corev1.Container {
+	return corev1.Container{
+		Name:            "session-streamer",
+		Image:           r.SessionSidecarImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      SessionRecVolName,
+				MountPath: SessionRecVolMount,
+				ReadOnly:  false,
+			},
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+				corev1.ResourceCPU:    resource.MustParse("512m"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+				corev1.ResourceCPU:    resource.MustParse("512m"),
+			},
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "KUBERNETES_POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name: "KUBERNETES_NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.namespace",
+					},
+				},
+			},
+			{
+				Name:  "SIDECAR_SHUTDOWN_DELAY",
+				Value: fmt.Sprint(SidewrapShutdownDelay),
+			},
+			{
+				Name:  "SIDECAR_GRACE_PERIOD",
+				Value: fmt.Sprint(SidewrapGracePeriod),
+			},
+			{
+				Name:  "TOPIC_ID",
+				Value: r.SessionPubsubTopicId,
+			},
+			{
+				Name:  "PROJECT_ID",
+				Value: r.SessionPubsubProjectId,
+			},
+		},
+	}
+}
+
+func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger, podTemplate *corev1.PodTemplateSpec) *corev1.PodTemplateSpec {
+
+	mutatedTemplate := podTemplate.DeepCopy()
+
+	// Add volume mount for session recording data
+	mutatedTemplate.Spec.Volumes = append(
+		mutatedTemplate.Spec.Volumes,
+		corev1.Volume{
+			Name: SessionRecVolName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	)
+
+	// Modify each container command and args to start the
+	// session recording wrapper which spawns the original
+	// command
+	for ix := range mutatedTemplate.Spec.Containers {
+		ctr := &mutatedTemplate.Spec.Containers[ix]
+		execCommand := []string{"--"}
+		execCommand = append(execCommand, ctr.Command...)
+		execCommand = append(execCommand, ctr.Args...)
+
+		ctr.Command = []string{"tlog-rec"}
+		args := []string{"-o", sessionRecordFileName(ix), "--log-input"}
+		args = append(args, execCommand...)
+		ctr.Args = args
+
+		ctr.VolumeMounts = append(
+			ctr.VolumeMounts,
+			corev1.VolumeMount{
+				Name:      SessionRecVolName,
+				MountPath: SessionRecVolMount,
+			},
+		)
+	}
+
+	mutatedTemplate.Spec.Containers = append(
+		mutatedTemplate.Spec.Containers,
+		r.buildSidecarContainer(),
+	)
+	// The grace period for the pod must be longer than Sidewrap's delay
+	// and grace periods combined
+	var gracePeriod int64 = SidewrapShutdownDelay + SidewrapGracePeriod + 30
+	if *mutatedTemplate.Spec.TerminationGracePeriodSeconds < gracePeriod {
+		mutatedTemplate.Spec.TerminationGracePeriodSeconds = &gracePeriod
+	}
+
+	return mutatedTemplate
+}
+
 func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedName, csl *workloadsv1alpha1.Console, template *workloadsv1alpha1.ConsoleTemplate) *batchv1.Job {
 	timeout := int64(csl.Spec.TimeoutSeconds)
 
@@ -600,7 +780,7 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 
 	numContainers := len(jobTemplate.Spec.Containers)
 
-	// If there's no containers in the spec then the controller will be emitting
+	// If there are no containers in the spec then the controller will be emitting
 	// warnings anyway, as the job will be rejected
 	if numContainers > 0 {
 		container := &jobTemplate.Spec.Containers[0]
@@ -660,6 +840,11 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 		jobTemplate.ObjectMeta.Labels,
 	)
 
+	podTemplate := (*corev1.PodTemplateSpec)(jobTemplate)
+	if r.EnableSessionRecording {
+		podTemplate = r.addSessionRecordingToPodTemplate(logger, podTemplate)
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -667,7 +852,7 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
-			Template:              corev1.PodTemplateSpec(*jobTemplate),
+			Template:              *podTemplate,
 			Completions:           &completions,
 			Parallelism:           &parallelism,
 			ActiveDeadlineSeconds: &timeout,
@@ -676,7 +861,52 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 	}
 }
 
-func buildRole(name types.NamespacedName, podName string) *rbacv1.Role {
+func buildServiceRole(name types.NamespacedName, podName string) *rbacv1.Role {
+	return &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				Verbs:         []string{"get"},
+				APIGroups:     []string{""},
+				Resources:     []string{"pods"},
+				ResourceNames: []string{podName},
+			},
+		},
+	}
+}
+
+func buildServiceRoleBinding(name types.NamespacedName, role *rbacv1.Role, serviceAccountName string) *rbacv1alpha1.DirectoryRoleBinding {
+	// There are cases where the console template lacks a service account
+	// In these cases the pods and jobs will run under the "default" account
+	// for the namespace
+	if len(serviceAccountName) == 0 {
+		serviceAccountName = "default"
+	}
+	return &rbacv1alpha1.DirectoryRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
+			Subjects: []rbacv1.Subject{
+				{
+					Kind: "ServiceAccount",
+					Name: serviceAccountName,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     name.Name,
+			},
+		},
+	}
+}
+
+func buildUserRole(name types.NamespacedName, podName string) *rbacv1.Role {
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -705,7 +935,7 @@ func buildRole(name types.NamespacedName, podName string) *rbacv1.Role {
 	}
 }
 
-func buildDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1alpha1.DirectoryRoleBinding {
+func buildUserDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1alpha1.DirectoryRoleBinding {
 	return &rbacv1alpha1.DirectoryRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
@@ -769,7 +999,7 @@ func (r *ConsoleReconciler) createAuthorisationObjects(ctx context.Context, logg
 	}
 
 	// Create or update the directory role binding
-	drb := buildDirectoryRoleBinding(rbacName, role, subjects)
+	drb := buildUserDirectoryRoleBinding(rbacName, role, subjects)
 	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
 		return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
 	}

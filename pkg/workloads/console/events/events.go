@@ -1,5 +1,4 @@
-// package events
-package main
+package events
 
 import (
 	"strings"

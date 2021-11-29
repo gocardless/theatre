@@ -5,27 +5,46 @@ import (
 	"time"
 )
 
+type Kind string
+
+const (
+	KindConsole Kind = "Console"
+)
+
+type EventKind string
+
+const (
+	EventRequest    EventKind = "Request"
+	EventAuthorise  EventKind = "Authorise"
+	EventStart      EventKind = "Start"
+	EventAttach     EventKind = "Attach"
+	EventTerminated EventKind = "Terminate"
+)
+
 type CommonEvent struct {
-	Version    string    `json:"apiVersion"`
-	Kind       string    `json:"kind"`
-	Event      string    `json:"event"`
-	ObservedAt time.Time `json:"observed_at"`
-	Id         string    `json:"id"`
+	Version     string            `json:"apiVersion"`
+	Kind        Kind              `json:"kind"`
+	Event       EventKind         `json:"event"`
+	ObservedAt  time.Time         `json:"observed_at"`
+	Id          string            `json:"id"`
+	Annotations map[string]string `json:"annotations"`
 }
 
+// EventKind returns the Kind/Event of the Event
 func (e CommonEvent) EventKind() string {
-	return strings.Join([]string{e.Kind, e.Event}, "/")
+	return strings.Join([]string{string(e.Kind), string(e.Event)}, "/")
 }
 
 type ConsoleRequestSpec struct {
 	Reason   string `json:"reason"`
 	Username string `json:"username"`
 	// Context is used to denote the cluster name,
-	Context         string    `json:"context"`
-	Namespace       string    `json:"namespace"`
-	ConsoleTemplate string    `json:"console_template"`
-	Console         string    `json:"console"`
-	Timestamp       time.Time `json:"timestamp"`
+	Context         string            `json:"context"`
+	Namespace       string            `json:"namespace"`
+	ConsoleTemplate string            `json:"console_template"`
+	Console         string            `json:"console"`
+	Timestamp       time.Time         `json:"timestamp"`
+	Labels          map[string]string `json:"labels"`
 }
 
 type ConsoleRequestEvent struct {
@@ -63,8 +82,7 @@ type ConsoleAttachEvent struct {
 }
 
 type ConsoleTerminatedSpec struct {
-	TimedOut bool   `json:"timed_out"`
-	ExitCode uint16 `json:"exit_code"`
+	TimedOut bool `json:"timed_out"`
 }
 
 type ConsoleTerminatedEvent struct {

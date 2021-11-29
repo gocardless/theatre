@@ -128,7 +128,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 	})
 
 	JustBeforeEach(func() {
-		gock.New("https://www.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members").
+		gock.New("https://admin.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members").
 			Reply(200).
 			JSON(membersResponse)
 	})

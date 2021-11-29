@@ -77,8 +77,9 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 
 type ConsoleReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	LifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
+	Log               logr.Logger
+	Scheme            *runtime.Scheme
 }
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -196,6 +197,10 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		job = r.buildJob(logger, req.NamespacedName, csl, tpl)
 		if err := r.createOrUpdate(ctx, logger, csl, job, Job, jobDiff); err != nil {
 			return ctrl.Result{}, err
+		}
+		err = r.LifecycleRecorder.ConsoleStart(ctx, csl, job.Name)
+		if err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.start")
 		}
 	}
 

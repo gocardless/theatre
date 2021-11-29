@@ -8,18 +8,21 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/gocardless/theatre/v3/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // +kubebuilder:object:generate=false
 type ConsoleAuthenticatorWebhook struct {
-	logger  logr.Logger
-	decoder *admission.Decoder
+	lifecycleRecorder LifecycleEventRecorder
+	logger            logr.Logger
+	decoder           *admission.Decoder
 }
 
-func NewConsoleAuthenticatorWebhook(logger logr.Logger) *ConsoleAuthenticatorWebhook {
+func NewConsoleAuthenticatorWebhook(lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthenticatorWebhook {
 	return &ConsoleAuthenticatorWebhook{
-		logger: logger,
+		lifecycleRecorder: lifecycleRecorder,
+		logger:            logger,
 	}
 }
 
@@ -50,6 +53,14 @@ func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.
 	}
 
 	logger.Info(fmt.Sprintf("authentication successful for user %s", user), "event", "authentication.success", "user", user)
+
+	// This endpoint is only called when we are creating console
+	// objects. If we are succeeding the request we are creating a
+	// console request.
+	err = c.lifecycleRecorder.ConsoleRequest(ctx, csl)
+	if err != nil {
+		logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.request")
+	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, copyBytes)
 }

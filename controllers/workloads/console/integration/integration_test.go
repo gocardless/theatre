@@ -158,7 +158,7 @@ var _ = Describe("Console", func() {
 			})
 
 			It("Keeps the console's timeout", func() {
-				By("Expect console kept it's timeout")
+				By("Expect console kept its timeout")
 				Eventually(func() int {
 					identifier, _ := client.ObjectKeyFromObject(csl)
 					mgr.GetClient().Get(context.TODO(), identifier, csl)

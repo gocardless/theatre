@@ -303,13 +303,23 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					return kubeClient.Update(context.TODO(), console)
 				}).ShouldNot(HaveOccurred(), "could not update console user")
 
-				By("Authorise a console")
-				err = consoleRunner.Authorise(context.TODO(), runner.AuthoriseOptions{
-					Namespace:   namespace,
-					ConsoleName: console.Name,
-					Username:    user,
-				})
-				Expect(err).NotTo(HaveOccurred(), "could not authorise console")
+				By("Authorise a console and attach")
+				go func() {
+					err := consoleRunner.Authorise(context.TODO(), runner.AuthoriseOptions{
+						Namespace:   namespace,
+						ConsoleName: console.Name,
+						Username:    user,
+						Attach:      true,
+						KubeConfig:  config,
+						IO: runner.IOStreams{
+							In:     nil,
+							Out:    nil,
+							ErrOut: nil,
+						},
+						Hook: nil,
+					})
+					Expect(err).NotTo(HaveOccurred(), "could not authorise console")
+				}()
 
 				var pod *corev1.Pod
 				By("Expect a pod has been created")
@@ -350,7 +360,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					Hook: nil,
 				})
 
-				By("Expect that the attachment is observed")
+				By("Expect that the attachment is observed twice")
 				Eventually(func() []corev1.Event {
 					events := &corev1.EventList{}
 					err := kubeClient.List(
@@ -367,7 +377,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 					Expect(err).ToNot(HaveOccurred())
 
 					return events.Items
-				}).Should(HaveLen(1))
+				}).Should(And(HaveLen(1), WithTransform(func(evs []corev1.Event) int { return int(evs[0].Count) }, Equal(2))))
 
 				By("Expect the console phase eventually changes to Stopped")
 				Eventually(func() workloadsv1alpha1.ConsolePhase {

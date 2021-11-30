@@ -13,13 +13,15 @@ import (
 
 // +kubebuilder:object:generate=false
 type ConsoleAuthenticatorWebhook struct {
-	logger  logr.Logger
-	decoder *admission.Decoder
+	lifecycleRecorder LifecycleEventRecorder
+	logger            logr.Logger
+	decoder           *admission.Decoder
 }
 
-func NewConsoleAuthenticatorWebhook(logger logr.Logger) *ConsoleAuthenticatorWebhook {
+func NewConsoleAuthenticatorWebhook(lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthenticatorWebhook {
 	return &ConsoleAuthenticatorWebhook{
-		logger: logger,
+		lifecycleRecorder: lifecycleRecorder,
+		logger:            logger,
 	}
 }
 

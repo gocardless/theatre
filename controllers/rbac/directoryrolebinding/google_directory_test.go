@@ -33,7 +33,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 	})
 
 	JustBeforeEach(func() {
-		url := "https://www.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members"
+		url := "https://admin.googleapis.com/admin/directory/v1/groups/platform%40gocardless.com/members"
 
 		gock.New(url).Times(1).Reply(200).JSON(pageOne)
 		gock.New(url).Times(1).MatchParam("pageToken", pageOne.NextPageToken).Reply(200).JSON(pageTwo)

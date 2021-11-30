@@ -13,20 +13,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"github.com/gocardless/theatre/v3/pkg/logging"
 	rbacutils "github.com/gocardless/theatre/v3/pkg/rbac"
 )
 
 // +kubebuilder:object:generate=false
 type ConsoleAuthorisationWebhook struct {
-	client  client.Client
-	logger  logr.Logger
-	decoder *admission.Decoder
+	client            client.Client
+	lifecycleRecorder LifecycleEventRecorder
+	logger            logr.Logger
+	decoder           *admission.Decoder
 }
 
-func NewConsoleAuthorisationWebhook(c client.Client, logger logr.Logger) *ConsoleAuthorisationWebhook {
+func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthorisationWebhook {
 	return &ConsoleAuthorisationWebhook{
-		client: c,
-		logger: logger,
+		client:            c,
+		lifecycleRecorder: lifecycleRecorder,
+		logger:            logger,
 	}
 }
 
@@ -75,6 +78,11 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	}
 
 	logger.Info("authorisation successful", "event", "authorisation.success")
+	err = c.lifecycleRecorder.ConsoleAuthorise(ctx, csl, user)
+	if err != nil {
+		logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.authorise")
+	}
+
 	return admission.ValidationResponse(true, "")
 }
 

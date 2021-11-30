@@ -7,28 +7,31 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gocardless/theatre/v3/pkg/logging"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/gocardless/theatre/v3/pkg/logging"
 )
 
 // +kubebuilder:object:generate=false
 type ConsoleAttachObserverWebhook struct {
-	client         client.Client
-	recorder       record.EventRecorder
-	logger         logr.Logger
-	decoder        *admission.Decoder
-	requestTimeout time.Duration
+	client            client.Client
+	recorder          record.EventRecorder
+	lifecycleRecorder LifecycleEventRecorder
+	logger            logr.Logger
+	decoder           *admission.Decoder
+	requestTimeout    time.Duration
 }
 
-func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, logger logr.Logger, requestTimeout time.Duration) *ConsoleAttachObserverWebhook {
+func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration) *ConsoleAttachObserverWebhook {
 	return &ConsoleAttachObserverWebhook{
-		client:         c,
-		recorder:       recorder,
-		logger:         logger,
-		requestTimeout: requestTimeout,
+		client:            c,
+		recorder:          recorder,
+		lifecycleRecorder: lifecycleRecorder,
+		logger:            logger,
+		requestTimeout:    requestTimeout,
 	}
 }
 
@@ -127,6 +130,10 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 		),
 		"event", "ConsoleAttach",
 	)
+	err := c.lifecycleRecorder.ConsoleAttach(ctx, csl, req.UserInfo.Username, attachOptions.Container)
+	if err != nil {
+		logging.WithNoRecord(logger).Error(err, "failed to record event")
+	}
 
 	return admission.Allowed("attachment observed")
 }

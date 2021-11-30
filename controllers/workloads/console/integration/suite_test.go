@@ -21,6 +21,7 @@ import (
 	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
 	consolecontroller "github.com/gocardless/theatre/v3/controllers/workloads/console"
+	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
 )
 
 var (
@@ -63,6 +64,8 @@ var _ = BeforeSuite(func(done Done) {
 	err = workloadsv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder("test", ctrl.Log.Logger, events.NewNopPublisher())
+
 	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 
@@ -75,6 +78,7 @@ var _ = BeforeSuite(func(done Done) {
 	// console authenticator webhook
 	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
+			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
 		),
 	})
@@ -83,6 +87,7 @@ var _ = BeforeSuite(func(done Done) {
 	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
 			mgr.GetClient(),
+			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authorisation"),
 		),
 	})
@@ -103,9 +108,10 @@ var _ = BeforeSuite(func(done Done) {
 	})
 
 	err = (&consolecontroller.ConsoleReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme: mgr.GetScheme(),
+		Client:            mgr.GetClient(),
+		LifecycleRecorder: lifecycleRecorder,
+		Log:               ctrl.Log.WithName("controllers").WithName("console"),
+		Scheme:            mgr.GetScheme(),
 	}).SetupWithManager(context.TODO(), mgr)
 	Expect(err).ToNot(HaveOccurred())
 

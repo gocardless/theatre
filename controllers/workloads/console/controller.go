@@ -120,6 +120,15 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
 	logger = logger.WithValues("console", req.NamespacedName)
 
+	// If we have yet to set the owner reference record this as a
+	// new console request
+	if len(csl.OwnerReferences) == 0 {
+		err := r.LifecycleRecorder.ConsoleRequest(ctx, csl)
+		if err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.request")
+		}
+	}
+
 	// Fetch console template
 	tpl, err := r.getConsoleTemplate(ctx, csl, req.NamespacedName)
 	if err != nil {
@@ -198,9 +207,14 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		if err := r.createOrUpdate(ctx, logger, csl, job, Job, jobDiff); err != nil {
 			return ctrl.Result{}, err
 		}
-		err = r.LifecycleRecorder.ConsoleStart(ctx, csl, job.Name)
-		if err != nil {
-			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.start")
+
+		// If we're pending a job we will be creating a job
+		// and starting the console
+		if csl.PendingJob() {
+			err = r.LifecycleRecorder.ConsoleStart(ctx, csl, job.Name)
+			if err != nil {
+				logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.start")
+			}
 		}
 	}
 

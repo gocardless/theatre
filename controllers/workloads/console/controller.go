@@ -120,19 +120,20 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
 	logger = logger.WithValues("console", req.NamespacedName)
 
-	// If we have yet to set the owner reference record this as a
-	// new console request
-	if len(csl.OwnerReferences) == 0 {
-		err := r.LifecycleRecorder.ConsoleRequest(ctx, csl)
-		if err != nil {
-			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.request")
-		}
-	}
-
 	// Fetch console template
 	tpl, err := r.getConsoleTemplate(ctx, csl, req.NamespacedName)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to retrieve console template")
+	}
+
+	// If we have yet to set the owner reference record then this as a new
+	// console request, and if the console requires authorisation then we
+	// publish a lifecycle event.
+	if len(csl.OwnerReferences) == 0 && tpl.HasAuthorisationRules() {
+		err := r.LifecycleRecorder.ConsoleRequest(ctx, csl)
+		if err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.request")
+		}
 	}
 
 	// Set the template as owner of the console

@@ -78,9 +78,16 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	}
 
 	logger.Info("authorisation successful", "event", "authorisation.success")
-	err = c.lifecycleRecorder.ConsoleAuthorise(ctx, csl, user)
+
+	tpl, err := c.getConsoleTemplate(ctx, csl.Spec.ConsoleTemplateRef.Name, existingAuth.Namespace)
 	if err != nil {
-		logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.authorise")
+		return admission.ValidationResponse(false, fmt.Sprintf("failed to retrieve console template for the authorisation: %v", err))
+	}
+	if tpl.HasAuthorisationRules() {
+		err = c.lifecycleRecorder.ConsoleAuthorise(ctx, csl, user)
+		if err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.authorise")
+		}
 	}
 
 	return admission.ValidationResponse(true, "")
@@ -95,6 +102,17 @@ func (c *ConsoleAuthorisationWebhook) getConsole(ctx context.Context, name, name
 	csl := &Console{}
 
 	return csl, c.client.Get(ctx, namespacedName, csl)
+}
+
+func (c *ConsoleAuthorisationWebhook) getConsoleTemplate(ctx context.Context, name, namespace string) (*ConsoleTemplate, error) {
+	namespacedName := client.ObjectKey{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	tpl := &ConsoleTemplate{}
+
+	return tpl, c.client.Get(ctx, namespacedName, tpl)
 }
 
 type ConsoleAuthorisationUpdate struct {

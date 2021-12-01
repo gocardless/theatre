@@ -53,6 +53,7 @@ func NewLifecycleEventRecorder(contextName string, logger logr.Logger, publisher
 }
 
 func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Console) error {
+
 	event := &events.ConsoleRequestEvent{
 		CommonEvent: CommonEventFromConsole(l.contextName, events.EventRequest, csl),
 		Spec: events.ConsoleRequestSpec{

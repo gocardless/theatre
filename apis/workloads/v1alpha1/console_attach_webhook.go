@@ -96,6 +96,22 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	rctx, cancel = context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+
+	// Get the console template associated to publish events
+	tpl := &ConsoleTemplate{}
+	if err := c.client.Get(rctx, client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      pod.Labels["console-template-name"], // ??
+	}, tpl); err != nil {
+		logger.Error(
+			err, "failed to get console template",
+			"console-template", pod.Labels["console-template-name"],
+		)
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
 	logger.WithValues(
 		"pod", pod.Name,
 		"namespace", pod.Namespace,
@@ -130,9 +146,12 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 		),
 		"event", "ConsoleAttach",
 	)
-	err := c.lifecycleRecorder.ConsoleAttach(ctx, csl, req.UserInfo.Username, attachOptions.Container)
-	if err != nil {
-		logging.WithNoRecord(logger).Error(err, "failed to record event")
+
+	if tpl.HasAuthorisationRules() {
+		err := c.lifecycleRecorder.ConsoleAttach(ctx, csl, req.UserInfo.Username, attachOptions.Container)
+		if err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event")
+		}
 	}
 
 	return admission.Allowed("attachment observed")

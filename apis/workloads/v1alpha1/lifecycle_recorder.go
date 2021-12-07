@@ -24,7 +24,7 @@ func CommonEventFromConsole(ctx string, eventKind events.EventKind, csl *Console
 
 // +kubebuilder:object:generate=false
 type LifecycleEventRecorder interface {
-	ConsoleRequest(context.Context, *Console) error
+	ConsoleRequest(context.Context, *Console, *ConsoleAuthorisationRule) error
 	ConsoleAuthorise(context.Context, *Console, string) error
 	ConsoleStart(context.Context, *Console, string) error
 	ConsoleAttach(context.Context, *Console, string, string) error
@@ -52,18 +52,24 @@ func NewLifecycleEventRecorder(contextName string, logger logr.Logger, publisher
 	}
 }
 
-func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Console) error {
+func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Console, authRule *ConsoleAuthorisationRule) error {
+	authCount := 0
+	if authRule != nil {
+		authCount = authRule.AuthorisationsRequired
+	}
+
 	event := &events.ConsoleRequestEvent{
 		CommonEvent: CommonEventFromConsole(l.contextName, events.EventRequest, csl),
 		Spec: events.ConsoleRequestSpec{
-			Reason:          csl.Spec.Reason,
-			Username:        csl.Spec.User,
-			Context:         l.contextName,
-			Namespace:       csl.Namespace,
-			ConsoleTemplate: csl.Spec.ConsoleTemplateRef.Name,
-			Console:         csl.Name,
-			Timestamp:       csl.CreationTimestamp.Time,
-			Labels:          csl.Labels,
+			Reason:                 csl.Spec.Reason,
+			Username:               csl.Spec.User,
+			Context:                l.contextName,
+			Namespace:              csl.Namespace,
+			ConsoleTemplate:        csl.Spec.ConsoleTemplateRef.Name,
+			Console:                csl.Name,
+			RequiredAuthorisations: authCount,
+			Timestamp:              csl.CreationTimestamp.Time,
+			Labels:                 csl.Labels,
 		},
 	}
 

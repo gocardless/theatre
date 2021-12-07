@@ -39,12 +39,13 @@ type ConsoleRequestSpec struct {
 	Reason   string `json:"reason"`
 	Username string `json:"username"`
 	// Context is used to denote the cluster name,
-	Context         string            `json:"context"`
-	Namespace       string            `json:"namespace"`
-	ConsoleTemplate string            `json:"console_template"`
-	Console         string            `json:"console"`
-	Timestamp       time.Time         `json:"timestamp"`
-	Labels          map[string]string `json:"labels"`
+	Context                string            `json:"context"`
+	Namespace              string            `json:"namespace"`
+	ConsoleTemplate        string            `json:"console_template"`
+	Console                string            `json:"console"`
+	RequiredAuthorisations int               `json:"required_authorisations"`
+	Timestamp              time.Time         `json:"timestamp"`
+	Labels                 map[string]string `json:"labels"`
 }
 
 type ConsoleRequestEvent struct {
@@ -97,5 +98,5 @@ func NewConsoleEventID(context, namespace, console string, time time.Time) strin
 		// year (2006) month (01) day (02) hour (15) minute (04) second (05)
 		time.Format("20060102150405"),
 		context, namespace, console,
-	}, "-")
+	}, "/")
 }

@@ -214,8 +214,7 @@ matchRule:
 // HasAuthorisationRules defines whether a console template has authorisation
 // rules defined on it.
 func (ct *ConsoleTemplate) HasAuthorisationRules() bool {
-	return len(ct.Spec.AuthorisationRules) > 0 ||
-		(ct.Spec.DefaultAuthorisationRule != nil && ct.Spec.DefaultAuthorisationRule.AuthorisationsRequired > 0)
+	return len(ct.Spec.AuthorisationRules) > 0 || ct.Spec.DefaultAuthorisationRule != nil
 }
 
 // Validate checks the console template object for correctness and returns a

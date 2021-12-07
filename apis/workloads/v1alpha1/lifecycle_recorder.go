@@ -53,7 +53,7 @@ func NewLifecycleEventRecorder(contextName string, logger logr.Logger, publisher
 }
 
 func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Console, authRule *ConsoleAuthorisationRule) error {
-	var authCount int
+	authCount := 0
 	if authRule != nil {
 		authCount = authRule.AuthorisationsRequired
 	}

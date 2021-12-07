@@ -120,6 +120,9 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
 	logger = logger.WithValues("console", req.NamespacedName)
 
+	// If we have yet to set the owner reference then this is a new console request
+	isNewConsole := len(csl.OwnerReferences) == 0
+
 	// Fetch console template
 	tpl, err := r.getConsoleTemplate(ctx, csl, req.NamespacedName)
 	if err != nil {
@@ -183,9 +186,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	}
 
-	// If we have yet to set the owner reference record this as a
-	// new console request
-	if len(csl.OwnerReferences) == 0 {
+	if isNewConsole {
 		err := r.LifecycleRecorder.ConsoleRequest(ctx, csl, authRule)
 		if err != nil {
 			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.request")

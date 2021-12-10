@@ -62,7 +62,7 @@ var _ = Describe("Console", func() {
 				Template: workloadsv1alpha1.PodTemplatePreserveMetadataSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							corev1.Container{
+							{
 								Image:   "alpine:latest",
 								Name:    "console-container-0",
 								Command: []string{"/bin/sh", "-c", "sleep 100"},
@@ -389,19 +389,19 @@ var _ = Describe("Console", func() {
 			Expect(role.Rules).To(
 				Equal(
 					[]rbacv1.PolicyRule{
-						rbacv1.PolicyRule{
+						{
 							Verbs:         []string{"create"},
 							APIGroups:     []string{""},
 							Resources:     []string{"pods/exec", "pods/attach"},
 							ResourceNames: []string{podName},
 						},
-						rbacv1.PolicyRule{
+						{
 							Verbs:         []string{"get"},
 							APIGroups:     []string{""},
 							Resources:     []string{"pods/log"},
 							ResourceNames: []string{podName},
 						},
-						rbacv1.PolicyRule{
+						{
 							Verbs:         []string{"get", "delete"},
 							APIGroups:     []string{""},
 							Resources:     []string{"pods"},
@@ -431,9 +431,9 @@ var _ = Describe("Console", func() {
 			)
 			Expect(drb.Spec.Subjects).To(
 				ConsistOf([]rbacv1.Subject{
-					rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
-					rbacv1.Subject{Kind: "User", Name: "add-user@example.com"},
-					rbacv1.Subject{Kind: "GoogleGroup", Name: "group@example.com"},
+					{Kind: "User", Name: csl.Spec.User},
+					{Kind: "User", Name: "add-user@example.com"},
+					{Kind: "GoogleGroup", Name: "group@example.com"},
 				}),
 			)
 
@@ -624,7 +624,7 @@ var _ = Describe("Console", func() {
 				)
 				Expect(drb.Spec.Subjects).To(
 					ConsistOf([]rbacv1.Subject{
-						rbacv1.Subject{Kind: "User", Name: "authorising-user-2@example.com"},
+						{Kind: "User", Name: "authorising-user-2@example.com"},
 					}),
 				)
 

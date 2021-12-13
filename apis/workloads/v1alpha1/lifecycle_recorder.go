@@ -8,18 +8,9 @@ import (
 	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
 )
 
-func CommonEventFromConsole(ctx string, eventKind events.EventKind, csl *Console) events.CommonEvent {
-	return events.CommonEvent{
-		Version:    "v1alpha1",
-		Kind:       events.KindConsole,
-		Event:      eventKind,
-		ObservedAt: time.Now().UTC(),
-		Id: events.NewConsoleEventID(
-			ctx, csl.Namespace, csl.Name,
-			csl.CreationTimestamp.Time,
-		),
-		Annotations: map[string]string{},
-	}
+// +kubebuilder:object:generate=false
+type ConsoleIdBuilder interface {
+	BuildId(*Console) string
 }
 
 // +kubebuilder:object:generate=false
@@ -32,6 +23,7 @@ type LifecycleEventRecorder interface {
 }
 
 var _ LifecycleEventRecorder = &lifecycleEventRecorderImpl{}
+var _ ConsoleIdBuilder = &consoleIdBuilderImpl{}
 
 // lifecycleEventRecorderImpl implements the interface to record lifecycle events given
 //
@@ -40,15 +32,46 @@ type lifecycleEventRecorderImpl struct {
 	// context name for the kubernetes cluster where this recorder runs
 	contextName string
 
+	idBuilder ConsoleIdBuilder
 	logger    logr.Logger
 	publisher events.Publisher
 }
 
-func NewLifecycleEventRecorder(contextName string, logger logr.Logger, publisher events.Publisher) LifecycleEventRecorder {
+// consoleIdBuilderImpl implements the interface to build console IDs from a console object
+//
+// +kubebuilder:object:generate=false
+type consoleIdBuilderImpl struct {
+	// context name for the kubernetes cluster where this recorder runs
+	contextName string
+}
+
+func NewConsoleIdBuilder(contextName string) ConsoleIdBuilder {
+	return &consoleIdBuilderImpl{
+		contextName: contextName,
+	}
+}
+
+func NewLifecycleEventRecorder(contextName string, logger logr.Logger, publisher events.Publisher, idBuilder ConsoleIdBuilder) LifecycleEventRecorder {
 	return &lifecycleEventRecorderImpl{
 		contextName: contextName,
 		logger:      logger,
 		publisher:   publisher,
+		idBuilder:   idBuilder,
+	}
+}
+
+func (b *consoleIdBuilderImpl) BuildId(csl *Console) string {
+	return events.NewConsoleEventID(b.contextName, csl.Namespace, csl.Name, csl.CreationTimestamp.Time)
+}
+
+func (l *lifecycleEventRecorderImpl) makeConsoleCommonEvent(eventKind events.EventKind, csl *Console) events.CommonEvent {
+	return events.CommonEvent{
+		Version:     "v1alpha1",
+		Kind:        events.KindConsole,
+		Event:       eventKind,
+		ObservedAt:  time.Now().UTC(),
+		Id:          l.idBuilder.BuildId(csl),
+		Annotations: map[string]string{},
 	}
 }
 
@@ -59,7 +82,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Co
 	}
 
 	event := &events.ConsoleRequestEvent{
-		CommonEvent: CommonEventFromConsole(l.contextName, events.EventRequest, csl),
+		CommonEvent: l.makeConsoleCommonEvent(events.EventRequest, csl),
 		Spec: events.ConsoleRequestSpec{
 			Reason:                 csl.Spec.Reason,
 			Username:               csl.Spec.User,
@@ -84,7 +107,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Co
 
 func (l *lifecycleEventRecorderImpl) ConsoleAuthorise(ctx context.Context, csl *Console, username string) error {
 	event := &events.ConsoleAuthoriseEvent{
-		CommonEvent: CommonEventFromConsole(l.contextName, events.EventAuthorise, csl),
+		CommonEvent: l.makeConsoleCommonEvent(events.EventAuthorise, csl),
 		Spec: events.ConsoleAuthoriseSpec{
 			Username: username,
 		},
@@ -101,7 +124,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleAuthorise(ctx context.Context, csl *
 
 func (l *lifecycleEventRecorderImpl) ConsoleStart(ctx context.Context, csl *Console, jobName string) error {
 	event := &events.ConsoleStartEvent{
-		CommonEvent: CommonEventFromConsole(l.contextName, events.EventStart, csl),
+		CommonEvent: l.makeConsoleCommonEvent(events.EventStart, csl),
 		Spec: events.ConsoleStartSpec{
 			Job: jobName,
 		},
@@ -118,7 +141,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleStart(ctx context.Context, csl *Cons
 
 func (l *lifecycleEventRecorderImpl) ConsoleAttach(ctx context.Context, csl *Console, username string, containerName string) error {
 	event := &events.ConsoleAttachEvent{
-		CommonEvent: CommonEventFromConsole(l.contextName, events.EventAttach, csl),
+		CommonEvent: l.makeConsoleCommonEvent(events.EventAttach, csl),
 		Spec: events.ConsoleAttachSpec{
 			Username:  username,
 			Pod:       csl.Status.PodName,
@@ -137,7 +160,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleAttach(ctx context.Context, csl *Con
 
 func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *Console, timedOut bool) error {
 	event := &events.ConsoleTerminatedEvent{
-		CommonEvent: CommonEventFromConsole(l.contextName, events.EventTerminated, csl),
+		CommonEvent: l.makeConsoleCommonEvent(events.EventTerminated, csl),
 		Spec: events.ConsoleTerminatedSpec{
 			TimedOut: timedOut,
 		},

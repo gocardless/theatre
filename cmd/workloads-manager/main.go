@@ -73,7 +73,8 @@ func main() {
 	} else { // Default to a nop publisher
 		publisher = events.NewNopPublisher()
 	}
-	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder(*contextName, logger, publisher)
+	idBuilder := workloadsv1alpha1.NewConsoleIdBuilder(*contextName)
+	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder(*contextName, logger, publisher, idBuilder)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
@@ -90,6 +91,7 @@ func main() {
 	if err = (&consolecontroller.ConsoleReconciler{
 		Client:                 mgr.GetClient(),
 		LifecycleRecorder:      lifecycleRecorder,
+		ConsoleIdBuilder:       idBuilder,
 		Log:                    ctrl.Log.WithName("controllers").WithName("console"),
 		Scheme:                 mgr.GetScheme(),
 		EnableSessionRecording: *enableSessionRecording,

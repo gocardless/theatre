@@ -85,6 +85,7 @@ func (IgnoreCreatePredicate) Create(e event.CreateEvent) bool {
 type ConsoleReconciler struct {
 	client.Client
 	LifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
+	ConsoleIdBuilder  workloadsv1alpha1.ConsoleIdBuilder
 	Log               logr.Logger
 	Scheme            *runtime.Scheme
 	// Enable injection of console session recording using tlog
@@ -661,7 +662,18 @@ func sessionRecordFileName(ix int) string {
 	return fmt.Sprintf("%s/output%0d", SessionRecVolMount, ix)
 }
 
-func (r *ConsoleReconciler) buildSidecarContainer() corev1.Container {
+func envVarSource(varName string, fieldPath string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name: varName,
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: fieldPath,
+			},
+		},
+	}
+}
+
+func (r *ConsoleReconciler) buildSidecarContainer(consoleId string) corev1.Container {
 	return corev1.Container{
 		Name:            "session-streamer",
 		Image:           r.SessionSidecarImage,
@@ -684,21 +696,15 @@ func (r *ConsoleReconciler) buildSidecarContainer() corev1.Container {
 			},
 		},
 		Env: []corev1.EnvVar{
+			envVarSource("KUBERNETES_POD_NAME", "metadata.name"),
+			envVarSource("KUBERNETES_NAMESPACE", "metadata.namespace"),
+			envVarSource("LABEL_CONSOLE_NAME", "metadata.labels['console-name']"),
+			envVarSource("LABEL_SERVICE", "metadata.labels['service']"),
+			envVarSource("LABEL_ENVIRONMENT", "metadata.labels['environment']"),
+			envVarSource("LABEL_USER", "metadata.labels['user']"),
 			{
-				Name: "KUBERNETES_POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-			{
-				Name: "KUBERNETES_NAMESPACE",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.namespace",
-					},
-				},
+				Name:  "CONSOLE_ID",
+				Value: consoleId,
 			},
 			{
 				Name:  "SIDECAR_SHUTDOWN_DELAY",
@@ -720,7 +726,7 @@ func (r *ConsoleReconciler) buildSidecarContainer() corev1.Container {
 	}
 }
 
-func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger, podTemplate *corev1.PodTemplateSpec) *corev1.PodTemplateSpec {
+func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger, podTemplate *corev1.PodTemplateSpec, consoleId string) *corev1.PodTemplateSpec {
 
 	mutatedTemplate := podTemplate.DeepCopy()
 
@@ -760,7 +766,7 @@ func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger,
 
 	mutatedTemplate.Spec.Containers = append(
 		mutatedTemplate.Spec.Containers,
-		r.buildSidecarContainer(),
+		r.buildSidecarContainer(consoleId),
 	)
 	// The grace period for the pod must be longer than Sidewrap's delay
 	// and grace periods combined
@@ -843,7 +849,8 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 
 	podTemplate := (*corev1.PodTemplateSpec)(jobTemplate)
 	if r.EnableSessionRecording {
-		podTemplate = r.addSessionRecordingToPodTemplate(logger, podTemplate)
+		consoleId := r.ConsoleIdBuilder.BuildId(csl)
+		podTemplate = r.addSessionRecordingToPodTemplate(logger, podTemplate, consoleId)
 	}
 
 	return &batchv1.Job{

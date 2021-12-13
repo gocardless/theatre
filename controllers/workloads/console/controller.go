@@ -765,7 +765,8 @@ func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger,
 	// The grace period for the pod must be longer than Sidewrap's delay
 	// and grace periods combined
 	var gracePeriod int64 = SidewrapShutdownDelay + SidewrapGracePeriod + 30
-	if *mutatedTemplate.Spec.TerminationGracePeriodSeconds < gracePeriod {
+	if mutatedTemplate.Spec.TerminationGracePeriodSeconds == nil ||
+		*mutatedTemplate.Spec.TerminationGracePeriodSeconds < gracePeriod {
 		mutatedTemplate.Spec.TerminationGracePeriodSeconds = &gracePeriod
 	}
 

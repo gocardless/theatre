@@ -726,6 +726,12 @@ func (r *ConsoleReconciler) buildSidecarContainer(consoleId string) corev1.Conta
 	}
 }
 
+func ensureMinimum(target **int64, minimum int64) {
+	if *target == nil || **target < minimum {
+		*target = &minimum
+	}
+}
+
 func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger, podTemplate *corev1.PodTemplateSpec, consoleId string) *corev1.PodTemplateSpec {
 
 	mutatedTemplate := podTemplate.DeepCopy()
@@ -771,10 +777,7 @@ func (r *ConsoleReconciler) addSessionRecordingToPodTemplate(logger logr.Logger,
 	// The grace period for the pod must be longer than Sidewrap's delay
 	// and grace periods combined
 	var gracePeriod int64 = SidewrapShutdownDelay + SidewrapGracePeriod + 30
-	if mutatedTemplate.Spec.TerminationGracePeriodSeconds == nil ||
-		*mutatedTemplate.Spec.TerminationGracePeriodSeconds < gracePeriod {
-		mutatedTemplate.Spec.TerminationGracePeriodSeconds = &gracePeriod
-	}
+	ensureMinimum(&mutatedTemplate.Spec.TerminationGracePeriodSeconds, gracePeriod)
 
 	return mutatedTemplate
 }

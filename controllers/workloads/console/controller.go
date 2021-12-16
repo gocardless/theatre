@@ -685,6 +685,16 @@ func (r *ConsoleReconciler) buildSidecarContainer(consoleId string) corev1.Conta
 				ReadOnly:  false,
 			},
 		},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http-metrics-wrap",
+				ContainerPort: 8090,
+			},
+			{
+				Name:          "http-metrics-sidecar",
+				ContainerPort: 8080,
+			},
+		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				corev1.ResourceMemory: resource.MustParse("512Mi"),

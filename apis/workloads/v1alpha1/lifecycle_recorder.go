@@ -6,6 +6,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // +kubebuilder:object:generate=false
@@ -43,6 +45,28 @@ type lifecycleEventRecorderImpl struct {
 type consoleIdBuilderImpl struct {
 	// context name for the kubernetes cluster where this recorder runs
 	contextName string
+}
+
+var (
+	lifecycleEventsPublish = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_lifecycle_events_published",
+			Help: "Count of requests handled by the webhook",
+		},
+		[]string{"event"},
+	)
+	lifecycleEventsPublishErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "theatre_lifecycle_events_published_errors",
+			Help: "Count of requests handled by the webhook",
+		},
+		[]string{"event"},
+	)
+)
+
+func init() {
+	// Register custom metrics with the global controller runtime prometheus registry
+	metrics.Registry.MustRegister(lifecycleEventsPublish, lifecycleEventsPublishErrors)
 }
 
 func NewConsoleIdBuilder(contextName string) ConsoleIdBuilder {
@@ -98,8 +122,10 @@ func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Co
 
 	id, err := l.publisher.Publish(ctx, event)
 	if err != nil {
+		lifecycleEventsPublishErrors.WithLabelValues("console_request").Inc()
 		return err
 	}
+	lifecycleEventsPublish.WithLabelValues("console_request").Inc()
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventRequest)
 	return nil
@@ -115,8 +141,10 @@ func (l *lifecycleEventRecorderImpl) ConsoleAuthorise(ctx context.Context, csl *
 
 	id, err := l.publisher.Publish(ctx, event)
 	if err != nil {
+		lifecycleEventsPublishErrors.WithLabelValues("console_authorise").Inc()
 		return err
 	}
+	lifecycleEventsPublish.WithLabelValues("console_authorise").Inc()
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventAuthorise)
 	return nil
@@ -132,8 +160,10 @@ func (l *lifecycleEventRecorderImpl) ConsoleStart(ctx context.Context, csl *Cons
 
 	id, err := l.publisher.Publish(ctx, event)
 	if err != nil {
+		lifecycleEventsPublishErrors.WithLabelValues("console_start").Inc()
 		return err
 	}
+	lifecycleEventsPublish.WithLabelValues("console_start").Inc()
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventStart)
 	return nil
@@ -151,8 +181,10 @@ func (l *lifecycleEventRecorderImpl) ConsoleAttach(ctx context.Context, csl *Con
 
 	id, err := l.publisher.Publish(ctx, event)
 	if err != nil {
+		lifecycleEventsPublishErrors.WithLabelValues("console_attach").Inc()
 		return err
 	}
+	lifecycleEventsPublish.WithLabelValues("console_attach").Inc()
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventAttach)
 	return nil
@@ -168,8 +200,10 @@ func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *
 
 	id, err := l.publisher.Publish(ctx, event)
 	if err != nil {
+		lifecycleEventsPublishErrors.WithLabelValues("console_terminate").Inc()
 		return err
 	}
+	lifecycleEventsPublish.WithLabelValues("console_terminate").Inc()
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventTerminated)
 	return nil

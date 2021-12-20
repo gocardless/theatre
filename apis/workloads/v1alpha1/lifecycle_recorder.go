@@ -50,14 +50,14 @@ type consoleIdBuilderImpl struct {
 var (
 	lifecycleEventsPublish = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_lifecycle_events_published",
+			Name: "theatre_lifecycle_events_published_total",
 			Help: "Count of requests handled by the webhook",
 		},
 		[]string{"event"},
 	)
 	lifecycleEventsPublishErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "theatre_lifecycle_events_published_errors",
+			Name: "theatre_lifecycle_events_published_errors_total",
 			Help: "Count of requests handled by the webhook",
 		},
 		[]string{"event"},

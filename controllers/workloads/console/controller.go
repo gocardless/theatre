@@ -687,12 +687,12 @@ func (r *ConsoleReconciler) buildSidecarContainer(consoleId string) corev1.Conta
 		},
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "http-metrics-2",
-				ContainerPort: 8090,
+				Name:          "http-metrics-1",
+				ContainerPort: 9882,
 			},
 			{
-				Name:          "http-metrics-1",
-				ContainerPort: 8080,
+				Name:          "http-metrics-2",
+				ContainerPort: 9892,
 			},
 		},
 		Resources: corev1.ResourceRequirements{

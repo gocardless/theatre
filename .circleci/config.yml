@@ -67,7 +67,8 @@ jobs:
           paths: ['bin']
 
   acceptance:
-    machine: true
+    machine:
+      image: ubuntu-2004:202201-02
     resource_class: large
     steps:
       - checkout

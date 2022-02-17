@@ -16,6 +16,7 @@ import (
 	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
 	"github.com/gocardless/theatre/v3/cmd"
 	consolecontroller "github.com/gocardless/theatre/v3/controllers/workloads/console"
+	terminationcontroller "github.com/gocardless/theatre/v3/controllers/workloads/console/termination"
 	"github.com/gocardless/theatre/v3/pkg/signals"
 	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
 )
@@ -100,6 +101,19 @@ func main() {
 		SessionPubsubTopicId:   *sessionPubsubTopicId,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
+	}
+
+	// controller to observe termination states
+	if err = (&terminationcontroller.TerminationReconciler{
+		//	Client:                 mgr.GetClient(),
+		//	LifecycleRecorder:      lifecycleRecorder,
+		//	ConsoleIdBuilder:       idBuilder,
+		//	Log:                    ctrl.Log.WithName("controllers").WithName("termination-watcher"),
+		// Scheme: mgr.GetScheme(),
+		//	SessionPubsubProjectId: *sessionPubsubProjectId,
+		//	SessionPubsubTopicId:   *sessionPubsubTopicId,
+	}).SetupWithManager(ctx, mgr); err != nil {
+		app.Fatalf("failed to create termination watching controller: %v", err)
 	}
 
 	// console authenticator webhook

@@ -78,8 +78,8 @@ all the necessary dependencies:
 ```shell
 brew cask install docker
 brew install go kubernetes-cli kustomize kind
-mkdir /usr/local/kubebuilder
-curl -fsL https://go.kubebuilder.io/dl/2.3.1/$(go env GOOS)/$(go env GOARCH) | tar -xvz --strip=1 -C /usr/local/kubebuilder
+sudo mkdir /usr/local/kubebuilder
+curl -fsL "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.1/kubebuilder_2.3.1_$(go env GOOS)_$(go env GOARCH).tar.gz" | sudo tar -xvz --strip=1 -C /usr/local/kubebuilder
 export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
 ```
 

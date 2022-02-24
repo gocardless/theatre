@@ -93,6 +93,35 @@ spec:
                 description: Time at which the job completed successfully
                 format: date-time
                 type: string
+              conditions:
+                items:
+                  description: ConsoleCondition is a status condition for a console
+                  properties:
+                    lastTransitionTime:
+                      description: LastTransitionTime of this condition
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: LastUpdateTime of this condition
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message associated with this condition
+                      type: string
+                    reason:
+                      description: Reason for the current status of this condition
+                      type: string
+                    status:
+                      description: Status of this condition
+                      type: string
+                    type:
+                      description: Type of this condition
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
               expiryTime:
                 format: date-time
                 type: string

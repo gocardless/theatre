@@ -18,6 +18,7 @@ require (
 	github.com/sykesm/zap-logfmt v0.0.3
 	go.uber.org/zap v1.12.0
 	golang.org/x/oauth2 v0.0.0-20211005180243-6b3c2da341f1
+	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678
 	gomodules.xyz/jsonpatch/v3 v3.0.1
 	google.golang.org/api v0.58.0
 	gopkg.in/h2non/gock.v1 v1.0.15

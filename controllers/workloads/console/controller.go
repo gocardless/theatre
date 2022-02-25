@@ -561,6 +561,9 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 		newStatus.CompletionTime != nil {
 		duration := statusCtx.Job.Status.CompletionTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
 		logger.Info("Console ended", "event", ConsoleEnded, "duration", duration)
+		if err := r.LifecycleRecorder.ConsoleTerminate(ctx, csl, false, statusCtx.Pod); err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.terminate")
+		}
 	}
 
 	// Console phase from Running to Stopped without CompletionTime.
@@ -572,6 +575,9 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 		newStatus.CompletionTime == nil {
 		duration := csl.Status.ExpiryTime.Sub(statusCtx.Job.Status.StartTime.Time).Seconds()
 		logger.Info("Console ended due to expiration", "event", ConsoleEnded, "duration", duration)
+		if err := r.LifecycleRecorder.ConsoleTerminate(ctx, csl, true, statusCtx.Pod); err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.terminate")
+		}
 	}
 
 	// Console phase transitioned to Stopped, but wasn't Running or Stopped beforehand.
@@ -579,11 +585,17 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 	// more than one phase in between reconciliation loops.
 	if !csl.Running() && !csl.Stopped() && newStatus.Phase == workloadsv1alpha1.ConsoleStopped {
 		logger.Info("Console ended: duration unknown", "event", ConsoleEnded)
+		if err := r.LifecycleRecorder.ConsoleTerminate(ctx, csl, false, statusCtx.Pod); err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.terminate")
+		}
 	}
 
 	// Console was in PendingAuthorisation phase, but is about to be deleted.
 	if csl.PendingAuthorisation() && csl.EligibleForGC() {
 		logger.Info("Console expired due to lack of authorisation", "event", ConsoleEnded)
+		if err := r.LifecycleRecorder.ConsoleTerminate(ctx, csl, true, statusCtx.Pod); err != nil {
+			logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.terminate")
+		}
 	}
 
 	// Console phase has changed to destroyed (i.e. the job has been removed)

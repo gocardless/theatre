@@ -222,12 +222,12 @@ func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *
 	return nil
 }
 
-func appendStatusMessages(result map[string]string, containers []corev1.ContainerStatus) {
-	if containers == nil {
+func appendStatusMessages(result map[string]string, containerStatuses []corev1.ContainerStatus) {
+	if containerStatuses == nil {
 		return
 	}
 
-	for _, containerStatus := range containers {
+	for _, containerStatus := range containerStatuses {
 		if containerStatus.State.Terminated != nil {
 			s := containerStatus.State.Terminated
 			var message strings.Builder

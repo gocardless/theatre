@@ -2,11 +2,16 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/sys/unix"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
@@ -21,7 +26,7 @@ type LifecycleEventRecorder interface {
 	ConsoleAuthorise(context.Context, *Console, string) error
 	ConsoleStart(context.Context, *Console, string) error
 	ConsoleAttach(context.Context, *Console, string, string) error
-	ConsoleTerminate(context.Context, *Console, bool) error
+	ConsoleTerminate(context.Context, *Console, bool, *corev1.Pod) error
 }
 
 var _ LifecycleEventRecorder = &lifecycleEventRecorderImpl{}
@@ -190,11 +195,19 @@ func (l *lifecycleEventRecorderImpl) ConsoleAttach(ctx context.Context, csl *Con
 	return nil
 }
 
-func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *Console, timedOut bool) error {
+func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *Console, timedOut bool, pod *corev1.Pod) error {
+	containerStatuses := make(map[string]string)
+	if pod != nil {
+		appendStatusMessages(containerStatuses, pod.Status.InitContainerStatuses)
+		appendStatusMessages(containerStatuses, pod.Status.ContainerStatuses)
+		appendStatusMessages(containerStatuses, pod.Status.EphemeralContainerStatuses)
+	}
+
 	event := &events.ConsoleTerminatedEvent{
 		CommonEvent: l.makeConsoleCommonEvent(events.EventTerminated, csl),
 		Spec: events.ConsoleTerminatedSpec{
-			TimedOut: timedOut,
+			TimedOut:          timedOut,
+			ContainerStatuses: containerStatuses,
 		},
 	}
 
@@ -207,4 +220,39 @@ func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *
 
 	l.logger.Info("event recorded", "id", id, "event", events.EventTerminated)
 	return nil
+}
+
+func appendStatusMessages(result map[string]string, containerStatuses []corev1.ContainerStatus) {
+	if containerStatuses == nil {
+		return
+	}
+
+	for _, containerStatus := range containerStatuses {
+		if containerStatus.State.Terminated != nil {
+			s := containerStatus.State.Terminated
+			var message strings.Builder
+			message.WriteString(fmt.Sprintf("Terminated with exit code %d", s.ExitCode))
+			if s.Reason != "" {
+				message.WriteString(fmt.Sprintf(". Reason: %s", s.Reason))
+			}
+			if s.Signal != 0 {
+				message.WriteString(fmt.Sprintf(" (received signal %s)", unix.SignalName(syscall.Signal(s.Signal))))
+			}
+			if s.Message != "" {
+				message.WriteString(fmt.Sprintf(". Message: %s", s.Message))
+			}
+			result[containerStatus.Name] = message.String()
+		} else if containerStatus.State.Waiting != nil {
+			s := containerStatus.State.Waiting
+			var message strings.Builder
+			message.WriteString("Waiting.")
+			if s.Reason != "" {
+				message.WriteString(fmt.Sprintf(" Reason: %s.", s.Reason))
+			}
+			if s.Message != "" {
+				message.WriteString(fmt.Sprintf(" Message: %s", s.Message))
+			}
+			result[containerStatus.Name] = message.String()
+		}
+	}
 }

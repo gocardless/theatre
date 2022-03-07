@@ -102,6 +102,20 @@ type ConsoleReconciler struct {
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Console")
+
+	jobPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			role, ok := e.MetaNew.GetLabels()["role"]
+			return ok && role == "console"
+		},
+		CreateFunc: func(_ event.CreateEvent) bool { return false },
+		DeleteFunc: func(_ event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool {
+			role, ok := e.Meta.GetLabels()["role"]
+			return ok && role == "console"
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workloadsv1alpha1.Console{}).
 		Watches(
@@ -125,11 +139,25 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 				OwnerType:    &workloadsv1alpha1.Console{},
 			},
 		).
+		Watches(
+			&source.Kind{Type: &batchv1.Job{}},
+			&handler.EnqueueRequestForObject{},
+			builder.WithPredicates(jobPredicate),
+		).
 		Complete(
 			recutil.ResolveAndReconcile(
 				ctx, logger, mgr, &workloadsv1alpha1.Console{},
 				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
-					return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
+					switch cast := obj.(type) {
+					case *workloadsv1alpha1.Console:
+						logger.Info("=== reconcile func recieved console")
+						return r.Reconcile(logger, ctx, request, cast, nil)
+					case *batchv1.Job:
+						logger.Info("=== reconcile func recieved job")
+						return r.Reconcile(logger, ctx, request, nil, cast)
+					default:
+						return ctrl.Result{}, fmt.Errorf("unknown object in failed to cast runtime.Object to console or job")
+					}
 				},
 			),
 		)
@@ -191,8 +219,21 @@ func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx co
 	return nil
 }
 
-func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
-	logger = logger.WithValues("console", req.NamespacedName)
+func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console, job *batchv1.Job) (ctrl.Result, error) {
+	if job != nil {
+		cslName := types.NamespacedName{
+			Name:      job.OwnerReferences[0].Name,
+			Namespace: job.Namespace,
+		}
+		csl = &workloadsv1alpha1.Console{}
+		if err := r.Get(ctx, cslName, csl); err != nil {
+			return ctrl.Result{}, err
+		}
+		logger = logger.WithValues("console", cslName)
+		logger.Info("received job", "job", job.Name)
+	} else {
+		logger = logger.WithValues("console", req.NamespacedName)
+	}
 
 	// If we have yet to set the owner reference then this is a new console request
 	isNewConsole := len(csl.OwnerReferences) == 0
@@ -267,7 +308,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	}
 
-	job, err := r.getJob(ctx, req.NamespacedName)
+	job, err = r.getJob(ctx, req.NamespacedName)
 	if err != nil {
 		job = nil
 	}
@@ -540,6 +581,28 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 
 	logger = getAuditLogger(logger, csl, statusCtx)
 	newStatus := calculateStatus(csl, statusCtx)
+
+	// The current pod is not the same as the original pod; revert back.
+	if pod != nil && csl.Status.PodName != "" && csl.Status.PodName != pod.Name {
+		logger.Info("=== pod aleady launched for console, observing a different pod. deleting job and stopping console.")
+
+		// Revert pod name to the original one. This prevents `utopia consoles attach` from attaching to the new pod.
+		newStatus.PodName = csl.Status.PodName
+
+		// Set the console status to "Stopped" and delete the job.
+		newStatus.Phase = workloadsv1alpha1.ConsoleStopped
+		jobName := types.NamespacedName{
+			Name:      getJobName(name.Name),
+			Namespace: name.Namespace,
+		}
+		job := &batchv1.Job{}
+		if err := r.Get(ctx, jobName, job); err == nil {
+			_ = r.Client.Delete(ctx, job)
+		}
+		updatedCsl := csl.DeepCopy()
+		updatedCsl.Status = newStatus
+		return updatedCsl, nil
+	}
 
 	if csl.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
 		logger.Info("Console pending authorisation", "event", ConsolePendingAuthorisation)

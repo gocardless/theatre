@@ -267,7 +267,13 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	}
 
-	job, err := r.getJob(ctx, req.NamespacedName)
+	var (
+		job     *batchv1.Job
+		pod     *corev1.Pod
+		podList corev1.PodList
+	)
+
+	job, err = r.getJob(ctx, req.NamespacedName)
 	if err != nil {
 		job = nil
 	}
@@ -293,6 +299,36 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	}
 
+	if job != nil {
+		matchLabels := client.MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
+		if err := r.List(ctx, &podList, client.InNamespace(csl.Namespace), matchLabels); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to list pods for console job")
+		}
+
+		// Check if more than one pod belongs to the console or if the current pod is not the same
+		// as the original pod (which also means that more than one pods was launched). A console's
+		// job object has `restartPolicy=Never` and `backoffLimit=0`. These two settings together
+		// prevent the job from launching a second pod when a failure occurs on the original pod.
+		// However, these settings don't cover situations where a console pod is deleted
+		// (e.g. manual deletion, eviction, preemption). We want consoles to never launch more than
+		// one pod. Launching a subsequent pod is problematic even if there is only one running pod
+		// at any given time. It causes the controller to enter its state machine logic in a way
+		// that it wasn't designed to handle. It also causes the console to remain in a running
+		// state for far longer than users expect.
+		if len(podList.Items) > 1 || (len(podList.Items) == 1 && csl.Status.PodName != "" && csl.Status.PodName != podList.Items[0].Name) {
+			logger.Info("More than one pod observed for console; deleting job and stopping console")
+			if err := r.abort(ctx, logger, csl, job, &podList); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to abort console")
+			}
+			// No need to requeue after an abort because the deleted job will trigger us again.
+			return ctrl.Result{Requeue: false}, nil
+		}
+
+		if len(podList.Items) == 1 {
+			pod = &podList.Items[0]
+		}
+	}
+
 	// Update the status fields in case they're out of sync, or the console spec
 	// has been updated
 	statusCtx := consoleStatusContext{
@@ -301,9 +337,10 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		Authorisation:     authorisation,
 		AuthorisationRule: authRule,
 		Job:               job,
+		Pod:               pod,
 	}
 
-	csl, err = r.generateStatusAndAuditEvents(ctx, logger, req.NamespacedName, csl, statusCtx)
+	csl, err = r.generateStatusAndAuditEvents(ctx, logger, csl, statusCtx)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to generate console status or audit events")
 	}
@@ -339,6 +376,10 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 				return ctrl.Result{}, err
 			}
 		}
+		// Retrigger reconciliation periodically to catch situations where a console pod is deleted
+		// and re-spawned by the console job. Note that this isn't strictly necessary as Kubernetes
+		// will periodically refresh caches and queue reconciliation events anyway.
+		res = requeueAfterInterval(logger, 30*time.Second)
 	case csl.PostRunning():
 		// Requeue for when the console has reached its after finished TTL so it can be deleted
 		res = requeueAfterInterval(logger, time.Until(*csl.GetGCTime()))
@@ -517,27 +558,7 @@ type consoleStatusContext struct {
 	Job               *batchv1.Job
 }
 
-func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, logger logr.Logger, name types.NamespacedName, csl *workloadsv1alpha1.Console, statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
-	var (
-		pod     *corev1.Pod
-		podList corev1.PodList
-	)
-
-	if statusCtx.Job != nil {
-		inNamespace := client.InNamespace(name.Namespace)
-		matchLabels := client.MatchingLabels(map[string]string{"job-name": statusCtx.Job.ObjectMeta.Name})
-		if err := r.List(ctx, &podList, inNamespace, matchLabels); err != nil {
-			return nil, errors.Wrap(err, "failed to list pods for console job")
-		}
-	}
-	if len(podList.Items) > 0 {
-		pod = &podList.Items[0]
-	} else {
-		pod = nil
-	}
-
-	statusCtx.Pod = pod
-
+func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
 	logger = getAuditLogger(logger, csl, statusCtx)
 	newStatus := calculateStatus(csl, statusCtx)
 
@@ -633,6 +654,41 @@ func calculateStatus(csl *workloadsv1alpha1.Console, statusCtx consoleStatusCont
 	newStatus.Phase = calculatePhase(statusCtx)
 
 	return newStatus
+}
+
+func (r *ConsoleReconciler) abort(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, job *batchv1.Job, podList *corev1.PodList) error {
+	// Delete job
+	if err := r.Client.Delete(ctx, job); err != nil {
+		return errors.Wrap(err, "failed to delete job")
+	}
+
+	// Delete pods
+	var podDeleteError error
+	for _, pod := range podList.Items {
+		if err := r.Client.Delete(ctx, &pod); err != nil {
+			podDeleteError = err
+		}
+	}
+	if podDeleteError != nil {
+		return errors.Wrap(podDeleteError, "failed to delete pod(s)")
+	}
+
+	// Update console status
+	newStatus := csl.DeepCopy().Status
+	newStatus.Phase = workloadsv1alpha1.ConsoleStopped
+	updatedCsl := csl.DeepCopy()
+	updatedCsl.Status = newStatus
+
+	if err := r.createOrUpdate(ctx, logger, csl, csl, Console, consoleDiff); err != nil {
+		return err
+	}
+
+	// Publish termination event
+	if err := r.LifecycleRecorder.ConsoleTerminate(ctx, csl, false, nil); err != nil {
+		logging.WithNoRecord(logger).Error(err, "failed to record event", "event", "console.terminate")
+	}
+
+	return nil
 }
 
 func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePhase {

@@ -103,18 +103,21 @@ type ConsoleReconciler struct {
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Console")
 
-	jobPredicate := predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			role, ok := e.MetaNew.GetLabels()["role"]
-			return ok && role == "console"
-		},
-		CreateFunc: func(_ event.CreateEvent) bool { return false },
-		DeleteFunc: func(_ event.DeleteEvent) bool { return false },
-		GenericFunc: func(e event.GenericEvent) bool {
-			role, ok := e.Meta.GetLabels()["role"]
-			return ok && role == "console"
-		},
-	}
+	// podPredicate := predicate.Funcs{
+	// 	CreateFunc: func(e event.CreateEvent) bool {
+	// 		role, ok := e.Meta.GetLabels()["role"]
+	// 		return ok && role == "console"
+	// 	},
+	// 	UpdateFunc: func(e event.UpdateEvent) bool {
+	// 		role, ok := e.MetaOld.GetLabels()["role"]
+	// 		return ok && role == "console"
+	// 	},
+	// 	DeleteFunc: func(e event.DeleteEvent) bool {
+	// 		role, ok := e.Meta.GetLabels()["role"]
+	// 		return ok && role == "console"
+	// 	},
+	// 	GenericFunc: func(e event.GenericEvent) bool { return false },
+	// }
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workloadsv1alpha1.Console{}).
@@ -140,9 +143,9 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 			},
 		).
 		Watches(
-			&source.Kind{Type: &batchv1.Job{}},
+			&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForObject{},
-			builder.WithPredicates(jobPredicate),
+			// builder.WithPredicates(podPredicate),
 		).
 		Complete(
 			recutil.ResolveAndReconcile(
@@ -152,8 +155,8 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 					case *workloadsv1alpha1.Console:
 						logger.Info("=== reconcile func recieved console")
 						return r.Reconcile(logger, ctx, request, cast, nil)
-					case *batchv1.Job:
-						logger.Info("=== reconcile func recieved job")
+					case *corev1.Pod:
+						logger.Info("=== reconcile func recieved pod")
 						return r.Reconcile(logger, ctx, request, nil, cast)
 					default:
 						return ctrl.Result{}, fmt.Errorf("unknown object in failed to cast runtime.Object to console or job")
@@ -219,8 +222,19 @@ func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx co
 	return nil
 }
 
-func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console, job *batchv1.Job) (ctrl.Result, error) {
-	if job != nil {
+func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console, pod *corev1.Pod) (ctrl.Result, error) {
+	if pod != nil {
+		// Get owning Job
+		jobName := types.NamespacedName{
+			Name:      pod.OwnerReferences[0].Name,
+			Namespace: pod.Namespace,
+		}
+		job := &batchv1.Job{}
+		if err := r.Get(ctx, jobName, job); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Get owning Console
 		cslName := types.NamespacedName{
 			Name:      job.OwnerReferences[0].Name,
 			Namespace: job.Namespace,
@@ -229,8 +243,13 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		if err := r.Get(ctx, cslName, csl); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		logger = logger.WithValues("console", cslName)
-		logger.Info("received job", "job", job.Name)
+		logger.Info("=== received pod", "pod", pod.Name)
+
+		if role, ok := pod.Labels["role"]; !ok || role != "console" {
+			return ctrl.Result{}, nil
+		}
 	} else {
 		logger = logger.WithValues("console", req.NamespacedName)
 	}
@@ -308,7 +327,7 @@ func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 	}
 
-	job, err = r.getJob(ctx, req.NamespacedName)
+	job, err := r.getJob(ctx, req.NamespacedName)
 	if err != nil {
 		job = nil
 	}
@@ -571,8 +590,15 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 			return nil, errors.Wrap(err, "failed to list pods for console job")
 		}
 	}
-	if len(podList.Items) > 0 {
+	if len(podList.Items) == 1 {
 		pod = &podList.Items[0]
+		// The current pod is not the same as the original pod. This means that more than one pods was launched for the console.
+		if csl.Status.PodName != "" && csl.Status.PodName != pod.Name {
+			r.abortMultiplePods(ctx, logger, csl)
+		}
+	} else if len(podList.Items) > 1 {
+		// Consoles should never have more than one pod.
+		r.abortMultiplePods(ctx, logger, csl)
 	} else {
 		pod = nil
 	}
@@ -581,28 +607,6 @@ func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, lo
 
 	logger = getAuditLogger(logger, csl, statusCtx)
 	newStatus := calculateStatus(csl, statusCtx)
-
-	// The current pod is not the same as the original pod; revert back.
-	if pod != nil && csl.Status.PodName != "" && csl.Status.PodName != pod.Name {
-		logger.Info("=== pod aleady launched for console, observing a different pod. deleting job and stopping console.")
-
-		// Revert pod name to the original one. This prevents `utopia consoles attach` from attaching to the new pod.
-		newStatus.PodName = csl.Status.PodName
-
-		// Set the console status to "Stopped" and delete the job.
-		newStatus.Phase = workloadsv1alpha1.ConsoleStopped
-		jobName := types.NamespacedName{
-			Name:      getJobName(name.Name),
-			Namespace: name.Namespace,
-		}
-		job := &batchv1.Job{}
-		if err := r.Get(ctx, jobName, job); err == nil {
-			_ = r.Client.Delete(ctx, job)
-		}
-		updatedCsl := csl.DeepCopy()
-		updatedCsl.Status = newStatus
-		return updatedCsl, nil
-	}
 
 	if csl.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
 		logger.Info("Console pending authorisation", "event", ConsolePendingAuthorisation)
@@ -696,6 +700,37 @@ func calculateStatus(csl *workloadsv1alpha1.Console, statusCtx consoleStatusCont
 	newStatus.Phase = calculatePhase(statusCtx)
 
 	return newStatus
+}
+
+func (r *ConsoleReconciler) abortMultiplePods(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console) (*workloadsv1alpha1.Console, error) {
+	logger.Info("=== more than one pod observed for console; deleting job and stopping console")
+
+	// Set the console status to "Stopped"
+	newStatus := csl.DeepCopy().Status
+	newStatus.Phase = workloadsv1alpha1.ConsoleStopped
+
+	// Delete the job
+	jobName := types.NamespacedName{
+		Name:      getJobName(csl.Name),
+		Namespace: csl.Namespace,
+	}
+	job := &batchv1.Job{}
+	if err := r.Get(ctx, jobName, job); err == nil {
+		_ = r.Client.Delete(ctx, job)
+	}
+
+	// Delete pods
+	var podList corev1.PodList
+	matchLabels := client.MatchingLabels(map[string]string{"job-name": job.ObjectMeta.Name})
+	if err := r.List(ctx, &podList, client.InNamespace(csl.Namespace), matchLabels); err == nil {
+		for _, pod := range podList.Items {
+			_ = r.Client.Delete(ctx, &pod)
+		}
+	}
+
+	updatedCsl := csl.DeepCopy()
+	updatedCsl.Status = newStatus
+	return updatedCsl, nil
 }
 
 func calculatePhase(statusCtx consoleStatusContext) workloadsv1alpha1.ConsolePhase {

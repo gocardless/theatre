@@ -102,23 +102,6 @@ type ConsoleReconciler struct {
 
 func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Console")
-
-	// podPredicate := predicate.Funcs{
-	// 	CreateFunc: func(e event.CreateEvent) bool {
-	// 		role, ok := e.Meta.GetLabels()["role"]
-	// 		return ok && role == "console"
-	// 	},
-	// 	UpdateFunc: func(e event.UpdateEvent) bool {
-	// 		role, ok := e.MetaOld.GetLabels()["role"]
-	// 		return ok && role == "console"
-	// 	},
-	// 	DeleteFunc: func(e event.DeleteEvent) bool {
-	// 		role, ok := e.Meta.GetLabels()["role"]
-	// 		return ok && role == "console"
-	// 	},
-	// 	GenericFunc: func(e event.GenericEvent) bool { return false },
-	// }
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workloadsv1alpha1.Console{}).
 		Watches(
@@ -142,25 +125,11 @@ func (r *ConsoleReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 				OwnerType:    &workloadsv1alpha1.Console{},
 			},
 		).
-		Watches(
-			&source.Kind{Type: &corev1.Pod{}},
-			&handler.EnqueueRequestForObject{},
-			// builder.WithPredicates(podPredicate),
-		).
 		Complete(
 			recutil.ResolveAndReconcile(
 				ctx, logger, mgr, &workloadsv1alpha1.Console{},
 				func(logger logr.Logger, request reconcile.Request, obj runtime.Object) (reconcile.Result, error) {
-					switch cast := obj.(type) {
-					case *workloadsv1alpha1.Console:
-						logger.Info("=== reconcile func recieved console")
-						return r.Reconcile(logger, ctx, request, cast, nil)
-					case *corev1.Pod:
-						logger.Info("=== reconcile func recieved pod")
-						return r.Reconcile(logger, ctx, request, nil, cast)
-					default:
-						return ctrl.Result{}, fmt.Errorf("unknown object in failed to cast runtime.Object to console or job")
-					}
+					return r.Reconcile(logger, ctx, request, obj.(*workloadsv1alpha1.Console))
 				},
 			),
 		)
@@ -222,37 +191,8 @@ func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx co
 	return nil
 }
 
-func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console, pod *corev1.Pod) (ctrl.Result, error) {
-	if pod != nil {
-		// Get owning Job
-		jobName := types.NamespacedName{
-			Name:      pod.OwnerReferences[0].Name,
-			Namespace: pod.Namespace,
-		}
-		job := &batchv1.Job{}
-		if err := r.Get(ctx, jobName, job); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		// Get owning Console
-		cslName := types.NamespacedName{
-			Name:      job.OwnerReferences[0].Name,
-			Namespace: job.Namespace,
-		}
-		csl = &workloadsv1alpha1.Console{}
-		if err := r.Get(ctx, cslName, csl); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		logger = logger.WithValues("console", cslName)
-		logger.Info("=== received pod", "pod", pod.Name)
-
-		if role, ok := pod.Labels["role"]; !ok || role != "console" {
-			return ctrl.Result{}, nil
-		}
-	} else {
-		logger = logger.WithValues("console", req.NamespacedName)
-	}
+func (r *ConsoleReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, csl *workloadsv1alpha1.Console) (ctrl.Result, error) {
+	logger = logger.WithValues("console", req.NamespacedName)
 
 	// If we have yet to set the owner reference then this is a new console request
 	isNewConsole := len(csl.OwnerReferences) == 0

@@ -662,7 +662,9 @@ func (r *ConsoleReconciler) abort(ctx context.Context, logger logr.Logger, csl *
 		return errors.Wrap(err, "failed to delete job")
 	}
 
-	// Delete pods
+	// Delete pods. In theory we shouldn't have to do this. All console pods are owned by
+	// the console job. A delete operation should cascade. However, in our testing we saw
+	// that the second pod launched by the job consistently lingers on after the job is gone.
 	var podDeleteError error
 	for _, pod := range podList.Items {
 		if err := r.Client.Delete(ctx, &pod); err != nil {

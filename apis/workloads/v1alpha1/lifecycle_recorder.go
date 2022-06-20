@@ -197,10 +197,11 @@ func (l *lifecycleEventRecorderImpl) ConsoleAttach(ctx context.Context, csl *Con
 
 func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *Console, timedOut bool, pod *corev1.Pod) error {
 	containerStatuses := make(map[string]string)
+	exitCodes := make(map[string]int32)
 	if pod != nil {
-		appendStatusMessages(containerStatuses, pod.Status.InitContainerStatuses)
-		appendStatusMessages(containerStatuses, pod.Status.ContainerStatuses)
-		appendStatusMessages(containerStatuses, pod.Status.EphemeralContainerStatuses)
+		appendStatusMessages(containerStatuses, exitCodes, pod.Status.InitContainerStatuses)
+		appendStatusMessages(containerStatuses, exitCodes, pod.Status.ContainerStatuses)
+		appendStatusMessages(containerStatuses, exitCodes, pod.Status.EphemeralContainerStatuses)
 	}
 
 	event := &events.ConsoleTerminatedEvent{
@@ -208,6 +209,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *
 		Spec: events.ConsoleTerminatedSpec{
 			TimedOut:          timedOut,
 			ContainerStatuses: containerStatuses,
+			ExitCodes:         exitCodes,
 		},
 	}
 
@@ -222,7 +224,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleTerminate(ctx context.Context, csl *
 	return nil
 }
 
-func appendStatusMessages(result map[string]string, containerStatuses []corev1.ContainerStatus) {
+func appendStatusMessages(containerStatusResult map[string]string, exitCodeResult map[string]int32, containerStatuses []corev1.ContainerStatus) {
 	if containerStatuses == nil {
 		return
 	}
@@ -241,7 +243,8 @@ func appendStatusMessages(result map[string]string, containerStatuses []corev1.C
 			if s.Message != "" {
 				message.WriteString(fmt.Sprintf(". Message: %s", s.Message))
 			}
-			result[containerStatus.Name] = message.String()
+			containerStatusResult[containerStatus.Name] = message.String()
+			exitCodeResult[containerStatus.Name] = s.ExitCode
 		} else if containerStatus.State.Waiting != nil {
 			s := containerStatus.State.Waiting
 			var message strings.Builder
@@ -252,7 +255,7 @@ func appendStatusMessages(result map[string]string, containerStatuses []corev1.C
 			if s.Message != "" {
 				message.WriteString(fmt.Sprintf(" Message: %s", s.Message))
 			}
-			result[containerStatus.Name] = message.String()
+			containerStatusResult[containerStatus.Name] = message.String()
 		}
 	}
 }

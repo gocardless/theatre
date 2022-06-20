@@ -97,7 +97,7 @@ type ConsoleTerminatedEvent struct {
 func NewConsoleEventID(context, namespace, console string, time time.Time) string {
 	return strings.Join([]string{
 		// year (2006) month (01) day (02) hour (15) minute (04) second (05)
-		time.Format("20060102150405"),
+		time.UTC().Format("20060102150405"),
 		context, namespace, console,
 	}, "/")
 }

@@ -85,6 +85,7 @@ type ConsoleAttachEvent struct {
 type ConsoleTerminatedSpec struct {
 	TimedOut          bool              `json:"timed_out"`
 	ContainerStatuses map[string]string `json:"container_statuses"`
+	ExitCodes         map[string]int32  `json:"exit_codes"`
 }
 
 type ConsoleTerminatedEvent struct {

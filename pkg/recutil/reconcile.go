@@ -53,7 +53,7 @@ type ObjectReconcileFunc func(logger logr.Logger, request reconcile.Request, obj
 // your modified object at the start of a reconciliation loop, and instead calls an inner
 // reconciliation function with the already resolved object.
 func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
-	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
+	return reconcile.Func(func(ctx context.Context, request reconcile.Request) (res reconcile.Result, err error) {
 		logger := logger.WithValues("request", request)
 		logger.Info("Reconcile request start", "event", EventRequestStart)
 
@@ -176,7 +176,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	case None:
 		return None, nil
 	default:
-		return Error, fmt.Errorf("Unrecognised operation: %s", op)
+		return Error, fmt.Errorf("unrecognised operation: %s", op)
 	}
 }
 

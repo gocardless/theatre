@@ -23,7 +23,7 @@ var _ = Describe("NewCachedDirectory", func() {
 
 	JustBeforeEach(func() {
 		directory = NewCachedDirectory(
-			zap.LoggerTo(GinkgoWriter, true),
+			zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
 			NewFakeDirectory(groups),
 			ttl,
 		)
@@ -142,8 +142,8 @@ var _ = Describe("NewGoogleDirectory", func() {
 			BeforeEach(func() {
 				membersResponse = directoryv1.Members{
 					Members: []*directoryv1.Member{
-						&directoryv1.Member{Email: "lawrence@gocardless.com"},
-						&directoryv1.Member{Email: "chris@gocardless.com"},
+						{Email: "lawrence@gocardless.com"},
+						{Email: "chris@gocardless.com"},
 					},
 				}
 			})

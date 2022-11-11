@@ -4,3 +4,4 @@
 *.coverprofile
 /dist/
 .vscode
+.tool-versions

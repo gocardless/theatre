@@ -59,15 +59,15 @@ var _ = Describe("NewGoogleDirectory", func() {
 				pageOne = directoryv1.Members{
 					NextPageToken: "next-page-please",
 					Members: []*directoryv1.Member{
-						&directoryv1.Member{Email: "lawrence@gocardless.com"},
-						&directoryv1.Member{Email: "chris@gocardless.com"},
+						{Email: "lawrence@gocardless.com"},
+						{Email: "chris@gocardless.com"},
 					},
 				}
 
 				pageTwo = directoryv1.Members{
 					NextPageToken: "",
 					Members: []*directoryv1.Member{
-						&directoryv1.Member{Email: "natalie@gocardless.com"},
+						{Email: "natalie@gocardless.com"},
 					},
 				}
 			})

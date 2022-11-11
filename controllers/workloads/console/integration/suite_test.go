@@ -27,8 +27,6 @@ import (
 var (
 	mgr     ctrl.Manager
 	testEnv *envtest.Environment
-
-	finished = make(chan struct{})
 )
 
 func TestSuite(t *testing.T) {
@@ -44,7 +42,7 @@ var _ = BeforeSuite(func(done Done) {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "config", "base", "crds")},
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			DirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "config", "base", "webhooks")},
+			Paths: []string{filepath.Join("..", "..", "..", "..", "config", "base", "webhooks")},
 		},
 	}
 
@@ -118,13 +116,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
-		<-ctrl.SetupSignalHandler()
-		close(finished)
-	}()
-
-	go func() {
 		defer GinkgoRecover()
-		err = mgr.Start(finished)
+		err = mgr.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		gexec.KillAndWait(4 * time.Second)
 		err := testEnv.Stop()
@@ -133,7 +126,3 @@ var _ = BeforeSuite(func(done Done) {
 
 	close(done)
 }, 60)
-
-var _ = AfterSuite(func() {
-	close(finished)
-})

@@ -127,7 +127,7 @@ var _ = Describe("Console", func() {
 				By("Creating a console with a timeout > MaxTimeoutSeconds")
 				By("Expect console has timeout == MaxTimeoutSeconds")
 				Eventually(func() int {
-					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier := client.ObjectKeyFromObject(csl)
 					mgr.GetClient().Get(context.TODO(), identifier, csl)
 					return csl.Spec.TimeoutSeconds
 				}).Should(Equal(7200),
@@ -144,7 +144,7 @@ var _ = Describe("Console", func() {
 				By("Creating a console with a timeout of 0")
 				By("Expect console has timeout == DefaultTimeoutSeconds")
 				Eventually(func() int {
-					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier := client.ObjectKeyFromObject(csl)
 					mgr.GetClient().Get(context.TODO(), identifier, csl)
 					return csl.Spec.TimeoutSeconds
 				}).Should(Equal(600),
@@ -160,7 +160,7 @@ var _ = Describe("Console", func() {
 			It("Keeps the console's timeout", func() {
 				By("Expect console kept its timeout")
 				Eventually(func() int {
-					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier := client.ObjectKeyFromObject(csl)
 					mgr.GetClient().Get(context.TODO(), identifier, csl)
 					return csl.Spec.TimeoutSeconds
 				}).Should(Equal(7199),
@@ -186,7 +186,7 @@ var _ = Describe("Console", func() {
 			job := &batchv1.Job{}
 
 			Eventually(func() error {
-				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier := client.ObjectKeyFromObject(csl)
 				identifier.Name += "-console"
 				err := mgr.GetClient().Get(context.TODO(), identifier, job)
 				return err
@@ -260,7 +260,7 @@ var _ = Describe("Console", func() {
 				job := &batchv1.Job{}
 
 				Eventually(func() error {
-					identifier, _ := client.ObjectKeyFromObject(csl)
+					identifier := client.ObjectKeyFromObject(csl)
 					identifier.Name += "-console"
 					err := mgr.GetClient().Get(context.TODO(), identifier, job)
 					return err
@@ -285,7 +285,7 @@ var _ = Describe("Console", func() {
 
 			By("Expect job was created")
 			job := &batchv1.Job{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier := client.ObjectKeyFromObject(csl)
 			identifier.Name += "-console"
 
 			Eventually(func() error {
@@ -313,7 +313,7 @@ var _ = Describe("Console", func() {
 
 			By("Expect job was created")
 			job := &batchv1.Job{}
-			identifier, _ = client.ObjectKeyFromObject(csl)
+			identifier = client.ObjectKeyFromObject(csl)
 			identifier.Name += "-console"
 
 			Eventually(func() error {
@@ -324,7 +324,7 @@ var _ = Describe("Console", func() {
 
 			By("Retrieving latest console object")
 			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ = client.ObjectKeyFromObject(csl)
+			identifier = client.ObjectKeyFromObject(csl)
 
 			Eventually(func() error {
 				err := mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
@@ -380,7 +380,7 @@ var _ = Describe("Console", func() {
 			By("Expect role was created")
 			role := &rbacv1.Role{}
 			Eventually(func() error {
-				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier := client.ObjectKeyFromObject(csl)
 				err := mgr.GetClient().Get(context.TODO(), identifier, role)
 				return err
 			}).ShouldNot(HaveOccurred(),
@@ -418,7 +418,7 @@ var _ = Describe("Console", func() {
 			By("Expect directory role binding was created for user and AdditionalAttachSubjects")
 			drb := &rbacv1alpha1.DirectoryRoleBinding{}
 			Eventually(func() error {
-				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier := client.ObjectKeyFromObject(csl)
 				err := mgr.GetClient().Get(context.TODO(), identifier, drb)
 				return err
 			}).ShouldNot(HaveOccurred(),
@@ -444,7 +444,7 @@ var _ = Describe("Console", func() {
 
 		It("Updates the status with expiry time", func() {
 			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier := client.ObjectKeyFromObject(csl)
 			Eventually(func() workloadsv1alpha1.ConsoleStatus {
 				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
 				return updatedCsl.Status
@@ -465,7 +465,7 @@ var _ = Describe("Console", func() {
 
 		It("Updates the status with completion time", func() {
 			updatedCsl := &workloadsv1alpha1.Console{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier := client.ObjectKeyFromObject(csl)
 			Eventually(func() workloadsv1alpha1.ConsoleStatus {
 				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
 				return updatedCsl.Status
@@ -501,7 +501,7 @@ var _ = Describe("Console", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update Job")
 
 			By("Expect console status updated")
-			identifier, _ = client.ObjectKeyFromObject(csl)
+			identifier = client.ObjectKeyFromObject(csl)
 			Eventually(func() workloadsv1alpha1.ConsoleStatus {
 				mgr.GetClient().Get(context.TODO(), identifier, updatedCsl)
 				return updatedCsl.Status
@@ -521,7 +521,7 @@ var _ = Describe("Console", func() {
 		It("Sets the owner of the console to be the template", func() {
 			By("Retrieving latest console object")
 			Eventually(func() []metav1.OwnerReference {
-				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier := client.ObjectKeyFromObject(csl)
 				mgr.GetClient().Get(context.TODO(), identifier, csl)
 				return csl.ObjectMeta.OwnerReferences
 			}).Should(HaveLen(1), "expect console owner to be defined")
@@ -566,7 +566,7 @@ var _ = Describe("Console", func() {
 			It("Creates an authorisation object", func() {
 				By("Expect consoleauthorisation was created")
 				auth := &workloadsv1alpha1.ConsoleAuthorisation{}
-				identifier, _ := client.ObjectKeyFromObject(csl)
+				identifier := client.ObjectKeyFromObject(csl)
 				Eventually(func() error {
 					err := mgr.GetClient().Get(context.TODO(), identifier, auth)
 					return err
@@ -583,7 +583,7 @@ var _ = Describe("Console", func() {
 
 				By("Expect role was created")
 				role := &rbacv1.Role{}
-				identifier, _ = client.ObjectKeyFromObject(csl)
+				identifier = client.ObjectKeyFromObject(csl)
 				identifier.Name = fmt.Sprintf("%s-authorisation", identifier.Name)
 				Eventually(func() error {
 					err := mgr.GetClient().Get(context.TODO(), identifier, role)
@@ -643,7 +643,7 @@ var _ = Describe("Console", func() {
 					cslToDelete := csl.DeepCopy()
 					By("Expect console to be deleted")
 					Eventually(func() metav1.StatusReason {
-						identifier, _ := client.ObjectKeyFromObject(cslToDelete)
+						identifier := client.ObjectKeyFromObject(cslToDelete)
 						err := mgr.GetClient().Get(context.TODO(), identifier, &workloadsv1alpha1.Console{})
 						return apierrors.ReasonForError(err)
 					}, 10*time.Second).Should(Equal(metav1.StatusReasonNotFound), "expected not to find console, but did")
@@ -665,7 +665,7 @@ var _ = Describe("Console", func() {
 			expectJobName := "very-very-very-very-long-long-long-long-name-very-very--console"
 
 			job := &batchv1.Job{}
-			identifier, _ := client.ObjectKeyFromObject(csl)
+			identifier := client.ObjectKeyFromObject(csl)
 			identifier.Name = expectJobName
 			Eventually(func() error {
 				err := mgr.GetClient().Get(context.TODO(), identifier, job)

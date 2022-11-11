@@ -51,12 +51,12 @@ var _ = Describe("PriorityInjector", func() {
 		Expect(c.Create(ctx, ns)).To(Succeed())
 
 		priorityClasses = []*scheduling_v1beta1.PriorityClass{
-			&scheduling_v1beta1.PriorityClass{
+			{
 				ObjectMeta:    metav1.ObjectMeta{Name: "default"},
 				GlobalDefault: true,
 				Value:         1000,
 			},
-			&scheduling_v1beta1.PriorityClass{
+			{
 				ObjectMeta: metav1.ObjectMeta{Name: "best-effort"},
 				Value:      900,
 			},
@@ -100,7 +100,7 @@ var _ = Describe("PriorityInjector", func() {
 			Spec: corev1.PodSpec{
 				PriorityClassName: priorityClassName,
 				Containers: []corev1.Container{
-					corev1.Container{
+					{
 						Name:  "app",
 						Image: "something",
 					},

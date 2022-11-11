@@ -24,8 +24,6 @@ import (
 var (
 	mgr     ctrl.Manager
 	testEnv *envtest.Environment
-
-	finished = make(chan struct{})
 )
 
 func TestSuite(t *testing.T) {
@@ -35,7 +33,7 @@ func TestSuite(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -85,13 +83,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
-		<-ctrl.SetupSignalHandler()
-		close(finished)
-	}()
-
-	go func() {
 		defer GinkgoRecover()
-		err = mgr.Start(finished)
+		err = mgr.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		gexec.KillAndWait(4 * time.Second)
 		err := testEnv.Stop()
@@ -100,7 +93,3 @@ var _ = BeforeSuite(func(done Done) {
 
 	close(done)
 }, 60)
-
-var _ = AfterSuite(func() {
-	close(finished)
-})

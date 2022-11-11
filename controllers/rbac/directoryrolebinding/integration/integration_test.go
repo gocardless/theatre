@@ -28,7 +28,7 @@ func newAdminRole(namespace string) *rbacv1.Role {
 			Namespace: namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
-			rbacv1.PolicyRule{
+			{
 				APIGroups: []string{rbacv1.APIGroupAll},
 				Resources: []string{rbacv1.ResourceAll},
 				Verbs:     []string{rbacv1.VerbAll},
@@ -109,7 +109,7 @@ var _ = Describe("Reconciler", func() {
 
 			By("Validate associated RoleBinding exists")
 			rb := &rbacv1.RoleBinding{}
-			identifier, _ := client.ObjectKeyFromObject(drb)
+			identifier := client.ObjectKeyFromObject(drb)
 			err := mgr.GetClient().Get(context.TODO(), identifier, rb)
 
 			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")

@@ -63,7 +63,7 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	idBuilder := workloadsv1alpha1.NewConsoleIdBuilder("test")
-	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder("test", ctrl.Log.Logger, events.NewNopPublisher(), idBuilder)
+	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder("test", ctrl.Log, events.NewNopPublisher(), idBuilder)
 
 	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,

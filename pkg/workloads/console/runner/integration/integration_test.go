@@ -120,6 +120,7 @@ func mustCreateRoleBinding(roleBinding rbacv1.RoleBinding) {
 func mustAddSubjectsToRoleBinding(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
 	rb.Subjects = subjects
 	err := kubeClient.Update(context.TODO(), &rb)
+	time.Sleep(2 * time.Second)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -280,7 +281,7 @@ var _ = Describe("Runner", func() {
 
 		Context("When console phase is Pending", func() {
 			It("Fails with a timeout waiting", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
+				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
@@ -435,7 +436,7 @@ var _ = Describe("Runner", func() {
 					rb.Subjects = nil
 					mustCreateRoleBinding(rb)
 
-					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
@@ -486,7 +487,7 @@ var _ = Describe("Runner", func() {
 						},
 					)
 
-					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 

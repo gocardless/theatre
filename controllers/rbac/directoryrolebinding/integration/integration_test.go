@@ -17,10 +17,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var (
-	timeout = 10 * time.Second
-)
-
 func newAdminRole(namespace string) *rbacv1.Role {
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
@@ -106,6 +102,9 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr.GetClient().Create(context.TODO(), drb)).NotTo(
 				HaveOccurred(), "failed to create 'foo' DirectoryRoleBinding",
 			)
+
+			// Wait to ensure that the apiserver has time to create DirectoryRoleBinding
+			time.Sleep(1 * time.Second)
 
 			By("Validate associated RoleBinding exists")
 			rb := &rbacv1.RoleBinding{}

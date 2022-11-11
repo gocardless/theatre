@@ -47,9 +47,9 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
 
-	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: "user@example.com",
-	}
+	user, err := testEnv.AddUser(envtest.User{Name: "user@example.com"}, &rest.Config{})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(user).ToNot(BeNil())
 
 	scheme := runtime.NewScheme()
 	err = clientgoscheme.AddToScheme(scheme)

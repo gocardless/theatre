@@ -178,7 +178,7 @@ var _ = Describe("Console", func() {
 		})
 
 		It("Sets console.spec.user from rbac", func() {
-			Expect(csl.Spec.User).To(Equal("system:unsecured"))
+			Expect(csl.Spec.User).To(Equal("admin"))
 		})
 
 		It("Creates a job", func() {
@@ -195,7 +195,7 @@ var _ = Describe("Console", func() {
 
 			By("Expect job and pod labels are correctly populated from the console template and console")
 			Expect(
-				job.ObjectMeta.Labels["user"]).To(Equal("system-unsecured"),
+				job.ObjectMeta.Labels["user"]).To(Equal("admin"),
 				"job should have a user label matching the console owner",
 			)
 			Expect(

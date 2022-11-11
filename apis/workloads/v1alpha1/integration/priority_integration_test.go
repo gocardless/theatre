@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	scheduling_v1beta1 "k8s.io/api/scheduling/v1beta1"
@@ -14,11 +13,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-)
-
-var (
-	timeout = 5 * time.Second
-	logger  = kitlog.NewLogfmtLogger(GinkgoWriter)
 )
 
 var _ = Describe("PriorityInjector", func() {

@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -24,7 +23,6 @@ import (
 var (
 	cfg        *rest.Config
 	kubeClient client.Client
-	mgr        ctrl.Manager
 	testEnv    *envtest.Environment
 
 	scheme = runtime.NewScheme()
@@ -49,9 +47,9 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
 
-	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: "user@example.com",
-	}
+	user, err := testEnv.AddUser(envtest.User{Name: "user@example.com"}, &rest.Config{})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(user).ToNot(BeNil())
 
 	err = clientgoscheme.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())

@@ -95,7 +95,7 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 			return res, err
 		}
 
-		logger = logging.WithEventRecorder(logger, mgr.GetEventRecorderFor("theatre"), obj)
+		logger = logging.WithEventRecorder(logger.GetSink(), mgr.GetEventRecorderFor("theatre"), obj)
 		logger.Info("Starting reconciliation", "event", EventStart)
 
 		// If the object is being deleted then don't attempt any further

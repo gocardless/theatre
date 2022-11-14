@@ -120,7 +120,7 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 
 	// Attach an event recorder to the logger, based on the
 	// associated pod
-	logger = logging.WithEventRecorder(logger, c.recorder, pod)
+	logger = logging.WithEventRecorder(logger.GetSink(), c.recorder, pod)
 
 	// Log an event observing the attachment
 	logger.Info(

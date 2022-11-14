@@ -129,6 +129,18 @@ Theatre has test suites at several different levels, each of which play a
 specific role. All of these suites are written using the [Ginkgo][ginkgo]
 framework.
 
+In order to setup your local testing environment for unit and integration tests do the following:
+
+```bash
+$ # install setup-envtest which configures etcd and kube-apiserver binaries for envtest
+$ # https://book.kubebuilder.io/reference/envtest.html#configuring-envtest-for-integration-tests
+$ # https://github.com/kubernetes-sigs/controller-runtime/tree/master/tools/setup-envtest#envtest-binaries-manager
+$ go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+$ # configure envtest to use k8s 1.22.x binaries
+$ setup-envtest use -p path 1.22.x
+$ source <(setup-envtest use -i -p env 1.22.x)
+```
+
 - **Unit**: Standard unit tests, used to exhaustively specify the functionality of
   functions or objects.
 

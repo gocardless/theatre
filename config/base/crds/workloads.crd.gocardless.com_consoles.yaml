@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.5.0
+    controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
   name: consoles.workloads.crd.gocardless.com
 spec:
@@ -32,13 +32,18 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Console declares an instance of a console environment to be created by a specific user
+        description: Console declares an instance of a console environment to be created
+          by a specific user
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -46,35 +51,52 @@ spec:
             description: ConsoleSpec defines the desired state of Console
             properties:
               command:
-                description: The command and arguments to execute. If not specified the command from the template specification will be used.
+                description: The command and arguments to execute. If not specified
+                  the command from the template specification will be used.
                 items:
                   type: string
                 type: array
               consoleTemplateRef:
-                description: LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.
+                description: LocalObjectReference contains enough information to let
+                  you locate the referenced object inside the same namespace.
                 properties:
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
               noninteractive:
-                description: Disable TTY and STDIN on the underlying container. This should usually be set to false so clients can attach interactively; however, in certain situations, enabling the TTY on a container in the console causes breakage - in Tekton steps, for example.
+                description: Disable TTY and STDIN on the underlying container. This
+                  should usually be set to false so clients can attach interactively;
+                  however, in certain situations, enabling the TTY on a container
+                  in the console causes breakage - in Tekton steps, for example.
                 type: boolean
               reason:
                 type: string
               timeoutSeconds:
-                description: Number of seconds that the console should run for. If the process running within the console has not exited before this timeout is reached, then the console will be terminated. If this value exceeds the Maximum Timeout Seconds specified in the ConsoleTemplate that this console refers to, then this timeout will be clamped to that value. Maximum value of 1 week (as per ConsoleTemplate.Spec.MaxTimeoutSeconds).
+                description: Number of seconds that the console should run for. If
+                  the process running within the console has not exited before this
+                  timeout is reached, then the console will be terminated. If this
+                  value exceeds the Maximum Timeout Seconds specified in the ConsoleTemplate
+                  that this console refers to, then this timeout will be clamped to
+                  that value. Maximum value of 1 week (as per ConsoleTemplate.Spec.MaxTimeoutSeconds).
                 maximum: 604800
                 minimum: 0
                 type: integer
               ttlSecondsAfterFinished:
-                description: Specifies the TTL for this Console. The Console will be eligible for garbage collection TTLSecondsAfterFinished seconds after it enters the Stopped or Destroyed phase. This field is modeled on the TTL mechanism in Kubernetes 1.12.
+                description: Specifies the TTL for this Console. The Console will
+                  be eligible for garbage collection TTLSecondsAfterFinished seconds
+                  after it enters the Stopped or Destroyed phase. This field is modeled
+                  on the TTL mechanism in Kubernetes 1.12.
                 format: int32
                 maximum: 604800
                 minimum: 0
                 type: integer
               ttlSecondsBeforeRunning:
-                description: Specifies the TTL before running for this Console. The Console will be eligible for garbage collection TTLSecondsBeforeRunning seconds if it has not progressed to the Running phase. This field is modeled on the TTL mechanism in Kubernetes 1.12.
+                description: Specifies the TTL before running for this Console. The
+                  Console will be eligible for garbage collection TTLSecondsBeforeRunning
+                  seconds if it has not progressed to the Running phase. This field
+                  is modeled on the TTL mechanism in Kubernetes 1.12.
                 format: int32
                 maximum: 86400
                 minimum: 0

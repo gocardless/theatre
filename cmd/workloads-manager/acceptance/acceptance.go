@@ -5,7 +5,7 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
-	"k8s.io/api/admissionregistration/v1beta1"
+	v1 "k8s.io/api/admissionregistration/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -90,7 +90,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 			// Wait for MutatingWebhookConfig to be created
 			Eventually(func() bool {
-				mutatingWebhookConfig := &v1beta1.MutatingWebhookConfiguration{}
+				mutatingWebhookConfig := &v1.MutatingWebhookConfiguration{}
 				err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: "theatre-system", Name: "theatre-workloads"}, mutatingWebhookConfig)
 				if err != nil {
 					logger.Log("error", err)

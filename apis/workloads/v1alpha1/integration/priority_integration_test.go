@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
-	scheduling_v1beta1 "k8s.io/api/scheduling/v1beta1"
+	scheduling_v1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +21,7 @@ var _ = Describe("PriorityInjector", func() {
 		cancel          func()
 		namespace       string
 		labelValue      string
-		priorityClasses []*scheduling_v1beta1.PriorityClass
+		priorityClasses []*scheduling_v1.PriorityClass
 
 		c client.Client
 	)
@@ -44,7 +44,7 @@ var _ = Describe("PriorityInjector", func() {
 		By("Creating test namespace: " + namespace)
 		Expect(c.Create(ctx, ns)).To(Succeed())
 
-		priorityClasses = []*scheduling_v1beta1.PriorityClass{
+		priorityClasses = []*scheduling_v1.PriorityClass{
 			{
 				ObjectMeta:    metav1.ObjectMeta{Name: "default"},
 				GlobalDefault: true,

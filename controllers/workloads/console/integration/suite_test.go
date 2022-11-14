@@ -35,7 +35,7 @@ func TestSuite(t *testing.T) {
 	RunSpecs(t, "controllers/workloads/integration")
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
 
 	By("bootstrapping test environment")
@@ -124,5 +124,4 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
-	close(done)
 }, 60)

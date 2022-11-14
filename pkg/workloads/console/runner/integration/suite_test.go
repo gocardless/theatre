@@ -34,7 +34,7 @@ func TestSuite(t *testing.T) {
 	RunSpecs(t, "pkg/workloads/console/runner/integration")
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
@@ -61,7 +61,6 @@ var _ = BeforeSuite(func(done Done) {
 	kubeClient, err = client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred(), "could not create client")
 
-	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {

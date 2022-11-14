@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	directoryv1 "google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/option"
 	gock "gopkg.in/h2non/gock.v1"
 
 	. "github.com/onsi/ginkgo"
@@ -25,7 +26,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 		gock.DisableNetworking()
 		gock.New("") // this shouldn't be necessary, but is
 
-		service, err := directoryv1.New(client)
+		service, err := directoryv1.NewService(context.TODO(), option.WithHTTPClient(client))
 		Expect(err).NotTo(HaveOccurred())
 
 		directory = NewGoogleDirectory(service.Members)

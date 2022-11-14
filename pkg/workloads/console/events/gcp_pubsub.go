@@ -14,7 +14,7 @@ func (e ErrorPubsubFailedConnect) Unwrap() error { return e.err }
 func (e ErrorPubsubFailedConnect) Error() string {
 	return fmt.Sprintf(
 		"failed to connect to pubsub topic: %s",
-		e.Error(),
+		e.err,
 	)
 }
 

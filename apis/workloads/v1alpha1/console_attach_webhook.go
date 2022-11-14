@@ -49,7 +49,7 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 	)
 	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logging.WithNoRecord(logger).Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logging.WithNoRecord(logger).Info("completed request", "event", "request.end", "duration", time.Since(start).Seconds())
 	}(time.Now())
 
 	attachOptions := &corev1.PodAttachOptions{}

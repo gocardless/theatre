@@ -402,7 +402,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("VAULT_TEST_SHELLWORD=%s", SentinelSecretValueShellword)),
 		)
-		return
 	}
 
 	expectsFuncFiles := func(buffer bytes.Buffer) {
@@ -415,7 +414,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("ascii:%s", strings.Split(SentinelSecretValueNonASCII, "\n")[0])),
 		)
-		return
 	}
 
 	Describe("theatre-secrets", func() {

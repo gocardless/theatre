@@ -34,7 +34,7 @@ func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.
 	logger := c.logger.WithValues("uuid", string(req.UID))
 	logger.Info("starting request", "event", "request.start")
 	defer func(start time.Time) {
-		logger.Info("completed request", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("completed request", "event", "request.end", "duration", time.Since(start).Seconds())
 	}(time.Now())
 
 	csl := &Console{}

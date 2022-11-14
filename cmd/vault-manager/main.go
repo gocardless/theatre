@@ -20,9 +20,6 @@ var (
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 
-	namespace               = app.Flag("namespace", "Kubernetes webhook service namespace").Default("theatre-system").String()
-	serviceName             = app.Flag("service-name", "Name of service for webhook").Default("theatre-vault-manager").String()
-	webhookName             = app.Flag("webhook-name", "Name of webhook").Default("theatre-vault").String()
 	theatreImage            = app.Flag("theatre-image", "Set to the same image as current binary").Required().String()
 	installPath             = app.Flag("install-path", "Location to install theatre binaries").Default("/var/run/theatre").String()
 	namespaceLabel          = app.Flag("namespace-label", "Namespace label that enables webhook to operate on").Default("theatre-secrets-injector").String()

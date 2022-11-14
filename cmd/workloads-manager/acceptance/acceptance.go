@@ -305,6 +305,8 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 				By("Authorise a console and attach")
 				go func() {
+					// https://onsi.github.io/ginkgo/#mental-model-how-ginkgo-handles-failure
+					defer GinkgoRecover()
 					err := consoleRunner.Authorise(context.TODO(), runner.AuthoriseOptions{
 						Namespace:   namespace,
 						ConsoleName: console.Name,

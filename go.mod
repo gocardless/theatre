@@ -12,24 +12,24 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.13.0
+	github.com/onsi/gomega v1.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/sykesm/zap-logfmt v0.0.3
-	go.uber.org/zap v1.17.0
+	go.uber.org/zap v1.18.1
 	golang.org/x/oauth2 v0.0.0-20211005180243-6b3c2da341f1
 	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678
 	gomodules.xyz/jsonpatch/v3 v3.0.1
 	google.golang.org/api v0.58.0
 	gopkg.in/h2non/gock.v1 v1.0.15
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.21.1
-	k8s.io/apimachinery v0.21.1
-	k8s.io/cli-runtime v0.21.1
-	k8s.io/client-go v0.21.1
+	k8s.io/api v0.21.3
+	k8s.io/apimachinery v0.21.3
+	k8s.io/cli-runtime v0.21.3
+	k8s.io/client-go v0.21.3
 	k8s.io/klog v1.0.0
-	k8s.io/kubectl v0.21.1
-	sigs.k8s.io/controller-runtime v0.9.0
+	k8s.io/kubectl v0.21.3
+	sigs.k8s.io/controller-runtime v0.9.6
 )
 
 require (
@@ -121,13 +121,13 @@ require (
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.21.1 // indirect
-	k8s.io/component-base v0.21.1 // indirect
+	k8s.io/apiextensions-apiserver v0.21.3 // indirect
+	k8s.io/component-base v0.21.3 // indirect
 	k8s.io/klog/v2 v2.8.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7 // indirect
-	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b // indirect
+	k8s.io/utils v0.0.0-20210722164352-7f3ee0f31471 // indirect
 	sigs.k8s.io/kustomize/api v0.8.8 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.10.17 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.1.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )

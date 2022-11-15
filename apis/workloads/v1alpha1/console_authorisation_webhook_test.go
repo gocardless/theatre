@@ -1,8 +1,8 @@
 package v1alpha1
 
 import (
-	"io/ioutil"
 	"net/http"
+	"os"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,7 +14,7 @@ import (
 func mustConsoleAuthorisationFixture(path string) *ConsoleAuthorisation {
 	consoleAuthorisation := &ConsoleAuthorisation{}
 
-	consoleAuthorisationFixtureYAML, _ := ioutil.ReadFile(path)
+	consoleAuthorisationFixtureYAML, _ := os.ReadFile(path)
 
 	decoder := serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 	if err := runtime.DecodeInto(decoder, consoleAuthorisationFixtureYAML, consoleAuthorisation); err != nil {

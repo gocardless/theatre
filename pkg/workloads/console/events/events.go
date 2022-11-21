@@ -44,6 +44,7 @@ type ConsoleRequestSpec struct {
 	ConsoleTemplate        string            `json:"console_template"`
 	Console                string            `json:"console"`
 	RequiredAuthorisations int               `json:"required_authorisations"`
+	AuthorisationRuleName  string            `json:"authorisation_rule_name"`
 	Timestamp              time.Time         `json:"timestamp"`
 	Labels                 map[string]string `json:"labels"`
 }

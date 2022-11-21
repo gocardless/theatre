@@ -106,8 +106,10 @@ func (l *lifecycleEventRecorderImpl) makeConsoleCommonEvent(eventKind events.Eve
 
 func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Console, authRule *ConsoleAuthorisationRule) error {
 	authCount := 0
+	authRuleName := ""
 	if authRule != nil {
 		authCount = authRule.AuthorisationsRequired
+		authRuleName = authRule.Name
 	}
 
 	event := &events.ConsoleRequestEvent{
@@ -120,6 +122,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Co
 			ConsoleTemplate:        csl.Spec.ConsoleTemplateRef.Name,
 			Console:                csl.Name,
 			RequiredAuthorisations: authCount,
+			AuthorisationRuleName:  authRuleName,
 			Timestamp:              csl.CreationTimestamp.Time,
 			Labels:                 csl.Labels,
 		},

@@ -113,6 +113,7 @@ var _ = BeforeSuite(func(done Done) {
 		LifecycleRecorder: lifecycleRecorder,
 		Log:               ctrl.Log.WithName("controllers").WithName("console"),
 		Scheme:            mgr.GetScheme(),
+		ConsoleIdBuilder:  workloadsv1alpha1.NewConsoleIdBuilder("test"),
 	}).SetupWithManager(context.TODO(), mgr)
 	Expect(err).ToNot(HaveOccurred())
 

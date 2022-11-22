@@ -559,7 +559,7 @@ type consoleStatusContext struct {
 }
 
 func (r *ConsoleReconciler) generateStatusAndAuditEvents(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, statusCtx consoleStatusContext) (*workloadsv1alpha1.Console, error) {
-	logger = getAuditLogger(logger, csl, statusCtx)
+	logger = getAuditLogger(logger, r.ConsoleIdBuilder.BuildId(csl), csl, statusCtx)
 	newStatus := calculateStatus(csl, statusCtx)
 
 	if csl.Creating() && newStatus.Phase == workloadsv1alpha1.ConsolePendingAuthorisation {
@@ -1189,7 +1189,7 @@ func jobDiff(expectedObj runtime.Object, existingObj runtime.Object) recutil.Out
 }
 
 // getAuditLogger provides a decorated logger for audit purposes
-func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) logr.Logger {
+func getAuditLogger(logger logr.Logger, consoleId string, c *workloadsv1alpha1.Console, statusCtx consoleStatusContext) logr.Logger {
 	loggerCtx := logging.WithNoRecord(logger)
 	// Append any label-based keys before doing anything else.
 	// This ensures that if there's duplicate keys (e.g. a `name` label on the
@@ -1205,7 +1205,8 @@ func getAuditLogger(logger logr.Logger, c *workloadsv1alpha1.Console, statusCtx 
 		"kind", Console,
 		"console_name", c.Name,
 		"console_user", c.Spec.User,
-
+		"console_event_id", consoleId,
+		"request_time", c.CreationTimestamp.Time,
 		"console_requires_authorisation", requiresAuth,
 		// Note that a console that does not require authorisation is considered
 		// authorised by default.

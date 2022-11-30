@@ -1,6 +1,3 @@
-// Package v1alpha1 contains API Schema definitions for the workloads v1alpha1 API group
-// +kubebuilder:object:generate=true
-// +groupName=workloads.crd.gocardless.com
 package v1alpha1
 
 import (

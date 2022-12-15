@@ -334,16 +334,13 @@ var _ = Describe("Console", func() {
 				return err
 			}).ShouldNot(HaveOccurred(), "failed to update console")
 
-			// Wait for a second to ensure that the apiserver has time to create a job if it were to do so.
-			time.Sleep(1 * time.Second)
-
 			By("Check that only one job has been created")
 			Eventually(func() []batchv1.Job {
 				jobs := &batchv1.JobList{}
 				err := mgr.GetClient().List(context.TODO(), jobs, client.InNamespace(identifier.Namespace))
 				Expect(err).NotTo(HaveOccurred())
 				return jobs.Items
-			}).Should(HaveLen(1), "Only 1 job should be created")
+			}, 2*time.Second).Should(HaveLen(1), "Only 1 job should be created")
 		})
 
 		It("Creates a role and directory role binding for the user", func() {

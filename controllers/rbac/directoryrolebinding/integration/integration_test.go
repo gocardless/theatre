@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -103,15 +102,14 @@ var _ = Describe("Reconciler", func() {
 				HaveOccurred(), "failed to create 'foo' DirectoryRoleBinding",
 			)
 
-			// Wait to ensure that the apiserver has time to create DirectoryRoleBinding
-			time.Sleep(1 * time.Second)
-
 			By("Validate associated RoleBinding exists")
 			rb := &rbacv1.RoleBinding{}
 			identifier := client.ObjectKeyFromObject(drb)
-			err := mgr.GetClient().Get(context.TODO(), identifier, rb)
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
+			Eventually(func() error {
+				return mgr.GetClient().Get(context.TODO(), identifier, rb)
+			}).ShouldNot(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
+
 			Expect(rb.RoleRef).To(Equal(drb.Spec.RoleRef), "associated RoleBinding should reference same Role as DRB")
 			Expect(rb.Subjects).To(BeEmpty(), "initial RoleBinding should contain no subjects")
 
@@ -124,7 +122,7 @@ var _ = Describe("Reconciler", func() {
 				newUser("manuel@gocardless.com"),
 			}
 
-			err = mgr.GetClient().Update(context.TODO(), drb)
+			err := mgr.GetClient().Update(context.TODO(), drb)
 			Expect(err).NotTo(HaveOccurred(), "failed to update DirectoryRoleBinding")
 
 			By("Refresh RoleBinding")

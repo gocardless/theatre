@@ -28,7 +28,7 @@ func newNamespace(name string) corev1.Namespace {
 }
 
 const (
-	shortTimeout time.Duration = 30 * time.Millisecond
+	shortTimeout time.Duration = 500 * time.Millisecond
 )
 
 func newConsoleTemplate(namespace, name string, labels map[string]string) workloadsv1alpha1.ConsoleTemplate {
@@ -119,9 +119,9 @@ func mustCreateRoleBinding(roleBinding rbacv1.RoleBinding) {
 
 func mustAddSubjectsToRoleBinding(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
 	rb.Subjects = subjects
-	err := kubeClient.Update(context.TODO(), &rb)
-	time.Sleep(2 * time.Second)
-	Expect(err).NotTo(HaveOccurred())
+	Eventually(func() error {
+		return kubeClient.Update(context.TODO(), &rb)
+	}, 2*time.Second).ShouldNot(HaveOccurred())
 }
 
 func mustUpdateConsolePhase(in workloadsv1alpha1.Console, phase workloadsv1alpha1.ConsolePhase) {
@@ -281,7 +281,7 @@ var _ = Describe("Runner", func() {
 
 		Context("When console phase is Pending", func() {
 			It("Fails with a timeout waiting", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
@@ -436,7 +436,7 @@ var _ = Describe("Runner", func() {
 					rb.Subjects = nil
 					mustCreateRoleBinding(rb)
 
-					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
@@ -487,7 +487,7 @@ var _ = Describe("Runner", func() {
 						},
 					)
 
-					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout+time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 

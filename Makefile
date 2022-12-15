@@ -29,6 +29,8 @@ bin/%.darwin_amd64:
 bin/%:
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
+# Run the below commands in order to install the required dependencies for
+# running `make test` locally.
 # go install github.com/onsi/ginkgo/ginkgo@v1.16.5
 # go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 # setup-envtest use -p path 1.22.x

@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -46,15 +46,17 @@ func (r *Runner) Name() string {
 //
 // It does several things:
 //
-// - Mounts a kv2 secrets engine at secret/
-// - Creates a Kubernetes auth backend mounted at auth/kubernetes
-// - Configures the Kubernetes backend to authenticate against the currently detected
-//   Kubernetes API server (the current cluster, if run from within)
-// - For all successful Kubernetes logins, the user is assigned a token that maps to a
-//   cluster-reader policy, which permits reading of secrets from:
+//   - Mounts a kv2 secrets engine at secret/
 //
-//   secret/data/kubernetes/{namespace}/{service-account-name}/*
+//   - Creates a Kubernetes auth backend mounted at auth/kubernetes
 //
+//   - Configures the Kubernetes backend to authenticate against the currently detected
+//     Kubernetes API server (the current cluster, if run from within)
+//
+//   - For all successful Kubernetes logins, the user is assigned a token that maps to a
+//     cluster-reader policy, which permits reading of secrets from:
+//
+//     secret/data/kubernetes/{namespace}/{service-account-name}/*
 func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	cfg := api.DefaultConfig()
 	cfg.Address = "http://localhost:8200"
@@ -110,7 +112,7 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	var ca []byte = config.CAData
 
 	if len(ca) == 0 {
-		ca, err = ioutil.ReadFile(config.CAFile)
+		ca, err = os.ReadFile(config.CAFile)
 		if err != nil {
 			return errors.Wrap(err, "could not parse certificate for kubernetes")
 		}
@@ -402,7 +404,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("VAULT_TEST_SHELLWORD=%s", SentinelSecretValueShellword)),
 		)
-		return
 	}
 
 	expectsFuncFiles := func(buffer bytes.Buffer) {
@@ -415,7 +416,6 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		Expect(buffer.String()).To(
 			ContainSubstring(fmt.Sprintf("ascii:%s", strings.Split(SentinelSecretValueNonASCII, "\n")[0])),
 		)
-		return
 	}
 
 	Describe("theatre-secrets", func() {

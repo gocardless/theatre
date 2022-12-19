@@ -6,6 +6,7 @@ import (
 	"time"
 
 	directoryv1 "google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/option"
 	gock "gopkg.in/h2non/gock.v1"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -23,7 +24,7 @@ var _ = Describe("NewCachedDirectory", func() {
 
 	JustBeforeEach(func() {
 		directory = NewCachedDirectory(
-			zap.LoggerTo(GinkgoWriter, true),
+			zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
 			NewFakeDirectory(groups),
 			ttl,
 		)
@@ -121,7 +122,7 @@ var _ = Describe("NewGoogleDirectory", func() {
 		gock.DisableNetworking()
 		gock.New("") // this shouldn't be necessary, but is
 
-		service, err := directoryv1.New(client)
+		service, err := directoryv1.NewService(context.TODO(), option.WithHTTPClient(client))
 		Expect(err).NotTo(HaveOccurred())
 
 		directory = NewGoogleDirectory(service.Members)
@@ -142,8 +143,8 @@ var _ = Describe("NewGoogleDirectory", func() {
 			BeforeEach(func() {
 				membersResponse = directoryv1.Members{
 					Members: []*directoryv1.Member{
-						&directoryv1.Member{Email: "lawrence@gocardless.com"},
-						&directoryv1.Member{Email: "chris@gocardless.com"},
+						{Email: "lawrence@gocardless.com"},
+						{Email: "chris@gocardless.com"},
 					},
 				}
 			})

@@ -33,7 +33,7 @@ func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admis
 	logger.Info("starting request", "event", "request.start")
 
 	defer func(start time.Time) {
-		logger.Info("request completed", "event", "request.end", "duration", time.Now().Sub(start).Seconds())
+		logger.Info("request completed", "event", "request.end", "duration", time.Since(start).Seconds())
 	}(time.Now())
 
 	template := &ConsoleTemplate{}

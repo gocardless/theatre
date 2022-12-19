@@ -53,7 +53,7 @@ type ObjectReconcileFunc func(logger logr.Logger, request reconcile.Request, obj
 // your modified object at the start of a reconciliation loop, and instead calls an inner
 // reconciliation function with the already resolved object.
 func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Manager, objType runtime.Object, inner ObjectReconcileFunc) reconcile.Reconciler {
-	return reconcile.Func(func(request reconcile.Request) (res reconcile.Result, err error) {
+	return reconcile.Func(func(ctx context.Context, request reconcile.Request) (res reconcile.Result, err error) {
 		logger := logger.WithValues("request", request)
 		logger.Info("Reconcile request start", "event", EventRequestStart)
 
@@ -95,7 +95,7 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 			return res, err
 		}
 
-		logger = logging.WithEventRecorder(logger, mgr.GetEventRecorderFor("theatre"), obj)
+		logger = logging.WithEventRecorder(logger.GetSink(), mgr.GetEventRecorderFor("theatre"), obj)
 		logger.Info("Starting reconciliation", "event", EventStart)
 
 		// If the object is being deleted then don't attempt any further
@@ -176,7 +176,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 	case None:
 		return None, nil
 	default:
-		return Error, fmt.Errorf("Unrecognised operation: %s", op)
+		return Error, fmt.Errorf("unrecognised operation: %s", op)
 	}
 }
 

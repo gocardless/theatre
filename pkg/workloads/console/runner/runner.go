@@ -198,7 +198,7 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 
 	// Wait for authorisation step or until ready
 	_, err = c.WaitUntilReady(ctx, *csl, false)
-	if err == consolePendingAuthorisationError {
+	if err == errConsolePendingAuthorisation {
 		rule, err := tpl.GetAuthorisationRuleForCommand(opts.Command)
 		if err != nil {
 			return csl, fmt.Errorf("failed to get authorisation rule %w", err)
@@ -838,8 +838,8 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 }
 
 var (
-	consolePendingAuthorisationError = errors.New("console pending authorisation")
-	consoleNotFoundError             = errors.New("console not found")
+	errConsoleNotFound             = errors.New("console not found")
+	errConsolePendingAuthorisation = errors.New("console pending authorisation")
 )
 
 func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
@@ -876,7 +876,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 		return csl, nil
 	}
 	if isPendingAuthorisation(csl) {
-		return csl, consolePendingAuthorisationError
+		return csl, errConsolePendingAuthorisation
 	}
 	// If the console has already stopped it may have already run to
 	// completion, so let's return it
@@ -903,7 +903,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return csl, nil
 			}
 			if isPendingAuthorisation(csl) {
-				return csl, consolePendingAuthorisationError
+				return csl, errConsolePendingAuthorisation
 			}
 			// If the console has already stopped it may have already run to
 			// completion, so let's return it
@@ -912,7 +912,7 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 			}
 		case <-ctx.Done():
 			if csl == nil {
-				return nil, fmt.Errorf("%s: %w", consoleNotFoundError, ctx.Err())
+				return nil, fmt.Errorf("%s: %w", errConsoleNotFound, ctx.Err())
 			}
 			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
 		}

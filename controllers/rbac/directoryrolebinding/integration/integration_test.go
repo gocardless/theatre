@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -17,10 +16,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var (
-	timeout = 10 * time.Second
-)
-
 func newAdminRole(namespace string) *rbacv1.Role {
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
@@ -28,7 +23,7 @@ func newAdminRole(namespace string) *rbacv1.Role {
 			Namespace: namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
-			rbacv1.PolicyRule{
+			{
 				APIGroups: []string{rbacv1.APIGroupAll},
 				Resources: []string{rbacv1.ResourceAll},
 				Verbs:     []string{rbacv1.VerbAll},
@@ -109,10 +104,12 @@ var _ = Describe("Reconciler", func() {
 
 			By("Validate associated RoleBinding exists")
 			rb := &rbacv1.RoleBinding{}
-			identifier, _ := client.ObjectKeyFromObject(drb)
-			err := mgr.GetClient().Get(context.TODO(), identifier, rb)
+			identifier := client.ObjectKeyFromObject(drb)
 
-			Expect(err).NotTo(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
+			Eventually(func() error {
+				return mgr.GetClient().Get(context.TODO(), identifier, rb)
+			}).ShouldNot(HaveOccurred(), "failed to find associated RoleBinding for DirectoryRoleBinding")
+
 			Expect(rb.RoleRef).To(Equal(drb.Spec.RoleRef), "associated RoleBinding should reference same Role as DRB")
 			Expect(rb.Subjects).To(BeEmpty(), "initial RoleBinding should contain no subjects")
 
@@ -125,7 +122,7 @@ var _ = Describe("Reconciler", func() {
 				newUser("manuel@gocardless.com"),
 			}
 
-			err = mgr.GetClient().Update(context.TODO(), drb)
+			err := mgr.GetClient().Update(context.TODO(), drb)
 			Expect(err).NotTo(HaveOccurred(), "failed to update DirectoryRoleBinding")
 
 			By("Refresh RoleBinding")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	execpkg "os/exec"
@@ -243,7 +242,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			path := file.filesystemPath
 			if path == "" {
 				// generate file path prefixed by key
-				tempFilePath, err := ioutil.TempFile("", fmt.Sprintf("%s-*", key))
+				tempFilePath, err := os.CreateTemp("", fmt.Sprintf("%s-*", key))
 				if err != nil {
 					return errors.Wrap(err, fmt.Sprintf("failed to write temporary file for key %s", key))
 				}
@@ -264,7 +263,7 @@ func mainError(ctx context.Context, command string) (err error) {
 			)
 
 			// write file with value of envMap[key]
-			if err := ioutil.WriteFile(path, []byte(secretEnv[file.vaultKey]), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(secretEnv[file.vaultKey]), 0600); err != nil {
 				return errors.Wrap(err,
 					fmt.Sprintf("failed to write file with key %s to path %s", key, path))
 			}
@@ -304,7 +303,7 @@ func mainError(ctx context.Context, command string) (err error) {
 // in cluster auth but falling back to other detection methods if that fails.
 func getKubernetesToken(tokenFileOverride string) (string, error) {
 	if tokenFileOverride != "" {
-		tokenBytes, err := ioutil.ReadFile(tokenFileOverride)
+		tokenBytes, err := os.ReadFile(tokenFileOverride)
 
 		return string(tokenBytes), errors.Wrap(err, "failed to read kubernetes token file")
 	}
@@ -470,7 +469,7 @@ type Config struct {
 func loadConfigFromFile(configFile string) (Config, error) {
 	var cfg Config
 
-	yamlContent, err := ioutil.ReadFile(configFile)
+	yamlContent, err := os.ReadFile(configFile)
 	if err != nil {
 		return cfg, errors.Wrap(err, "failed to open config file")
 	}

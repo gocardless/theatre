@@ -29,7 +29,12 @@ bin/%.darwin_amd64:
 bin/%:
 	CGO_ENABLED=0 GOARCH=amd64 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
+# Run the below commands in order to install the required dependencies for
+# running `make test` locally.
 # go install github.com/onsi/ginkgo/ginkgo@v1.16.5
+# go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+# setup-envtest use -p path 1.22.x
+# source <(setup-envtest use -i -p env 1.22.x)
 test:
 	ginkgo -race -r ./...
 
@@ -78,7 +83,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen

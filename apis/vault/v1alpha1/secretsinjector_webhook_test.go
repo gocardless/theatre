@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -15,7 +15,7 @@ import (
 )
 
 func mustPodFixture(path string) *corev1.Pod {
-	podFixtureYAML, _ := ioutil.ReadFile(path)
+	podFixtureYAML, _ := os.ReadFile(path)
 	decoder := scheme.Codecs.UniversalDeserializer()
 	obj, _, _ := decoder.Decode(podFixtureYAML, nil, nil)
 	return obj.(*corev1.Pod)

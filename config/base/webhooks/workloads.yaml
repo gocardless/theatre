@@ -6,7 +6,7 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: theatre-system/theatre-workloads-manager
 webhooks:
-  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+  - admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: Cg==
       service:
@@ -30,7 +30,7 @@ webhooks:
           - consoles
         scope: '*'
     sideEffects: None
-  - admissionReviewVersions: ["v1beta1"]
+  - admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: Cg==
       service:
@@ -68,7 +68,7 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: theatre-system/theatre-workloads-manager
 webhooks:
-  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+  - admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: Cg==
       service:
@@ -92,7 +92,7 @@ webhooks:
           - consoleauthorisations
         scope: '*'
     sideEffects: None
-  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+  - admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: Cg==
       service:
@@ -117,7 +117,7 @@ webhooks:
           - consoletemplates
         scope: '*'
     sideEffects: None
-  - admissionReviewVersions: ["v1beta1"] # need to upgrade out webhook to support v1
+  - admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: Cg==
       service:

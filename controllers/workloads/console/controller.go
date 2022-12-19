@@ -472,7 +472,7 @@ func (r *ConsoleReconciler) createOrUpdate(ctx context.Context, logger logr.Logg
 		}
 	}
 
-	outcome, err := recutil.CreateOrUpdate(ctx, r, expected, diffFunc)
+	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, expected, diffFunc)
 	if err != nil {
 		return errors.Wrap(err, "CreateOrUpdate failed")
 	}

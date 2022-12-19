@@ -101,7 +101,7 @@ func (i *priorityInjector) Handle(ctx context.Context, req admission.Request) (r
 			Name: req.Namespace,
 		},
 	}
-	nsName, _ := client.ObjectKeyFromObject(ns)
+	nsName := client.ObjectKeyFromObject(ns)
 	if err := i.client.Get(ctx, nsName, ns); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}

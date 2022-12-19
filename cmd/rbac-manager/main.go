@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
@@ -89,7 +90,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.Start(ctx.Done()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		app.Fatalf("failed to run manager: %v", err)
 	}
 }
@@ -113,5 +114,5 @@ func createGoogleDirectory(ctx context.Context, subject string) (*directoryv1.Se
 	// Access to the directory API must be signed with a Subject to enable domain selection.
 	conf.Subject = subject
 
-	return directoryv1.New(conf.Client(ctx))
+	return directoryv1.NewService(ctx, option.WithHTTPClient(conf.Client(ctx)))
 }

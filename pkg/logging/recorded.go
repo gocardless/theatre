@@ -20,44 +20,61 @@ func WithNoRecord(logger logr.Logger) logr.Logger {
 	return logger.WithValues("eventType", EventTypeDontRecord)
 }
 
-var _ logr.Logger = &EventRecordingLogger{}
+var _ logr.LogSink = &EventRecordingLogSink{}
 
-func WithEventRecorder(logger logr.Logger, recorder record.EventRecorder, object runtime.Object) logr.Logger {
-	return &EventRecordingLogger{
-		Logger:   logger,
-		recorder: recorder,
-		object:   object,
-		values:   []interface{}{},
-	}
-}
-
-type EventRecordingLogger struct {
-	logr.Logger
+type EventRecordingLogSink struct {
+	logger   logr.LogSink
+	info     logr.RuntimeInfo
 	recorder record.EventRecorder
 	object   runtime.Object
 	values   []interface{}
 }
 
-func (erl *EventRecordingLogger) WithValues(values ...interface{}) logr.Logger {
-	return &EventRecordingLogger{
-		Logger:   erl.Logger.WithValues(values...),
-		recorder: erl.recorder,
-		object:   erl.object,
-		values:   append(erl.values, values...),
-	}
+// Init implements logr.LogSink.
+func (erl *EventRecordingLogSink) Init(info logr.RuntimeInfo) {
+	erl.info = info
 }
 
-func (erl *EventRecordingLogger) WithName(name string) logr.Logger {
-	return &EventRecordingLogger{
-		Logger:   erl.Logger.WithName(name),
+// Enabled tests whether this Logger is enabled.  For example, commandline
+// flags might be used to set the logging verbosity and disable some info
+// logs.
+// Enabled implements logr.LogSink.
+func (erl *EventRecordingLogSink) Enabled(level int) bool {
+	return erl.logger.Enabled(level)
+}
+
+// WithName implements logr.LogSink.
+func (erl *EventRecordingLogSink) WithName(name string) logr.LogSink {
+	return &EventRecordingLogSink{
+		logger:   erl.logger.WithName(name),
 		recorder: erl.recorder,
 		object:   erl.object,
 		values:   erl.values,
 	}
 }
 
-func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
-	erl.Logger.Info(msg, keyvals...)
+// WithValues implements logr.LogSink.
+func (erl *EventRecordingLogSink) WithValues(values ...interface{}) logr.LogSink {
+	return &EventRecordingLogSink{
+		logger:   erl.logger.WithValues(values...),
+		recorder: erl.recorder,
+		object:   erl.object,
+		values:   append(erl.values, values...),
+	}
+}
+
+func WithEventRecorder(logger logr.LogSink, recorder record.EventRecorder, object runtime.Object) logr.Logger {
+	return logr.New(&EventRecordingLogSink{
+		logger:   logger,
+		recorder: recorder,
+		object:   object,
+		values:   []interface{}{},
+	})
+}
+
+// Info implements logr.LogSink.
+func (erl *EventRecordingLogSink) Info(levels int, msg string, keyvals ...interface{}) {
+	erl.logger.Info(levels, msg, keyvals...)
 
 	// Pop key values from our slice into a map so we can better access each element
 	kvs := map[string]string{}
@@ -89,4 +106,18 @@ func (erl *EventRecordingLogger) Info(msg string, keyvals ...interface{}) {
 	}
 
 	erl.recorder.Event(erl.object, eventType, event, message)
+}
+
+// Error logs an error, with the given message and key/value pairs as context.
+// It functions similarly to calling Info with the "error" named value, but may
+// have unique behavior, and should be preferred for logging errors (see the
+// package documentations for more information).
+//
+// The msg field should be used to add context to any underlying error,
+// while the err field should be used to attach the actual error that
+// triggered this log line, if present.
+//
+// Error implements logr.LogSink.
+func (erl *EventRecordingLogSink) Error(err error, msg string, keysAndValues ...interface{}) {
+	erl.logger.Error(err, msg, keysAndValues...)
 }

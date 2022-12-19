@@ -4,10 +4,9 @@ import (
 	"context"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
-	scheduling_v1beta1 "k8s.io/api/scheduling/v1beta1"
+	scheduling_v1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,18 +15,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var (
-	timeout = 5 * time.Second
-	logger  = kitlog.NewLogfmtLogger(GinkgoWriter)
-)
-
 var _ = Describe("PriorityInjector", func() {
 	var (
 		ctx             context.Context
 		cancel          func()
 		namespace       string
 		labelValue      string
-		priorityClasses []*scheduling_v1beta1.PriorityClass
+		priorityClasses []*scheduling_v1.PriorityClass
 
 		c client.Client
 	)
@@ -50,13 +44,13 @@ var _ = Describe("PriorityInjector", func() {
 		By("Creating test namespace: " + namespace)
 		Expect(c.Create(ctx, ns)).To(Succeed())
 
-		priorityClasses = []*scheduling_v1beta1.PriorityClass{
-			&scheduling_v1beta1.PriorityClass{
+		priorityClasses = []*scheduling_v1.PriorityClass{
+			{
 				ObjectMeta:    metav1.ObjectMeta{Name: "default"},
 				GlobalDefault: true,
 				Value:         1000,
 			},
-			&scheduling_v1beta1.PriorityClass{
+			{
 				ObjectMeta: metav1.ObjectMeta{Name: "best-effort"},
 				Value:      900,
 			},
@@ -100,7 +94,7 @@ var _ = Describe("PriorityInjector", func() {
 			Spec: corev1.PodSpec{
 				PriorityClassName: priorityClassName,
 				Containers: []corev1.Container{
-					corev1.Container{
+					{
 						Name:  "app",
 						Image: "something",
 					},

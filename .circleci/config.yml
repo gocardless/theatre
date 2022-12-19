@@ -50,6 +50,7 @@ jobs:
             setup-envtest use -p path 1.22.x
       - run:
           name: Run tests
+          no_output_timeout: 20m
           command: |
             source <(setup-envtest use -i -p env 1.22.x)
             ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v ./...

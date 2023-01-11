@@ -114,7 +114,7 @@ jobs:
     steps:
       - add_ssh_keys:
           fingerprints:
-            - 60:aa:94:d0:56:d8:c9:37:08:c2:41:a8:9d:06:d2:61
+            - f2:6b:e8:ba:cc:eb:84:a1:d9:5e:71:b5:a3:17:63:ea
       - checkout
       - run:
           name: Release

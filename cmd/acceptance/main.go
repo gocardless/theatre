@@ -37,7 +37,7 @@ var (
 	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
 	prepareConfigFile    = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile    = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
-	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.22.2").String()
+	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.24.13").String()
 	prepareVerbose       = prepare.Flag("verbose", "Use a higher log level when creating the cluster").Short('v').Bool()
 
 	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")

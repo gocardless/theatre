@@ -90,6 +90,9 @@ jobs:
         run: bin/acceptance.linux_amd64 prepare --verbose && sleep 20
       - name: Run acceptance tests
         run: bin/acceptance.linux_amd64 run --verbose
+      - name: Show all pods
+        run: kubectl get pods -A -o wide
+        if: failure()
       - name: Show events
         run: kubectl get events
         if: failure()
@@ -98,6 +101,12 @@ jobs:
         if: failure()
       - name: Show rbac logs
         run: kubectl -n theatre-system logs theatre-rbac-manager-0
+        if: failure()
+      - name: Show vault manager logs
+        run: kubectl -n theatre-system logs theatre-vault-manager-0
+        if: failure()
+      - name: Show Vault logs
+        run: kubectl -n vault logs vault-0
         if: failure()
 
   release:

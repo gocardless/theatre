@@ -58,6 +58,8 @@ spec:
             - server
             - -dev
             - -dev-root-token-id=vault-token
+            - -dev-listen-address=0.0.0.0:8200
+            - -log-format=json
           ports:
             - containerPort: 8200
               name: http

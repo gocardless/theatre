@@ -6,7 +6,7 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: theatre-system/theatre-vault-manager
 webhooks:
-  - admissionReviewVersions: ["v1"]
+  - admissionReviewVersions: ["v1", "v1beta1"]
     clientConfig:
       caBundle: Cg==
       service:

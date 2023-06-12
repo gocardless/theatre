@@ -1,4 +1,4 @@
-# Theatre [![CircleCI](https://circleci.com/gh/gocardless/theatre.svg?style=svg)](https://circleci.com/gh/gocardless/theatre)
+# Theatre
 
 This project contains GoCardless' Kubernetes extensions, in the form of
 operators, admission controller webhooks and associated CLIs. The aim of this

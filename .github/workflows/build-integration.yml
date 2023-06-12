@@ -68,7 +68,7 @@ jobs:
         run: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v ./...
 
   acceptance:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.1.0
       - uses: actions/setup-go@v4
@@ -88,6 +88,9 @@ jobs:
           EOF
       - name: Prepare the cluster
         run: bin/acceptance.linux_amd64 prepare --verbose && sleep 20
+      - name: Kind cluser
+        run: |
+          kubectl cluster-info --context kind-e2e
       - name: Run acceptance tests
         run: bin/acceptance.linux_amd64 run --verbose
       - name: Show all pods

@@ -372,7 +372,7 @@ func newVaultOptions(cmd *kingpin.CmdClause) *vaultOptions {
 	cmd.Flag("vault-use-tls", "Use TLS when connecting to Vault").Default("true").BoolVar(&opt.UseTLS)
 	cmd.Flag("vault-insecure-skip-verify", "Skip TLS certificate verification when connecting to Vault").Default("false").BoolVar(&opt.InsecureSkipVerify)
 	cmd.Flag("vault-path-prefix", "Path prefix to read Vault secret from").Default("").StringVar(&opt.PathPrefix)
-	cmd.Flag("vault-http-timeout", "Timeout in seconds when making requests to vault").Default("2s").DurationVar(&opt.Timeout)
+	cmd.Flag("vault-http-timeout", "Timeout in seconds when making requests to vault").Default("10s").DurationVar(&opt.Timeout)
 
 	return opt
 }

@@ -82,3 +82,9 @@ data:
   auth_mount_path: kubernetes
   auth_role: default
   secret_mount_path_prefix: secret/data/kubernetes
+  # For completeness
+  # Explicit,  configuration defaults behaviour that changes across Vault version
+  # iss and issuer are deprecated
+  # https://developer.hashicorp.com/vault/docs/auth/kubernetes#kubernetes-1-21
+  # https://developer.hashicorp.com/vault/docs/auth/kubernetes#discovering-the-service-account-issuer
+  disable_iss_validation: "true"

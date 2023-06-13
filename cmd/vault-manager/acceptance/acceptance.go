@@ -126,7 +126,12 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 	backendConfig := map[string]interface{}{
 		"kubernetes_host":    "https://kubernetes.default.svc",
 		"kubernetes_ca_cert": string(ca),
-		"issuer":             "api",
+		// Explicit,  configuration defaults behaviour that changes across Vault version
+		// iss and issuer are deprecated
+		// https://developer.hashicorp.com/vault/docs/auth/kubernetes#kubernetes-1-21
+		// https://developer.hashicorp.com/vault/docs/auth/kubernetes#discovering-the-service-account-issuer
+		"issuer":                 "api",
+		"disable_iss_validation": "true",
 	}
 
 	logger.Log("msg", "writing auth backend config", "path", backendConfigPath, "config", backendConfig)

@@ -1,14 +1,11 @@
----
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-bases:
-  - ../base
-
 resources:
-  - resources/google-application-credentials.yaml
+- resources/google-application-credentials.yaml
+- ../base
 
-patchesStrategicMerge:
-  - overlays/rbac-manager.yaml
-  - overlays/vault-manager.yaml
-  - overlays/workloads-manager.yaml
+patches:
+- path: overlays/rbac-manager.yaml
+- path: overlays/vault-manager.yaml
+- path: overlays/workloads-manager.yaml

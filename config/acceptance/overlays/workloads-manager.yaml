@@ -11,3 +11,6 @@ spec:
         - name: manager
           image: theatre:latest
           imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "100m"

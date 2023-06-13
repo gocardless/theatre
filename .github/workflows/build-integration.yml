@@ -96,6 +96,10 @@ jobs:
       - name: Show all pods
         run: kubectl get pods -A -o wide
         if: failure()
+      - name: Describe theatre-workloads-manager-0
+        run: |
+          kubectl -n theatre-system describe pod theatre-workloads-manager-0
+        if: failure()
       - name: Show events
         run: kubectl get events
         if: failure()

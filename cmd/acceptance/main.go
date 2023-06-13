@@ -134,6 +134,21 @@ func main() {
 			app.Fatalf("failed to install setup manifests into cluster: %v", err)
 		}
 
+		logger.Log("msg", "waiting for setup resources to run")
+		//WIP: my guesss is that kubectl wait with a timeout is not returning a status code
+
+		ctx, deadline := context.WithTimeout(ctx, 5*time.Minute)
+		defer deadline()
+		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "10m")
+
+		if err := pipeOutput(waitCmd).Run(); err != nil {
+			app.Fatalf("not all setup resources are running: %v", err)
+		}
+
+		if ctx.Err() == context.DeadlineExceeded {
+			app.Fatalf("no all setup resources are running: %v", err)
+		}
+
 		logger.Log("msg", "generating theatre manifests")
 		manifests, err := exec.CommandContext(ctx, "kustomize", "build", "config/acceptance").Output()
 		if err != nil {
@@ -148,18 +163,18 @@ func main() {
 			app.Fatalf("failed to install theatre manifests into cluster: %v", err)
 		}
 
-		logger.Log("msg", "waiting for setup resources to run")
+		logger.Log("msg", "waiting for theatre resources are running")
 		//WIP: my guesss is that kubectl wait with a timeout is not returning a status code
-		ctx, deadline := context.WithTimeout(ctx, 5*time.Minute)
+		ctx, deadline = context.WithTimeout(ctx, 5*time.Minute)
 		defer deadline()
-		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "10m")
+		waitCmd = exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "10m")
 
 		if err := pipeOutput(waitCmd).Run(); err != nil {
-			app.Fatalf("not all setup resources are running: %v", err)
+			app.Fatalf("not all theatre resources are running: %v", err)
 		}
 
 		if ctx.Err() == context.DeadlineExceeded {
-			app.Fatalf("context timeout: no all setup resources are running: %v", err)
+			app.Fatalf("no all theatre resources are running: %v", err)
 		}
 
 		cfg := mustClusterConfig()

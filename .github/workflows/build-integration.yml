@@ -68,7 +68,7 @@ jobs:
         run: ginkgo -race -randomizeSuites -randomizeAllSpecs -r -v ./...
 
   acceptance:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.1.0
       - uses: actions/setup-go@v4
@@ -79,17 +79,20 @@ jobs:
       - name: Install tooling
         run: |-
           sudo bash <<EOF
-          curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.11.1/kind-linux-amd64
+          curl -fsL -o /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.19.0/kind-linux-amd64
           curl -fsL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv4.4.1/kustomize_v4.4.1_linux_amd64.tar.gz \
             | tar xfz -
           mv -v kustomize /usr/local/bin/kustomize
-          curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.22.3/bin/linux/amd64/kubectl
+          curl -fsL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.24.11/bin/linux/amd64/kubectl
           chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
           EOF
       - name: Prepare the cluster
         run: bin/acceptance.linux_amd64 prepare --verbose && sleep 10
       - name: Run acceptance tests
         run: bin/acceptance.linux_amd64 run --verbose
+      - name: Show all pods
+        run: kubectl get pods -A -o wide
+        if: failure()
       - name: Show events
         run: kubectl get events
         if: failure()
@@ -98,6 +101,9 @@ jobs:
         if: failure()
       - name: Show rbac logs
         run: kubectl -n theatre-system logs theatre-rbac-manager-0
+        if: failure()
+      - name: Show vault manager logs
+        run: kubectl -n theatre-system logs theatre-vault-manager-0
         if: failure()
 
   release:

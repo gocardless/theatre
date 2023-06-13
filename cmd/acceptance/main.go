@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -133,13 +134,6 @@ func main() {
 			app.Fatalf("failed to install setup manifests into cluster: %v", err)
 		}
 
-		logger.Log("msg", "waiting for setup resources to run")
-		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
-
-		if err := pipeOutput(waitCmd).Run(); err != nil {
-			app.Fatalf("not all setup resources are running: %v", err)
-		}
-
 		logger.Log("msg", "generating theatre manifests")
 		manifests, err := exec.CommandContext(ctx, "kustomize", "build", "config/acceptance").Output()
 		if err != nil {
@@ -152,6 +146,20 @@ func main() {
 
 		if err := pipeOutput(applyCmd).Run(); err != nil {
 			app.Fatalf("failed to install theatre manifests into cluster: %v", err)
+		}
+
+		logger.Log("msg", "waiting for setup resources to run")
+		//WIP: my guesss is that kubectl wait with a timeout is not returning a status code
+		ctx, deadline := context.WithTimeout(ctx, 5*time.Minute)
+		defer deadline()
+		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "10m")
+
+		if err := pipeOutput(waitCmd).Run(); err != nil {
+			app.Fatalf("not all setup resources are running: %v", err)
+		}
+
+		if ctx.Err() == context.DeadlineExceeded {
+			app.Fatalf("context timeout: no all setup resources are running: %v", err)
 		}
 
 		cfg := mustClusterConfig()

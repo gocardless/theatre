@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -134,10 +135,17 @@ func main() {
 		}
 
 		logger.Log("msg", "waiting for setup resources to run")
+		contextTimeout := 3 * time.Minute
+		ctx, deadline := context.WithTimeout(ctx, contextTimeout)
+		defer deadline()
 		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
 
 		if err := pipeOutput(waitCmd).Run(); err != nil {
 			app.Fatalf("not all setup resources are running: %v", err)
+		}
+
+		if ctx.Err() == context.DeadlineExceeded {
+			app.Fatalf("context deadline: no all setup resources are running: %v", err)
 		}
 
 		logger.Log("msg", "generating theatre manifests")
@@ -152,6 +160,19 @@ func main() {
 
 		if err := pipeOutput(applyCmd).Run(); err != nil {
 			app.Fatalf("failed to install theatre manifests into cluster: %v", err)
+		}
+
+		logger.Log("msg", "waiting for Theatre resources are running")
+		ctx, deadline = context.WithTimeout(ctx, contextTimeout)
+		defer deadline()
+		waitCmd = exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
+
+		if err := pipeOutput(waitCmd).Run(); err != nil {
+			app.Fatalf("not all theatre resources are running: %v", err)
+		}
+
+		if ctx.Err() == context.DeadlineExceeded {
+			app.Fatalf("context deadline: no all theatre resources are running: %v", err)
 		}
 
 		cfg := mustClusterConfig()

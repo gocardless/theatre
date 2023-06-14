@@ -23,6 +23,8 @@ jobs:
   requires-release:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      release: ${{ steps.version.output.release }}
     steps:
       - uses: actions/checkout@v3
         with:

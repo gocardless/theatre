@@ -1,6 +1,10 @@
 ---
 name: build-integration
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches:
@@ -13,8 +17,7 @@ on:
   push:
     branches:
       - master
-    tags:
-      - v*
+
   workflow_dispatch:
 
 jobs:

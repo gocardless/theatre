@@ -13,10 +13,7 @@ on:
     types:
       - completed
     branches:
-      # - master
-      - rnaveiras-goreleaser
-  # TODO(rnaverias); testing, remove
-  workflow_dispatch:
+      - master
 
 # required to upload artifacts to github releases
 permissions:

@@ -41,7 +41,3 @@ builds:
     id: workloads-manager
     binary: workloads-manager
     main: cmd/workloads-manager/main.go
-
-release:
-  # changed this after testing
-  draft: true

@@ -98,14 +98,6 @@ var _ = BeforeSuite(func() {
 		),
 	})
 
-	// workloads pod PriorityClass webhook
-	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewPriorityInjector(
-			mgr.GetClient(),
-			ctrl.Log.WithName("webhooks").WithName("priority-injector"),
-		),
-	})
-
 	err = (&consolecontroller.ConsoleReconciler{
 		Client:            mgr.GetClient(),
 		LifecycleRecorder: lifecycleRecorder,

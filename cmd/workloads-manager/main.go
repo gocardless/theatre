@@ -126,14 +126,6 @@ func main() {
 		),
 	})
 
-	// priority webhook
-	mgr.GetWebhookServer().Register("/mutate-pods", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewPriorityInjector(
-			mgr.GetClient(),
-			logger.WithName("webhooks").WithName("priority-injector"),
-		),
-	})
-
 	// console attach webhook
 	mgr.GetWebhookServer().Register("/observe-console-attach", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewConsoleAttachObserverWebhook(

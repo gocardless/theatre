@@ -39,8 +39,6 @@ expected to create or mutate pods, deployments, etc.
 - [Consoles](controllers/workloads/console/README.md): Provide engineers with a temporary
   dedicated pod to perform operational tasks, avoiding the need to provide
   `pods/exec` permissions on production workloads.
-- [Default priority classes](apis/workloads/v1alpha1/README.md): Mutate all pods within a
-  namespace to set a default priority class.
 
 ### [Vault](apis/vault/v1alpha1/README.md)
 

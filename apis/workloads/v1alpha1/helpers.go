@@ -121,11 +121,11 @@ func (ct *ConsoleTemplate) GetDefaultCommandWithArgs() ([]string, error) {
 // The `matchCommandElements` field, within an AuthorisationRule, is an array
 // of matchers, of which there are 3 supported types:
 //
-//   1. `*`  - a wildcard that matches the presence of an element.
-//   2. `**` - a wildcard that matches any number (including 0) of
-//             elements. This can only be used at the end of the array.
-//   3. Any other string of characters, this is used to perform an exact
-//      string match against the current element.
+//  1. `*`  - a wildcard that matches the presence of an element.
+//  2. `**` - a wildcard that matches any number (including 0) of
+//     elements. This can only be used at the end of the array.
+//  3. Any other string of characters, this is used to perform an exact
+//     string match against the current element.
 //
 // The elements of the command array are evaluated in order; any failure to
 // match will result in falling back to the next rule.
@@ -143,7 +143,6 @@ func (ct *ConsoleTemplate) GetDefaultCommandWithArgs() ([]string, error) {
 // | ["echo", "**"]        | ["echo", "hello"]                | Yes      |
 // | ["echo", "**"]        | ["echo", "hi", "bye" ]           | Yes      |
 // | ["echo", "**", "bye"] | ["echo", "hi", "bye" ]           | Error    |
-//
 func (ct *ConsoleTemplate) GetAuthorisationRuleForCommand(command []string) (ConsoleAuthorisationRule, error) {
 	// We expect that the Validate() function will already have been called
 	// before this, via the webhook that validates console templates. However,

@@ -73,15 +73,16 @@ Theatre assumes developers have several tools installed to provide development
 and testing capabilities. The following will configure a macOS environment with
 all the necessary dependencies:
 
+
 ```shell
-brew cask install docker
-brew install go kubernetes-cli kustomize kind
+make install-tools-homebrew
+make install-tools-kubebuilder
+make install-tools
 sudo mkdir /usr/local/kubebuilder
-curl -fsL "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.1/kubebuilder_2.3.1_$(go env GOOS)_$(go env GOARCH).tar.gz" | sudo tar -xvz --strip=1 -C /usr/local/kubebuilder
+curl -fsL "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.1/kubebuilder_2.3.1_$(go env GOOS)_$(go env GOARCH).tar.gz" | \
+  sudo tar -xvz --strip=1 -C /usr/local/kubebuilder
 export KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
 ```
-
-Running `make` should now compile binaries into `bin`.
 
 ## Local development environment
 
@@ -91,8 +92,17 @@ infrastructure to install the code into a local Kubernetes-in-Docker
 Ensure `kind` is installed (as per the [getting started
 steps][#getting-started]) and then run the following:
 
-
+```shell
+make build
+make test
+make acceptance-e2e
 ```
+
+You can also run the individual commands, check the Makefile for more details,
+
+Example: get the kind cluster read for the acceptance tests
+
+```shell
 go run cmd/acceptance/main.go prepare # prepare the cluster, install theatre
 ```
 
@@ -129,20 +139,23 @@ framework.
 
 In order to setup your local testing environment for unit and integration tests do the following:
 
-```bash
+```shell
+$ make install-tools
 $ # install setup-envtest which configures etcd and kube-apiserver binaries for envtest
 $ # https://book.kubebuilder.io/reference/envtest.html#configuring-envtest-for-integration-tests
 $ # https://github.com/kubernetes-sigs/controller-runtime/tree/master/tools/setup-envtest#envtest-binaries-manager
-$ go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-$ # configure envtest to use k8s 1.24.x binaries
-$ setup-envtest use -p path 1.24.x
-$ source <(setup-envtest use -i -p env 1.24.x)
+$ # Configures envtest to use k8s 1.24.x binaries, in your shell (if required)
+$ eval $(setup-envtest use -i -p env 1.24.x)
 ```
 
 - **Unit**: Standard unit tests, used to exhaustively specify the functionality of
   functions or objects.
 
-  Invoked with the `ginkgo` CLI.
+  Invoked with the `ginkgo` CLI. (requires setup-envtest variable)
+
+```
+make test
+```
 
   [Example unit test](apis/workloads/v1alpha1/helpers_test.go).
 
@@ -169,7 +182,7 @@ $ source <(setup-envtest use -i -p env 1.24.x)
   and at the end of development cycles that the code correctly interacts with
   the other components of a Kubernetes cluster.
 
-  Invoked with: `go run cmd/acceptance/main.go run`
+  Invoked with: `make acceptance-run`
 
   [Example acceptance test](cmd/workloads-manager/acceptance/acceptance.go).
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/alecthomas/kingpin"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	zaplogfmt "github.com/sykesm/zap-logfmt"
 	zapopt "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -77,3 +78,20 @@ func VersionStanza() string {
 		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
 	)
 }
+
+var (
+	BuildInfo = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "theatre_build_info",
+			Help: "A metric with a constant '1' value labeled by version, commit, goversion from which %s was built, and the goos and goarch for the build.",
+			ConstLabels: prometheus.Labels{
+				"version":   Version,
+				"commit":    Commit,
+				"goversion": GoVersion,
+				"goos":      runtime.GOOS,
+				"goarch":    runtime.GOARCH,
+			},
+		},
+		func() float64 { return 1 },
+	)
+)

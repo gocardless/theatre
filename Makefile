@@ -51,7 +51,7 @@ acceptance-prepare: install-tools
 	go run cmd/acceptance/main.go prepare --verbose
 
 acceptance-destroy: install-tools
-	go run cmd/acceptance/main.go prepare --verbose
+	go run cmd/acceptance/main.go destroy
 
 generate: install-tools
 	controller-gen object paths="./apis/rbac/..."

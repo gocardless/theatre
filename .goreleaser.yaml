@@ -17,7 +17,7 @@ builds:
       - arm64
     ignore:
       - goos: linux
-      - goarch: arm64
+        goarch: arm64
     ldflags: >
       -X github.com/gocardless/theatre/cmd.Version={{.Version}}
       -X github.com/gocardless/theatre/cmd.Commit={{.Commit}}

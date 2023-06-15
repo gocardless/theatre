@@ -265,12 +265,12 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 // parseContainerConfigs extracts the pod annotation and parses that configuration
 // required for this container.
 //
-//   secrets-injector.vault.crd.gocardless.com/configs: app:config.yaml,sidecar
+//	secrets-injector.vault.crd.gocardless.com/configs: app:config.yaml,sidecar
 //
 // Valid values for the annotation are:
 //
-//   annotation ::= container_config | ',' annotation
-//   container_config ::= container_name ( ':' config_file )?
+//	annotation ::= container_config | ',' annotation
+//	container_config ::= container_name ( ':' config_file )?
 //
 // If no config file is specified, we inject theatre-secrets but don't load
 // configuration from files, relying solely on environment variables.

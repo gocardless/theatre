@@ -10,6 +10,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
@@ -39,6 +40,9 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = workloadsv1alpha1.AddToScheme(scheme)
 	_ = rbacv1alpha1.AddToScheme(scheme)
+
+	// Register custom metrics with the global controller runtime prometheus registry
+	metrics.Registry.MustRegister(cmd.BuildInfo)
 }
 
 func main() {

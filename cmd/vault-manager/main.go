@@ -8,6 +8,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	vaultv1alpha1 "github.com/gocardless/theatre/v3/apis/vault/v1alpha1"
@@ -42,6 +43,11 @@ var (
 	serviceAccountTokenExpiry   = app.Flag("service-account-token-expiry", "Expiry for service account tokens").Default("15m").Duration()
 	serviceAccountTokenAudience = app.Flag("service-account-token-audience", "Audience for the projected service account token").String()
 )
+
+func init() {
+	// Register custom metrics with the global controller runtime prometheus registry
+	metrics.Registry.MustRegister(cmd.BuildInfo)
+}
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))

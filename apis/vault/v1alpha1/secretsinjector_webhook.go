@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -87,11 +86,6 @@ var (
 		podLabels,
 	)
 )
-
-func init() {
-	// Register custom metrics with the global controller runtime prometheus registry
-	metrics.Registry.MustRegister(handleTotal, mutateTotal, skipTotal, errorsTotal)
-}
 
 func (i *SecretsInjector) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
 	labels := prometheus.Labels{"pod_namespace": req.Namespace}

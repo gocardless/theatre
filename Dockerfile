@@ -3,8 +3,10 @@ FROM golang:1.20.5 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 
 COPY . /go/src/github.com/gocardless/theatre
+ARG git_revision=unset
+RUN echo $git_revision > REVISION
 RUN set -x \
-  && make VERSION="$(cat VERSION)" build
+  && make VERSION="$(cat VERSION)" GIT_REVISION="$(cat REVISION)" build
 
 # Use ubuntu as our base package to enable generic system tools
 FROM ubuntu:jammy-20230522
@@ -20,4 +22,6 @@ RUN set -x \
 
 WORKDIR /
 COPY --from=builder /go/src/github.com/gocardless/theatre/bin/* /usr/local/bin/
+ARG git_revision=unset
+RUN echo $git_revision > REVISION
 ENTRYPOINT ["/bin/bash"]

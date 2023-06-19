@@ -1,8 +1,11 @@
 PROG=bin/rbac-manager bin/vault-manager bin/theatre-secrets bin/workloads-manager bin/theatre-consoles
 PROJECT=github.com/gocardless/theatre
 IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
-VERSION=$(shell git rev-parse --short HEAD)-dev
-BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
+VERSION=$(shell git describe --tags  --dirty --long)
+GIT_REVISION=$(shell git rev-parse HEAD)
+DATE=$(shell date +"%Y%m%d.%H%M%S")
+LDFLAGS=-ldflags "-s -X github.com/gocardless/theatre/v3/cmd.Version=$(VERSION) -X github.com/gocardless/theatre/v3/cmd.Commit=$(GIT_REVISION) -X github.com/gocardless/theatre/v3/cmd.Date=$(DATE)"
+BUILD_COMMAND=go build $(LDFLAGS)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

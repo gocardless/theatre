@@ -99,11 +99,12 @@ var _ = BeforeSuite(func() {
 	})
 
 	err = (&consolecontroller.ConsoleReconciler{
-		Client:            mgr.GetClient(),
-		LifecycleRecorder: lifecycleRecorder,
-		Log:               ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme:            mgr.GetScheme(),
-		ConsoleIdBuilder:  workloadsv1alpha1.NewConsoleIdBuilder("test"),
+		Client:                     mgr.GetClient(),
+		LifecycleRecorder:          lifecycleRecorder,
+		Log:                        ctrl.Log.WithName("controllers").WithName("console"),
+		Scheme:                     mgr.GetScheme(),
+		ConsoleIdBuilder:           workloadsv1alpha1.NewConsoleIdBuilder("test"),
+		EnableDirectoryRoleBinding: true,
 	}).SetupWithManager(context.TODO(), mgr)
 	Expect(err).ToNot(HaveOccurred())
 

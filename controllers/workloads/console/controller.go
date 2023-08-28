@@ -62,6 +62,7 @@ const (
 	ConsoleAuthorisation = "consoleauthorisation"
 	ConsoleTemplate      = "consoletemplate"
 	Role                 = "role"
+	RoleBinding          = "rolebinding"
 	DirectoryRoleBinding = "directoryrolebinding"
 
 	DefaultTTLBeforeRunning = 1 * time.Hour
@@ -88,6 +89,9 @@ type ConsoleReconciler struct {
 	ConsoleIdBuilder  workloadsv1alpha1.ConsoleIdBuilder
 	Log               logr.Logger
 	Scheme            *runtime.Scheme
+	// Use DRBs for RBAC on console objects
+	EnableDirectoryRoleBinding bool
+
 	// Enable injection of console session recording using tlog
 	EnableSessionRecording bool
 	// The image reference for the sidecar to inject to stream session
@@ -140,10 +144,10 @@ func (r *ConsoleReconciler) createOrUpdateUserRbac(logger logr.Logger, ctx conte
 	// Create or update the user role
 	role := buildUserRole(req.NamespacedName, csl.Status.PodName)
 	if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
-		return err
+		return errors.Wrap(err, "failed to create role for user")
 	}
 
-	// Create or update the directory role binding
+	// Create or update the role binding
 	subjects := append(
 		tpl.Spec.AdditionalAttachSubjects,
 		rbacv1.Subject{Kind: "User", Name: csl.Spec.User},
@@ -153,9 +157,16 @@ func (r *ConsoleReconciler) createOrUpdateUserRbac(logger logr.Logger, ctx conte
 		subjects = append(subjects, authorisation.Spec.Authorisations...)
 	}
 
-	drb := buildUserDirectoryRoleBinding(req.NamespacedName, role, subjects)
-	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
-		return err
+	if r.EnableDirectoryRoleBinding {
+		drb := buildUserDirectoryRoleBinding(req.NamespacedName, role, subjects)
+		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create directory rolebinding for user")
+		}
+	} else {
+		rb := buildUserRoleBinding(req.NamespacedName, role, subjects)
+		if err := r.createOrUpdate(ctx, logger, csl, rb, RoleBinding, recutil.RoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create rolebinding for user")
+		}
 	}
 
 	return nil
@@ -168,7 +179,7 @@ func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx co
 	// result is to allow the console pod to read information about itself, which is required by our wrapper so that it can
 	// exit the sidecar when the main console container exits.
 
-	// We already create roles and directory rolebindings with the same name as
+	// We already create roles and rolebindings with the same name as
 	// the console to provide permissions on the job/pod. Therefore for the name
 	// of these objects, suffix the console name with '-svc'.
 	rbacName := types.NamespacedName{
@@ -179,13 +190,20 @@ func (r *ConsoleReconciler) createOrUpdateServiceRbac(logger logr.Logger, ctx co
 	// Create or update the service role
 	role := buildServiceRole(rbacName, csl.Status.PodName)
 	if err := r.createOrUpdate(ctx, logger, csl, role, Role, recutil.RoleDiff); err != nil {
-		return err
+		return errors.Wrap(err, "failed to create role for service")
 	}
 
 	// Create or update the service rolebinding
-	drb := buildServiceRoleBinding(rbacName, role, tpl.Spec.Template.Spec.ServiceAccountName)
-	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
-		return err
+	if r.EnableDirectoryRoleBinding {
+		drb := buildServiceDirectoryRoleBinding(rbacName, role, tpl.Spec.Template.Spec.ServiceAccountName)
+		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create directory rolebinding for service")
+		}
+	} else {
+		rb := buildServiceRoleBinding(rbacName, role, tpl.Spec.Template.Spec.ServiceAccountName)
+		if err := r.createOrUpdate(ctx, logger, csl, rb, RoleBinding, recutil.RoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create rolebinding for service")
+		}
 	}
 
 	return nil
@@ -969,7 +987,7 @@ func buildServiceRole(name types.NamespacedName, podName string) *rbacv1.Role {
 	}
 }
 
-func buildServiceRoleBinding(name types.NamespacedName, role *rbacv1.Role, serviceAccountName string) *rbacv1alpha1.DirectoryRoleBinding {
+func buildServiceDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role, serviceAccountName string) *rbacv1alpha1.DirectoryRoleBinding {
 	// There are cases where the console template lacks a service account
 	// In these cases the pods and jobs will run under the "default" account
 	// for the namespace
@@ -993,6 +1011,32 @@ func buildServiceRoleBinding(name types.NamespacedName, role *rbacv1.Role, servi
 				Kind:     "Role",
 				Name:     name.Name,
 			},
+		},
+	}
+}
+
+func buildServiceRoleBinding(name types.NamespacedName, role *rbacv1.Role, serviceAccountName string) *rbacv1.RoleBinding {
+	// There are cases where the console template lacks a service account
+	// In these cases the pods and jobs will run under the "default" account
+	// for the namespace
+	if len(serviceAccountName) == 0 {
+		serviceAccountName = "default"
+	}
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind: "ServiceAccount",
+				Name: serviceAccountName,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     name.Name,
 		},
 	}
 }
@@ -1043,6 +1087,21 @@ func buildUserDirectoryRoleBinding(name types.NamespacedName, role *rbacv1.Role,
 	}
 }
 
+func buildUserRoleBinding(name types.NamespacedName, role *rbacv1.Role, subjects []rbacv1.Subject) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Subjects: subjects,
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     name.Name,
+		},
+	}
+}
+
 func (r *ConsoleReconciler) createAuthorisationObjects(ctx context.Context, logger logr.Logger, csl *workloadsv1alpha1.Console, name types.NamespacedName, subjects []rbacv1.Subject) error {
 	authorisation := &workloadsv1alpha1.ConsoleAuthorisation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1061,7 +1120,7 @@ func (r *ConsoleReconciler) createAuthorisationObjects(ctx context.Context, logg
 		return errors.Wrap(err, "failed to create consoleauthorisation")
 	}
 
-	// We already create roles and directory rolebindings with the same name as
+	// We already create roles and rolebindings with the same name as
 	// the console to provide permissions on the job/pod. Therefore for the name
 	// of these objects, suffix the console name with '-authorisation'.
 	rbacName := types.NamespacedName{
@@ -1089,10 +1148,17 @@ func (r *ConsoleReconciler) createAuthorisationObjects(ctx context.Context, logg
 		return errors.Wrap(err, "failed to create role for consoleauthorisation")
 	}
 
-	// Create or update the directory role binding
-	drb := buildUserDirectoryRoleBinding(rbacName, role, subjects)
-	if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
-		return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
+	// Create or update the role binding
+	if r.EnableDirectoryRoleBinding {
+		drb := buildUserDirectoryRoleBinding(rbacName, role, subjects)
+		if err := r.createOrUpdate(ctx, logger, csl, drb, DirectoryRoleBinding, recutil.DirectoryRoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create directory rolebinding for consoleauthorisation")
+		}
+	} else {
+		rb := buildUserRoleBinding(rbacName, role, subjects)
+		if err := r.createOrUpdate(ctx, logger, csl, rb, RoleBinding, recutil.RoleBindingDiff); err != nil {
+			return errors.Wrap(err, "failed to create rolebinding for consoleauthorisation")
+		}
 	}
 
 	return nil

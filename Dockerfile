@@ -2,6 +2,10 @@
 FROM golang:1.20.5 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 
+# Install dependencies
+COPY go.mod go.sum /go/src/github.com/gocardless/theatre/
+RUN go mod download
+
 COPY . /go/src/github.com/gocardless/theatre
 ARG git_revision=unset
 RUN echo $git_revision > REVISION

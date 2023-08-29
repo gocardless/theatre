@@ -212,3 +212,23 @@ func DirectoryRoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Ob
 
 	return operation
 }
+
+// RoleBindingDiff is a DiffFunc for RoleBindings
+func RoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
+	expected := expectedObj.(*rbacv1.RoleBinding)
+	existing := existingObj.(*rbacv1.RoleBinding)
+
+	operation := None
+
+	if !reflect.DeepEqual(expected.Subjects, existing.Subjects) {
+		existing.Subjects = expected.Subjects
+		operation = Update
+	}
+
+	if !reflect.DeepEqual(expected.RoleRef, existing.RoleRef) {
+		existing.RoleRef = expected.RoleRef
+		operation = Update
+	}
+
+	return operation
+}

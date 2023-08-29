@@ -24,14 +24,15 @@ import (
 var (
 	scheme = runtime.NewScheme()
 
-	app                    = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(cmd.VersionStanza())
-	contextName            = app.Flag("context-name", "Distinct name for the context this controller runs within. Usually the user-facing name of the kubernetes context for the cluster").Envar("CONTEXT_NAME").String()
-	pubsubProjectId        = app.Flag("pubsub-project-id", "ID for the project containing the Pub/Sub topic for console event publishing").Envar("PUBSUB_PROJECT_ID").String()
-	pubsubTopicId          = app.Flag("pubsub-topic-id", "ID of the topic to publish lifecycle event messages").Envar("PUBSUB_TOPIC_ID").String()
-	enableSessionRecording = app.Flag("session-recording", "Enable session recording features").Envar("ENABLE_SESSION_RECORDING").Default("false").Bool()
-	sessionSidecarImage    = app.Flag("session-sidecar-image", "Container image to use for the session recording sidecar container").Envar("SESSION_SIDECAR_IMAGE").Default("").String()
-	sessionPubsubProjectId = app.Flag("session-pubsub-project-id", "ID for the project containing the Pub/Sub topic for session recording").Envar("SESSION_PUBSUB_PROJECT_ID").Default("").String()
-	sessionPubsubTopicId   = app.Flag("session-pubsub-topic-id", "ID of the topic to publish session recording data to").Envar("SESSION_PUBSUB_TOPIC_ID").Default("").String()
+	app                        = kingpin.New("workloads-manager", "Manages workloads.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	contextName                = app.Flag("context-name", "Distinct name for the context this controller runs within. Usually the user-facing name of the kubernetes context for the cluster").Envar("CONTEXT_NAME").String()
+	pubsubProjectId            = app.Flag("pubsub-project-id", "ID for the project containing the Pub/Sub topic for console event publishing").Envar("PUBSUB_PROJECT_ID").String()
+	pubsubTopicId              = app.Flag("pubsub-topic-id", "ID of the topic to publish lifecycle event messages").Envar("PUBSUB_TOPIC_ID").String()
+	enableDirectoryRoleBinding = app.Flag("directory-role-binding", "Use DirectoryRoleBinding for provisioning RBAC against console objects").Envar("ENABLE_DIRECTORY_ROLE_BINDING").Default("true").Bool()
+	enableSessionRecording     = app.Flag("session-recording", "Enable session recording features").Envar("ENABLE_SESSION_RECORDING").Default("false").Bool()
+	sessionSidecarImage        = app.Flag("session-sidecar-image", "Container image to use for the session recording sidecar container").Envar("SESSION_SIDECAR_IMAGE").Default("").String()
+	sessionPubsubProjectId     = app.Flag("session-pubsub-project-id", "ID for the project containing the Pub/Sub topic for session recording").Envar("SESSION_PUBSUB_PROJECT_ID").Default("").String()
+	sessionPubsubTopicId       = app.Flag("session-pubsub-topic-id", "ID of the topic to publish session recording data to").Envar("SESSION_PUBSUB_TOPIC_ID").Default("").String()
 
 	commonOpts = cmd.NewCommonOptions(app).WithMetrics(app)
 )
@@ -93,15 +94,16 @@ func main() {
 
 	// controller
 	if err = (&consolecontroller.ConsoleReconciler{
-		Client:                 mgr.GetClient(),
-		LifecycleRecorder:      lifecycleRecorder,
-		ConsoleIdBuilder:       idBuilder,
-		Log:                    ctrl.Log.WithName("controllers").WithName("console"),
-		Scheme:                 mgr.GetScheme(),
-		EnableSessionRecording: *enableSessionRecording,
-		SessionSidecarImage:    *sessionSidecarImage,
-		SessionPubsubProjectId: *sessionPubsubProjectId,
-		SessionPubsubTopicId:   *sessionPubsubTopicId,
+		Client:                     mgr.GetClient(),
+		LifecycleRecorder:          lifecycleRecorder,
+		ConsoleIdBuilder:           idBuilder,
+		Log:                        ctrl.Log.WithName("controllers").WithName("console"),
+		Scheme:                     mgr.GetScheme(),
+		EnableDirectoryRoleBinding: *enableDirectoryRoleBinding,
+		EnableSessionRecording:     *enableSessionRecording,
+		SessionSidecarImage:        *sessionSidecarImage,
+		SessionPubsubProjectId:     *sessionPubsubProjectId,
+		SessionPubsubTopicId:       *sessionPubsubTopicId,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}

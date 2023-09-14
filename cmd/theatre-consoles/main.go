@@ -16,10 +16,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/v3/cmd"
-	"github.com/gocardless/theatre/v3/pkg/signals"
-	"github.com/gocardless/theatre/v3/pkg/workloads/console/runner"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v4/cmd"
+	"github.com/gocardless/theatre/v4/pkg/signals"
+	"github.com/gocardless/theatre/v4/pkg/workloads/console/runner"
 )
 
 var (

@@ -19,9 +19,9 @@ builds:
       - goos: linux
         goarch: arm64
     ldflags: >
-      -X github.com/gocardless/theatre/v3/cmd.Version={{.Version}}
-      -X github.com/gocardless/theatre/v3/cmd.Commit={{.Commit}}
-      -X github.com/gocardless/theatre/v3/cmd.Date={{.Date}}
+      -X github.com/gocardless/theatre/v4/cmd.Version={{.Version}}
+      -X github.com/gocardless/theatre/v4/cmd.Commit={{.Commit}}
+      -X github.com/gocardless/theatre/v4/cmd.Date={{.Date}}
       -a
       -installsuffix cgo
     env:

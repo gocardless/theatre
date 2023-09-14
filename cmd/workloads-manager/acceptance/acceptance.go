@@ -18,9 +18,9 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/v3/pkg/workloads/console/runner"
+	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v4/pkg/workloads/console/runner"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

@@ -16,8 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
+	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
 )
 
 var _ = Describe("Console", func() {

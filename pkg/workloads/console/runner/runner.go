@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -896,8 +897,24 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return nil, errors.New("watch channel closed")
 			}
 
-			obj := event.Object.(*unstructured.Unstructured)
-			runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+			// We can ignore Bookmark events, because we aren't making requests using bookmarks.
+			//
+			// If we encounter an Error event, then igore this too.
+			// We'll instead wait until the channel is closed, or our context timeout is
+			// reached.
+			if event.Type == watch.Bookmark || event.Type == watch.Error {
+				continue
+			}
+
+			obj, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				return nil, fmt.Errorf("failed  to cast watch event")
+			}
+
+			err = runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+			if err != nil {
+				return nil, fmt.Errorf("error converting console object: %w", err)
+			}
 
 			if isRunning(csl) {
 				return csl, nil

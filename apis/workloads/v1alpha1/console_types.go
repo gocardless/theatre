@@ -57,9 +57,59 @@ type ConsoleStatus struct {
 	PodName    string       `json:"podName"`
 	ExpiryTime *metav1.Time `json:"expiryTime,omitempty"`
 	// Time at which the job completed successfully
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-	Phase          ConsolePhase `json:"phase"`
+	CompletionTime *metav1.Time       `json:"completionTime,omitempty"`
+	Phase          ConsolePhase       `json:"phase"`
+	Conditions     []ConsoleCondition `json:"conditions,omitempty"`
 }
+
+// Console conditions describe a valid condition for a console
+type ConsoleConditionType string
+
+const (
+	// ConsoleTerminatedType describes the type of condition where the console
+	// is terminated
+	ConsoleTerminatedType ConsoleConditionType = "ConsoleTerminated"
+
+	// ConsoleFailedType describes the type of condition where the controller
+	// tried to start the console, but there was some error causing it to fail
+	ConsoleFailedType ConsoleConditionType = "ConsoleFailed"
+)
+
+// ConsoleCondition is a status condition for a console
+type ConsoleCondition struct {
+	// Type of this condition
+	Type ConsoleConditionType `json:"type"`
+
+	// Status of this condition
+	Status corev1.ConditionStatus `json:"status"`
+
+	// LastUpdateTime of this condition
+	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// LastTransitionTime of this condition
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// Reason for the current status of this condition
+	Reason ConsoleConditionReason `json:"reason,omitempty"`
+
+	// Message associated with this condition
+	Message string `json:"message,omitempty"`
+}
+
+// ConsoleConditionReason represents a valid condition reason for a console
+type ConsoleConditionReason string
+
+const (
+	// ReasonTlogNotFound is a console condition for a failed console because
+	// tlog-rec was not found in the image
+	ReasonTlogNotFound ConsoleConditionReason = "tlog-rec binary not found"
+
+	ReasonCrashLoopBackoff ConsoleConditionReason = "pod for console is in CrashLoopBackoff"
+
+	ReasonImagePull ConsoleConditionReason = "specified image failed to pull"
+
+	ReasonTimedOutAuthorize ConsoleConditionReason = "specified image failed to pull"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion

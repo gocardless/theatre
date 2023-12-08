@@ -6,9 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"cloud.google.com/go/compute/metadata"
 	"github.com/alecthomas/kingpin"
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -108,6 +110,30 @@ func createGoogleDirectory(ctx context.Context, subject string) (*directoryv1.Se
 	creds, err := google.FindDefaultCredentials(ctx, scopes...)
 	if err != nil {
 		return nil, err
+	}
+
+	// If the found credential doesn't contain JSON, try to fallback to workload identity
+	if len(creds.JSON) == 0 {
+		// Get the email address associated with the service account. The account may be empty
+		// or the string "default" to use the instance's main account.
+		principal, err := metadata.Email("default")
+		if err != nil {
+			return nil, err
+		}
+
+		// Access to the directory API must be signed with a Subject to enable domain selection.
+		config := impersonate.CredentialsConfig{
+			TargetPrincipal: principal,
+			Scopes:          scopes,
+			Subject:         subject,
+		}
+
+		ts, err := impersonate.CredentialsTokenSource(ctx, config, option.WithCredentials(creds))
+		if err != nil {
+			return nil, err
+		}
+
+		return directoryv1.NewService(ctx, option.WithTokenSource(ts))
 	}
 
 	conf, err := google.JWTConfigFromJSON(creds.JSON, strings.Join(scopes, " "))

@@ -15,6 +15,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
 	"github.com/gocardless/theatre/v4/cmd"
@@ -72,11 +73,10 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               9443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "rbac.crds.gocardless.com",
+		Scheme:           scheme,
+		Metrics:          metricsserver.Options{BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort)},
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "rbac.crds.gocardless.com",
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)

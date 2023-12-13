@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
 	rbacutils "github.com/gocardless/theatre/v4/pkg/rbac"
@@ -112,11 +111,8 @@ func (r *DirectoryRoleBindingReconciler) SetupWithManager(mgr manager.Manager) e
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&rbacv1alpha1.DirectoryRoleBinding{}).
 		Watches(
-			&source.Kind{Type: &rbacv1.RoleBinding{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: true,
-				OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
-			},
+			&rbacv1.RoleBinding{},
+			handler.EnqueueRequestForOwner(r.Scheme, mgr.GetRESTMapper(), &rbacv1alpha1.DirectoryRoleBinding{}, handler.OnlyControllerOwner()),
 		).
 		Complete(
 			recutil.ResolveAndReconcile(

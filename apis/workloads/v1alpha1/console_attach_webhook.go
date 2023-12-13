@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -25,19 +26,15 @@ type ConsoleAttachObserverWebhook struct {
 	requestTimeout    time.Duration
 }
 
-func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration) *ConsoleAttachObserverWebhook {
+func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration, scheme *runtime.Scheme) *ConsoleAttachObserverWebhook {
 	return &ConsoleAttachObserverWebhook{
 		client:            c,
 		recorder:          recorder,
 		lifecycleRecorder: lifecycleRecorder,
 		logger:            logger,
 		requestTimeout:    requestTimeout,
+		decoder:           admission.NewDecoder(scheme),
 	}
-}
-
-func (c *ConsoleAttachObserverWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {

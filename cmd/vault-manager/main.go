@@ -9,6 +9,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	vaultv1alpha1 "github.com/gocardless/theatre/v4/apis/vault/v1alpha1"
@@ -57,10 +59,12 @@ func main() {
 	defer cancel()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "vault.crds.gocardless.com",
+		Metrics:          metricsserver.Options{BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort)},
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "vault.crds.gocardless.com",
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 443,
+		}),
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
@@ -86,6 +90,7 @@ func main() {
 			mgr.GetClient(),
 			logger.WithName("webhooks").WithName("secrets-injector"),
 			injectorOpts,
+			mgr.GetScheme(),
 		),
 	})
 

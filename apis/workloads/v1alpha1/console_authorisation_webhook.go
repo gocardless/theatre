@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -25,17 +26,13 @@ type ConsoleAuthorisationWebhook struct {
 	decoder           *admission.Decoder
 }
 
-func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthorisationWebhook {
+func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthorisationWebhook {
 	return &ConsoleAuthorisationWebhook{
 		client:            c,
 		lifecycleRecorder: lifecycleRecorder,
 		logger:            logger,
+		decoder:           admission.NewDecoder(scheme),
 	}
-}
-
-func (c *ConsoleAuthorisationWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {

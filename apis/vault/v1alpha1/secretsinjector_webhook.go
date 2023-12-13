@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -31,11 +32,12 @@ type SecretsInjector struct {
 	opts    SecretsInjectorOptions
 }
 
-func NewSecretsInjector(c client.Client, logger logr.Logger, opts SecretsInjectorOptions) *SecretsInjector {
+func NewSecretsInjector(c client.Client, logger logr.Logger, opts SecretsInjectorOptions, scheme *runtime.Scheme) *SecretsInjector {
 	return &SecretsInjector{
-		client: c,
-		logger: logger,
-		opts:   opts,
+		client:  c,
+		logger:  logger,
+		opts:    opts,
+		decoder: admission.NewDecoder(scheme),
 	}
 }
 

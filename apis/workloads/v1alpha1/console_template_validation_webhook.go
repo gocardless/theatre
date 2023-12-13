@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -17,15 +18,11 @@ type ConsoleTemplateValidationWebhook struct {
 	decoder *admission.Decoder
 }
 
-func NewConsoleTemplateValidationWebhook(logger logr.Logger) *ConsoleTemplateValidationWebhook {
+func NewConsoleTemplateValidationWebhook(logger logr.Logger, scheme *runtime.Scheme) *ConsoleTemplateValidationWebhook {
 	return &ConsoleTemplateValidationWebhook{
-		logger: logger,
+		logger:  logger,
+		decoder: admission.NewDecoder(scheme),
 	}
-}
-
-func (c *ConsoleTemplateValidationWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {

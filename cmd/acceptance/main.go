@@ -138,8 +138,21 @@ func main() {
 		contextTimeout := 3 * time.Minute
 		ctx, deadline := context.WithTimeout(ctx, contextTimeout)
 		defer deadline()
-		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
 
+		// Wait for Deployments
+		// We do this to guard against a race condition where, if you only have the "wait for
+		// pods" check below, but the controller hasn't yet actually *spawned* any pods for
+		// deployments, then you can proceed with the preparation when the cluster isn't in a
+		// good state.
+		// The most notable issue is cert-manager; if the pods aren't up, and therefore
+		// serving webhooks, then subsequently the installation of any controllers which have
+		// webhooks, and therefore require a certificate, will fail.
+		waitCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Available", "deployments", "--all", "--timeout", "2m")
+		if err := pipeOutput(waitCmd).Run(); err != nil {
+			app.Fatalf("not all setup resources are running: %v", err)
+		}
+		// Pods - covers those created by Statefulsets
+		waitCmd = exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "wait", "--all-namespaces", "--for", "condition=Ready", "pods", "--all", "--timeout", "2m")
 		if err := pipeOutput(waitCmd).Run(); err != nil {
 			app.Fatalf("not all setup resources are running: %v", err)
 		}

@@ -887,6 +887,8 @@ func (r *ConsoleReconciler) buildJob(logger logr.Logger, name types.NamespacedNa
 			container.Stdin = true
 			container.TTY = true
 		}
+
+		container.Env = append(container.Env, corev1.EnvVar{Name: "UTOPIA_CONSOLE_USER", Value: csl.Spec.User})
 	}
 
 	if numContainers > 1 {

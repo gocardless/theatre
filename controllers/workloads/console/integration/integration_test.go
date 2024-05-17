@@ -233,6 +233,10 @@ var _ = Describe("Console", func() {
 				"job's args does not match the other command elements in the spec",
 			)
 			Expect(
+				job.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "UTOPIA_CONSOLE_USER", Value: "admin"}),
+				"job's env does not contain valid UTOPIA_CONSOLE_USER",
+			)
+			Expect(
 				*job.Spec.BackoffLimit).To(BeNumerically("==", 0),
 				"job's BackoffLimit is not 0",
 			)

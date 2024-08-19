@@ -12,3 +12,26 @@ patchesStrategicMerge:
   - overlays/rbac-manager.yaml
   - overlays/vault-manager.yaml
   - overlays/workloads-manager.yaml
+
+# Sadly we must repeat the replacement as in our root Kustomization, because we've
+# overriden the image field, and there's no way to get Kustomize to run the (merged) replacements
+# after (merged) patches.
+replacements:
+  - source:
+      fieldPath: spec.template.spec.containers.[name=manager].image
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: theatre-vault-manager
+      namespace: theatre-system
+    targets:
+      - select:
+          group: apps
+          kind: StatefulSet
+          name: vault-manager
+          version: v1
+        fieldPaths:
+          - spec.template.spec.containers.0.args.0
+        options:
+          delimiter: =
+          index: 1

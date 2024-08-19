@@ -68,7 +68,7 @@ manifests: generate
 install-tools:
 	go install github.com/onsi/ginkgo/ginkgo@v1.16.5
 	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0
-	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.17
 
 install-tools-homebrew:
 	brew install kubernetes-cli kustomize kind

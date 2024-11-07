@@ -203,6 +203,20 @@ var _ = Describe("Runner", func() {
 				}).Should(HaveLen(1), "only one console should be present")
 			})
 		})
+
+		Context("Unsuccessfully creates console", func() {
+			JustBeforeEach(func() {
+				var csl *workloadsv1alpha1.Console
+				createOptions := runner.Options{Cmd: cmd, Reason: ""}
+				csl, err = consoleRunner.CreateResource(namespace.Name, consoleTemplate, createOptions)
+				console = *csl
+			})
+
+			It("Fails to create a new console", func() {
+				By("Returning an error when reason not provided")
+				Expect(err).To(HaveOccurred(), "should have failed due to reason not being given for interactive console")
+				Expect(console).To(BeNil(), "no console should be created")
+		})
 	})
 
 	Describe("FindTemplateBySelector", func() {

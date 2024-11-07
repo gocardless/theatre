@@ -185,6 +185,11 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
+	if !opts.Noninteractive && opts.Reason == "" {
+		return nil, errors.New("No reason given when creating interactive console session.")
+	}
+	
+
 	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason, Noninteractive: opts.Noninteractive}
 	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
 	if err != nil {
@@ -668,6 +673,10 @@ func (c *Runner) List(ctx context.Context, opts ListOptions) (ConsoleSlice, erro
 
 // CreateResource builds a console according to the supplied options and submits it to the API
 func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.ConsoleTemplate, opts Options) (*workloadsv1alpha1.Console, error) {
+	if !opts.Noninteractive && opts.Reason == "" {
+		return nil, errors.New("No reason given when creating interactive console session.")
+	}
+	
 	csl := &workloadsv1alpha1.Console{
 		ObjectMeta: metav1.ObjectMeta{
 			// Let Kubernetes generate a unique name

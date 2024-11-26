@@ -67,8 +67,8 @@ manifests: generate
 # See https://github.com/kubernetes-sigs/controller-runtime/tree/main/tools/setup-envtest
 install-tools:
 	go install github.com/onsi/ginkgo/ginkgo@v1.16.5
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0
-	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
 
 install-tools-homebrew:
 	brew install kubernetes-cli kustomize kind

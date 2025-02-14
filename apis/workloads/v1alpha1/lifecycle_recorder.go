@@ -123,6 +123,7 @@ func (l *lifecycleEventRecorderImpl) ConsoleRequest(ctx context.Context, csl *Co
 			Console:                csl.Name,
 			RequiredAuthorisations: authCount,
 			AuthorisationRuleName:  authRuleName,
+			IncidentId:             csl.Spec.IncidentId,
 			Timestamp:              csl.CreationTimestamp.Time,
 			Labels:                 csl.Labels,
 		},

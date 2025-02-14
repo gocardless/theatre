@@ -7,8 +7,9 @@ import (
 
 // ConsoleSpec defines the desired state of Console
 type ConsoleSpec struct {
-	User   string `json:"user"`
-	Reason string `json:"reason"`
+	User       string `json:"user"`
+	Reason     string `json:"reason"`
+	IncidentId string `json:"incident_id"`
 
 	// Number of seconds that the console should run for.
 	// If the process running within the console has not exited before this

@@ -73,6 +73,8 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              incident_id:
+                type: string
               noninteractive:
                 description: |-
                   Disable TTY and STDIN on the underlying container. This should usually
@@ -118,6 +120,7 @@ spec:
                 type: string
             required:
             - consoleTemplateRef
+            - incident_id
             - reason
             - user
             type: object

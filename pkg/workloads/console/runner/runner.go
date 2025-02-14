@@ -47,9 +47,10 @@ type Runner struct {
 
 // Options defines the parameters that can be set upon a new console
 type Options struct {
-	Cmd     []string
-	Timeout int
-	Reason  string
+	Cmd        []string
+	Timeout    int
+	Reason     string
+	IncidentId string
 	// Whether or not to enable a TTY for the console. Typically this
 	// should be set to false but some execution environments, eg
 	// Tekton, do not like attaching to TTY-enabled pods.
@@ -148,6 +149,7 @@ type CreateOptions struct {
 	Selector       string
 	Timeout        time.Duration
 	Reason         string
+	IncidentId     string
 	Command        []string
 	Attach         bool
 	Noninteractive bool
@@ -185,7 +187,13 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
-	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason, Noninteractive: opts.Noninteractive}
+	opt := Options{
+		Cmd:            opts.Command,
+		Timeout:        int(opts.Timeout.Seconds()),
+		Reason:         opts.Reason,
+		Noninteractive: opts.Noninteractive,
+		IncidentId:     opts.IncidentId,
+	}
 	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
 	if err != nil {
 		return nil, err
@@ -682,6 +690,7 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 			TimeoutSeconds: opts.Timeout,
 			Command:        opts.Cmd,
 			Reason:         opts.Reason,
+			IncidentId:     opts.IncidentId,
 			Noninteractive: opts.Noninteractive,
 		},
 	}

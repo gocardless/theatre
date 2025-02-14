@@ -43,6 +43,8 @@ var (
 			Duration()
 	createReason = create.Flag("reason", "Reason for creating console").
 			String()
+	createIncidentId = create.Flag("incident-id", "Incident ID linked to the console").
+				String()
 	createNoninteractive = create.Flag("noninteractive", "Do not enable TTY and STDIN on console container").
 				Bool()
 	createAttach = create.Flag("attach", "Attach to the console if it starts successfully").
@@ -117,6 +119,7 @@ func Run(ctx context.Context, logger kitlog.Logger) error {
 				Selector:       *createSelector,
 				Timeout:        *createTimeout,
 				Reason:         *createReason,
+				IncidentId:     *createIncidentId,
 				Command:        *createCommand,
 				Attach:         *createAttach,
 				Noninteractive: *createNoninteractive,

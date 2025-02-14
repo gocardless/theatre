@@ -155,7 +155,8 @@ var _ = Describe("Runner", func() {
 
 		cmd := []string{"/bin/rails", "console"}
 		reason := "reason for console"
-		createOptions := runner.Options{Cmd: cmd, Reason: reason}
+		incidentId := "INC-123"
+		createOptions := runner.Options{Cmd: cmd, Reason: reason, IncidentId: incidentId}
 
 		BeforeEach(func() {
 			namespace = newNamespace("")
@@ -179,11 +180,14 @@ var _ = Describe("Runner", func() {
 				By("Referencing the template in the returned console spec")
 				Expect(console.Spec.ConsoleTemplateRef.Name).To(Equal(consoleTemplate.Name))
 
-				By("Seting the specified command in the spec")
+				By("Setting the specified command in the spec")
 				Expect(console.Spec.Command).To(Equal(cmd))
 
 				By("Setting the specified reason in the spec")
 				Expect(console.Spec.Reason).To(Equal(reason))
+
+				By("Setting the specified incident ID in the spec")
+				Expect(console.Spec.IncidentId).To(Equal(incidentId))
 
 				By("Inheriting labels from console template")
 				Expect(console.Labels).To(HaveKeyWithValue("release", "test"))

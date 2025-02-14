@@ -1213,6 +1213,7 @@ func getAuditLogger(logger logr.Logger, consoleId string, c *workloadsv1alpha1.C
 		"console_is_authorised", statusCtx.IsAuthorised,
 		"command", string(cmdString),
 		"reason", c.Spec.Reason,
+		"incident_id", c.Spec.IncidentId,
 	)
 
 	if statusCtx.Pod != nil {

@@ -50,6 +50,7 @@ type Options struct {
 	Cmd     []string
 	Timeout int
 	Reason  string
+	Labels  labels.Set
 	// Whether or not to enable a TTY for the console. Typically this
 	// should be set to false but some execution environments, eg
 	// Tekton, do not like attaching to TTY-enabled pods.
@@ -156,6 +157,9 @@ type CreateOptions struct {
 	KubeConfig *rest.Config
 	IO         IOStreams
 
+	// Allow specifying additional labels to be attached to the pod
+	Labels map[string]string
+
 	// Lifecycle hook to notify when the state of the console changes
 	Hook LifecycleHook
 }
@@ -164,6 +168,9 @@ type CreateOptions struct {
 func (opts CreateOptions) WithDefaults() CreateOptions {
 	if opts.Hook == nil {
 		opts.Hook = DefaultLifecycleHook{}
+	}
+	if opts.Labels == nil {
+		opts.Labels = labels.Set{}
 	}
 
 	return opts
@@ -185,7 +192,14 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 		return nil, err
 	}
 
-	opt := Options{Cmd: opts.Command, Timeout: int(opts.Timeout.Seconds()), Reason: opts.Reason, Noninteractive: opts.Noninteractive}
+	opt := Options{
+		Cmd:            opts.Command,
+		Timeout:        int(opts.Timeout.Seconds()),
+		Reason:         opts.Reason,
+		Noninteractive: opts.Noninteractive,
+		Labels:         labels.Merge(labels.Set{}, opts.Labels),
+	}
+
 	csl, err := c.CreateResource(tpl.Namespace, *tpl, opt)
 	if err != nil {
 		return nil, err
@@ -668,11 +682,21 @@ func (c *Runner) List(ctx context.Context, opts ListOptions) (ConsoleSlice, erro
 
 // CreateResource builds a console according to the supplied options and submits it to the API
 func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.ConsoleTemplate, opts Options) (*workloadsv1alpha1.Console, error) {
+	lbls := labels.Merge(opts.Labels, template.Labels)
+
+	// There is no easy way to only invoke validation, so we convert the labels to
+	// a selector instead and discard its output, which will force the validation
+	// to happen
+	_, err := lbls.AsValidatedSelector()
+	if err != nil {
+		return nil, err
+	}
+
 	csl := &workloadsv1alpha1.Console{
 		ObjectMeta: metav1.ObjectMeta{
 			// Let Kubernetes generate a unique name
 			GenerateName: template.Name + "-",
-			Labels:       labels.Merge(labels.Set{}, template.Labels),
+			Labels:       lbls,
 			Namespace:    namespace,
 		},
 		Spec: workloadsv1alpha1.ConsoleSpec{
@@ -686,7 +710,7 @@ func (c *Runner) CreateResource(namespace string, template workloadsv1alpha1.Con
 		},
 	}
 
-	err := c.kubeClient.Create(
+	err = c.kubeClient.Create(
 		context.TODO(),
 		csl,
 	)

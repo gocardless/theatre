@@ -3,13 +3,13 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
     'build',
-    '--tag', 'eu.gcr.io/$PROJECT_ID/theatre:$SHORT_SHA',
+    '--tag', 'eu.gcr.io/$PROJECT_ID/theatre:$COMMIT_SHA',
     '--file', 'Dockerfile',
     '.'
   ]
 
 images: [
-  'eu.gcr.io/$PROJECT_ID/theatre:$SHORT_SHA'
+  'eu.gcr.io/$PROJECT_ID/theatre:$COMMIT_SHA'
 ]
 
 options:

@@ -251,7 +251,7 @@ func mainError(ctx context.Context, command string) (err error) {
 				path = file.filesystemPath
 			}
 			// ensure the path structure is available
-			err := os.MkdirAll(filepath.Dir(path), 0600)
+			err := os.MkdirAll(filepath.Dir(path), 0700)
 			if err != nil {
 				return errors.Wrap(err, "failed to ensure path structure is available")
 			}

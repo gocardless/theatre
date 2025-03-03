@@ -3,7 +3,8 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
     'build',
-    '--tag', 'eu.gcr.io/$PROJECT_ID/theatre:$COMMIT_SHA', 'europe-west1-docker.pkg.dev/$PROJECT_ID/docker/theatre:$COMMIT_SHA',
+    '--tag', 'eu.gcr.io/$PROJECT_ID/theatre:$COMMIT_SHA',
+    '--tag', 'europe-west1-docker.pkg.dev/$PROJECT_ID/docker/theatre:$COMMIT_SHA',
     '--file', 'Dockerfile',
     '.'
   ]

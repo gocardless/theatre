@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
+	"github.com/gocardless/theatre/v4/pkg/workloads/console/events"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sys/unix"
 	corev1 "k8s.io/api/core/v1"

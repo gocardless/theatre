@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	vaultv1alpha1 "github.com/gocardless/theatre/v3/apis/vault/v1alpha1"
-	"github.com/gocardless/theatre/v3/cmd"
-	"github.com/gocardless/theatre/v3/pkg/signals"
+	vaultv1alpha1 "github.com/gocardless/theatre/v4/apis/vault/v1alpha1"
+	"github.com/gocardless/theatre/v4/cmd"
+	"github.com/gocardless/theatre/v4/pkg/signals"
 )
 
 var (

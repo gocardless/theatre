@@ -19,9 +19,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
-	rbacutils "github.com/gocardless/theatre/v3/pkg/rbac"
-	"github.com/gocardless/theatre/v3/pkg/recutil"
+	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
+	rbacutils "github.com/gocardless/theatre/v4/pkg/rbac"
+	"github.com/gocardless/theatre/v4/pkg/recutil"
 )
 
 const (

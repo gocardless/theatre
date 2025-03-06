@@ -16,10 +16,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/v3/cmd"
-	directoryrolebinding "github.com/gocardless/theatre/v3/controllers/rbac/directoryrolebinding"
-	"github.com/gocardless/theatre/v3/pkg/signals"
+	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
+	"github.com/gocardless/theatre/v4/cmd"
+	directoryrolebinding "github.com/gocardless/theatre/v4/controllers/rbac/directoryrolebinding"
+	"github.com/gocardless/theatre/v4/pkg/signals"
 )
 
 var (

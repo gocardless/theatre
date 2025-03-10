@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/gocardless/theatre/v3/pkg/logging"
-	rbacutils "github.com/gocardless/theatre/v3/pkg/rbac"
+	"github.com/gocardless/theatre/v4/pkg/logging"
+	rbacutils "github.com/gocardless/theatre/v4/pkg/rbac"
 )
 
 // +kubebuilder:object:generate=false

@@ -13,12 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v3/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/v3/cmd"
-	consolecontroller "github.com/gocardless/theatre/v3/controllers/workloads/console"
-	"github.com/gocardless/theatre/v3/pkg/signals"
-	"github.com/gocardless/theatre/v3/pkg/workloads/console/events"
+	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v4/cmd"
+	consolecontroller "github.com/gocardless/theatre/v4/controllers/workloads/console"
+	"github.com/gocardless/theatre/v4/pkg/signals"
+	"github.com/gocardless/theatre/v4/pkg/workloads/console/events"
 )
 
 var (

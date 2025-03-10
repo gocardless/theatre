@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/v3/apis/workloads/v1alpha1"
@@ -151,11 +152,11 @@ var _ = Describe("Runner", func() {
 			console         workloadsv1alpha1.Console
 			consoleTemplate workloadsv1alpha1.ConsoleTemplate
 			err             error
+			consoleLabels   labels.Set
 		)
 
 		cmd := []string{"/bin/rails", "console"}
 		reason := "reason for console"
-		createOptions := runner.Options{Cmd: cmd, Reason: reason}
 
 		BeforeEach(func() {
 			namespace = newNamespace("")
@@ -166,20 +167,31 @@ var _ = Describe("Runner", func() {
 
 		JustBeforeEach(func() {
 			var csl *workloadsv1alpha1.Console
+
+			createOptions := runner.Options{Cmd: cmd, Reason: reason, Labels: consoleLabels}
 			csl, err = consoleRunner.CreateResource(namespace.Name, consoleTemplate, createOptions)
-			console = *csl
+
+			if err == nil {
+				Expect(csl).NotTo(BeNil(), "a console was not returned")
+				console = *csl
+			}
 		})
 
 		Context("Successfully creates a new console", func() {
+			BeforeEach(func() {
+				consoleLabels = labels.Set(map[string]string{
+					"custom_key": "custom_value",
+				})
+			})
+
 			It("Creates a new console", func() {
 				By("Returning a console")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(console).NotTo(BeNil(), "a console was not returned")
 
 				By("Referencing the template in the returned console spec")
 				Expect(console.Spec.ConsoleTemplateRef.Name).To(Equal(consoleTemplate.Name))
 
-				By("Seting the specified command in the spec")
+				By("Setting the specified command in the spec")
 				Expect(console.Spec.Command).To(Equal(cmd))
 
 				By("Setting the specified reason in the spec")
@@ -187,6 +199,9 @@ var _ = Describe("Runner", func() {
 
 				By("Inheriting labels from console template")
 				Expect(console.Labels).To(HaveKeyWithValue("release", "test"))
+
+				By("Inheriting custom labels")
+				Expect(console.Labels).To(HaveKeyWithValue("custom_key", "custom_value"))
 
 				By("Creating the console")
 				Eventually(func() error {
@@ -201,6 +216,19 @@ var _ = Describe("Runner", func() {
 					kubeClient.List(context.TODO(), consoleList, opts)
 					return consoleList.Items
 				}).Should(HaveLen(1), "only one console should be present")
+			})
+		})
+
+		Context("When a new console can't be created", func() {
+			BeforeEach(func() {
+				consoleLabels = labels.Set(map[string]string{
+					"this is an invalid label": "this is an invalid value",
+				})
+			})
+
+			It("Fails to create a new console", func() {
+				By("Returning an error")
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

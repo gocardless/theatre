@@ -58,7 +58,7 @@ jobs:
           CURRENT_VERSION="v$(cat VERSION)"
           git tag $CURRENT_VERSION
           git push origin $CURRENT_VERSION
-      - uses: goreleaser/goreleaser-action@v4
+      - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest

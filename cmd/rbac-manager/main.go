@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
+	"cloud.google.com/go/compute/metadata"
 	"github.com/alecthomas/kingpin"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	directoryv1 "google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -110,13 +112,43 @@ func createGoogleDirectory(ctx context.Context, subject string) (*directoryv1.Se
 		return nil, err
 	}
 
-	conf, err := google.JWTConfigFromJSON(creds.JSON, strings.Join(scopes, " "))
-	if err != nil {
-		return nil, err
+	var ts oauth2.TokenSource
+
+	// If the found credential doesn't contain JSON, try to fallback to workload identity
+	if len(creds.JSON) == 0 {
+		// Get the email address associated with the service account. The account may be empty
+		// or the string "default" to use the instance's main account.
+		principal, err := metadata.Email("default")
+		if err != nil {
+			return nil, err
+		}
+
+		// Access to the directory API must be signed with a Subject to enable domain selection.
+		config := impersonate.CredentialsConfig{
+			TargetPrincipal: principal,
+			Scopes:          scopes,
+			Subject:         subject,
+		}
+
+		// Impersonation (as itself) is required as the federated access token obtained from the GCE
+		// metadata server is not sufficient for acting as the subject via domain-wide delegation.
+		// For delegation to work, we need to sign a JWT with the the "sub" claim set to subject -
+		// this happens implicitly through impersonation.
+		ts, err = impersonate.CredentialsTokenSource(ctx, config)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		conf, err := google.JWTConfigFromJSON(creds.JSON, scopes...)
+		if err != nil {
+			return nil, err
+		}
+
+		// Access to the directory API must be signed with a Subject to enable domain selection.
+		conf.Subject = subject
+
+		ts = conf.TokenSource(ctx)
 	}
 
-	// Access to the directory API must be signed with a Subject to enable domain selection.
-	conf.Subject = subject
-
-	return directoryv1.NewService(ctx, option.WithHTTPClient(conf.Client(ctx)))
+	return directoryv1.NewService(ctx, option.WithTokenSource(ts))
 }

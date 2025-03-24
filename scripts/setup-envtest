@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+HAS_ASDF_INSTALLED_GO=false
+if [[ "$(command -v go)" == *'/.asdf/shims/go' ]]; then
+    HAS_ASDF_INSTALLED_GO=true
+fi
+
+if [[ "${HAS_ASDF_INSTALLED_GO}" ]]; then
+    PATH="${PATH}:$(asdf where golang)/packages/bin"
+    export PATH
+fi
+
+setup-envtest "${@}"

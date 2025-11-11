@@ -23,10 +23,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	"github.com/gocardless/theatre/v4/pkg/signals"
+	"github.com/gocardless/theatre/v5/pkg/signals"
 
-	vaultManagerAcceptance "github.com/gocardless/theatre/v4/cmd/vault-manager/acceptance"
-	workloadsManagerAcceptance "github.com/gocardless/theatre/v4/cmd/workloads-manager/acceptance"
+	vaultManagerAcceptance "github.com/gocardless/theatre/v5/cmd/vault-manager/acceptance"
+	workloadsManagerAcceptance "github.com/gocardless/theatre/v5/cmd/workloads-manager/acceptance"
 )
 
 var (

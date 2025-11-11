@@ -1,5 +1,5 @@
 # Build Go binary without cgo dependencies
-FROM golang:1.23.3 as builder
+FROM golang:1.24.5 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 
 COPY . /go/src/github.com/gocardless/theatre
@@ -9,7 +9,7 @@ RUN set -x \
   && make VERSION="$(cat VERSION)" GIT_REVISION="$(cat REVISION)" build
 
 # Use ubuntu as our base package to enable generic system tools
-FROM ubuntu:jammy-20230522
+FROM ubuntu:jammy-20251001
 
 # Without these certificates we'll fail to validate TLS connections to Google's
 # services.

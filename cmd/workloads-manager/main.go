@@ -11,14 +11,16 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/v4/cmd"
-	consolecontroller "github.com/gocardless/theatre/v4/controllers/workloads/console"
-	"github.com/gocardless/theatre/v4/pkg/signals"
-	"github.com/gocardless/theatre/v4/pkg/workloads/console/events"
+	rbacv1alpha1 "github.com/gocardless/theatre/v5/api/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v5/cmd"
+	consolecontroller "github.com/gocardless/theatre/v5/internal/controller/workloads"
+	"github.com/gocardless/theatre/v5/pkg/signals"
+	"github.com/gocardless/theatre/v5/pkg/workloads/console/events"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -80,12 +82,19 @@ func main() {
 	idBuilder := workloadsv1alpha1.NewConsoleIdBuilder(*contextName)
 	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder(*contextName, logger, publisher, idBuilder)
 
+	webhookOptions := webhook.Options{
+		Port: 443,
+	}
+	webhookServer := webhook.NewServer(webhookOptions)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "workloads.crds.gocardless.com",
-		Scheme:             scheme,
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "workloads.crds.gocardless.com",
+		Scheme:           scheme,
+		WebhookServer:    webhookServer,
+		Metrics: metricsserver.Options{
+			BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		},
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)

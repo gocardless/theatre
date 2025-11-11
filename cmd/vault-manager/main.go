@@ -9,11 +9,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	vaultv1alpha1 "github.com/gocardless/theatre/v4/apis/vault/v1alpha1"
-	"github.com/gocardless/theatre/v4/cmd"
-	"github.com/gocardless/theatre/v4/pkg/signals"
+	"github.com/gocardless/theatre/v5/cmd"
+	vaultv1alpha1 "github.com/gocardless/theatre/v5/internal/webhook/vault/v1alpha1"
+	"github.com/gocardless/theatre/v5/pkg/signals"
+
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -56,11 +59,18 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
+	webhookOptions := webhook.Options{
+		Port: 443,
+	}
+	webhookServer := webhook.NewServer(webhookOptions)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "vault.crds.gocardless.com",
+		WebhookServer:    webhookServer,
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "vault.crds.gocardless.com",
+		Metrics: metricsserver.Options{
+			BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		},
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)

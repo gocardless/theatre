@@ -9,10 +9,7 @@ commonLabels:
   app: theatre
 
 resources:
-  - crds/rbac.crd.gocardless.com_directoryrolebindings.yaml
-  - crds/workloads.crd.gocardless.com_consoles.yaml
-  - crds/workloads.crd.gocardless.com_consoleauthorisations.yaml
-  - crds/workloads.crd.gocardless.com_consoletemplates.yaml
+  - ../crd/
   - managers/namespace.yaml
   - managers/rbac.yaml
   - managers/vault.yaml

@@ -56,13 +56,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24.5
-      - name: Install go tooling and setup-envtest
-        run: |
-          make install-tools
       - name: Run tests
-        run: |
-          export KUBEBUILDER_ASSETS="$(setup-envtest use -p path 1.24.x!)"
-          ginkgo -race -randomizeSuites -randomizeAllSpecs -r ./...
+        run: make test
 
   acceptance:
     runs-on: ubuntu-latest

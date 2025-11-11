@@ -32,15 +32,15 @@ jobs:
       - name: Get Version
         id: version
         run: |
-              CURRENT_VERSION="v$(cat VERSION)"
-              if [[ $(git tag -l "${CURRENT_VERSION}") == "${CURRENT_VERSION}" ]]; then
-                echo "Version ${CURRENT_VERSION} is already released"
-                echo "release=false" >> "$GITHUB_OUTPUT"
-              else
-                echo "Version ${CURRENT_VERSION} can be release"
-                echo "release=true" >> "$GITHUB_OUTPUT"
-              fi
-              exit 0
+          CURRENT_VERSION="v$(cat VERSION)"
+          if [[ $(git tag -l "${CURRENT_VERSION}") == "${CURRENT_VERSION}" ]]; then
+            echo "Version ${CURRENT_VERSION} is already released"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version ${CURRENT_VERSION} can be release"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
 
   release:
     needs: requires-release
@@ -52,7 +52,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.3
+          go-version: 1.24.5
       - name: Create tag for new version
         run: |
           CURRENT_VERSION="v$(cat VERSION)"

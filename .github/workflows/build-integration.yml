@@ -79,7 +79,7 @@ jobs:
           chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
           EOF
       - name: Prepare the cluster
-        run: bin/acceptance.linux prepare --verbose && sleep 120
+        run: bin/acceptance.linux prepare --verbose && sleep 30
       - name: Run acceptance tests
         run: bin/acceptance.linux run --verbose
       - name: Show all pods

@@ -9,7 +9,6 @@ commonLabels:
   app: theatre
 
 resources:
-  - ../crd/
   - managers/namespace.yaml
   - managers/rbac.yaml
   - managers/vault.yaml

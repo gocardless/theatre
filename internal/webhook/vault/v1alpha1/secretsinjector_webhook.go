@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -27,21 +28,18 @@ var FQDNArray = []string{SecretsInjectorFQDN, EnvconsulInjectorFQDN}
 type SecretsInjector struct {
 	client  client.Client
 	logger  logr.Logger
-	decoder *admission.Decoder
+	decoder admission.Decoder
 	opts    SecretsInjectorOptions
 }
 
-func NewSecretsInjector(c client.Client, logger logr.Logger, opts SecretsInjectorOptions) *SecretsInjector {
+func NewSecretsInjector(c client.Client, logger logr.Logger, opts SecretsInjectorOptions, scheme *runtime.Scheme) *SecretsInjector {
+	decoder := admission.NewDecoder(scheme)
 	return &SecretsInjector{
-		client: c,
-		logger: logger,
-		opts:   opts,
+		client:  c,
+		logger:  logger,
+		decoder: decoder,
+		opts:    opts,
 	}
-}
-
-func (e *SecretsInjector) InjectDecoder(d *admission.Decoder) error {
-	e.decoder = d
-	return nil
 }
 
 type SecretsInjectorOptions struct {
@@ -114,7 +112,7 @@ func (i *SecretsInjector) Handle(ctx context.Context, req admission.Request) (re
 	}(time.Now())
 
 	pod := &corev1.Pod{}
-	if err := (*i.decoder).Decode(req, pod); err != nil {
+	if err := i.decoder.Decode(req, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 

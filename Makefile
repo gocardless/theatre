@@ -4,7 +4,7 @@ IMAGE=eu.gcr.io/gc-containers/gocardless/theatre
 VERSION=$(shell git describe --tags  --dirty --long)
 GIT_REVISION=$(shell git rev-parse HEAD)
 DATE=$(shell date +"%Y%m%d.%H%M%S")
-LDFLAGS=-ldflags "-s -X github.com/gocardless/theatre/v4/cmd.Version=$(VERSION) -X github.com/gocardless/theatre/v4/cmd.Commit=$(GIT_REVISION) -X github.com/gocardless/theatre/v4/cmd.Date=$(DATE)"
+LDFLAGS=-ldflags "-s -X github.com/gocardless/theatre/v5/cmd.Version=$(VERSION) -X github.com/gocardless/theatre/v5/cmd.Commit=$(GIT_REVISION) -X github.com/gocardless/theatre/v5/cmd.Date=$(DATE)"
 BUILD_COMMAND=go build $(LDFLAGS)
 
 # CONTAINER_TOOL defines the container tool to be used for building images.

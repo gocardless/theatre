@@ -59,10 +59,7 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	webhookOptions := webhook.Options{
-		Port: 443,
-	}
-	webhookServer := webhook.NewServer(webhookOptions)
+	webhookServer := webhook.NewServer(webhook.Options{Port: 443})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		WebhookServer:    webhookServer,

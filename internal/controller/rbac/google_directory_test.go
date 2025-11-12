@@ -1,4 +1,4 @@
-package rbac
+package directoryrolebinding
 
 import (
 	"context"

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rbac
+package directoryrolebinding
 
 import (
 	"context"
@@ -135,11 +135,6 @@ func (r *DirectoryRoleBindingReconciler) SetupWithManager(mgr manager.Manager) e
 				&rbacv1alpha1.DirectoryRoleBinding{},
 				handler.OnlyControllerOwner(),
 			),
-		// &source.Kind{Type: &rbacv1.RoleBinding{}},
-		// &handler.EnqueueRequestForOwner{
-		// 	IsController: true,
-		// 	OwnerType:    &rbacv1alpha1.DirectoryRoleBinding{},
-		// },
 		).
 		Complete(
 			recutil.ResolveAndReconcile(

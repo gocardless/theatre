@@ -82,10 +82,7 @@ func main() {
 	idBuilder := workloadsv1alpha1.NewConsoleIdBuilder(*contextName)
 	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder(*contextName, logger, publisher, idBuilder)
 
-	webhookOptions := webhook.Options{
-		Port: 443,
-	}
-	webhookServer := webhook.NewServer(webhookOptions)
+	webhookServer := webhook.NewServer(webhook.Options{Port: 443})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOpts.ManagerLeaderElection,

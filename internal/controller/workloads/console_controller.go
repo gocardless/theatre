@@ -1,4 +1,4 @@
-package workloads
+package controllers
 
 import (
 	"context"

@@ -75,10 +75,7 @@ func main() {
 		)
 	}
 
-	webhookServerOptions := webhook.Options{
-		Port: 443,
-	}
-	webhookServer := webhook.NewServer(webhookServerOptions)
+	webhookServer := webhook.NewServer(webhook.Options{Port: 9443})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

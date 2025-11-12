@@ -1,6 +1,9 @@
 # This kustomization.yaml is not intended to be run by itself,
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
+commonLabels:
+  app: theatre
+
 resources:
   - bases/rbac.crd.gocardless.com_directoryrolebindings.yaml
   - bases/workloads.crd.gocardless.com_consoles.yaml

@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -22,20 +23,18 @@ type ConsoleAuthorisationWebhook struct {
 	client            client.Client
 	lifecycleRecorder LifecycleEventRecorder
 	logger            logr.Logger
-	decoder           *admission.Decoder
+	decoder           admission.Decoder
 }
 
-func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthorisationWebhook {
+func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthorisationWebhook {
+	decoder := admission.NewDecoder(scheme)
+
 	return &ConsoleAuthorisationWebhook{
 		client:            c,
 		lifecycleRecorder: lifecycleRecorder,
 		logger:            logger,
+		decoder:           decoder,
 	}
-}
-
-func (c *ConsoleAuthorisationWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -47,14 +46,14 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 
 	// request console authorisation object
 	updatedAuth := &ConsoleAuthorisation{}
-	if err := (*c.decoder).DecodeRaw(req.Object, updatedAuth); err != nil {
-		admission.Errored(http.StatusBadRequest, err)
+	if err := c.decoder.Decode(req, updatedAuth); err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// existing console authorisation object
 	existingAuth := &ConsoleAuthorisation{}
-	if err := (*c.decoder).DecodeRaw(req.OldObject, existingAuth); err != nil {
-		admission.Errored(http.StatusBadRequest, err)
+	if err := c.decoder.Decode(req, existingAuth); err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// user making the request

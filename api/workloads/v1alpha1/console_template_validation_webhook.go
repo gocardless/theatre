@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -14,18 +15,16 @@ import (
 // +kubebuilder:object:generate=false
 type ConsoleTemplateValidationWebhook struct {
 	logger  logr.Logger
-	decoder *admission.Decoder
+	decoder admission.Decoder
 }
 
-func NewConsoleTemplateValidationWebhook(logger logr.Logger) *ConsoleTemplateValidationWebhook {
+func NewConsoleTemplateValidationWebhook(logger logr.Logger, scheme *runtime.Scheme) *ConsoleTemplateValidationWebhook {
+	decoder := admission.NewDecoder(scheme)
+
 	return &ConsoleTemplateValidationWebhook{
-		logger: logger,
+		logger:  logger,
+		decoder: decoder,
 	}
-}
-
-func (c *ConsoleTemplateValidationWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -37,8 +36,8 @@ func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admis
 	}(time.Now())
 
 	template := &ConsoleTemplate{}
-	if err := (*c.decoder).Decode(req, template); err != nil {
-		admission.Errored(http.StatusBadRequest, err)
+	if err := c.decoder.Decode(req, template); err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	if err := template.Validate(); err != nil {

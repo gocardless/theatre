@@ -84,6 +84,7 @@ var _ = BeforeSuite(func() {
 		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
 			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
+			mgr.GetScheme(),
 		),
 	})
 
@@ -93,6 +94,7 @@ var _ = BeforeSuite(func() {
 			mgr.GetClient(),
 			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authorisation"),
+			mgr.GetScheme(),
 		),
 	})
 
@@ -100,6 +102,7 @@ var _ = BeforeSuite(func() {
 	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
 			ctrl.Log.WithName("webhooks").WithName("console-template"),
+			mgr.GetScheme(),
 		),
 	})
 

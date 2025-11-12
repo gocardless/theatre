@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -15,19 +16,17 @@ import (
 type ConsoleAuthenticatorWebhook struct {
 	lifecycleRecorder LifecycleEventRecorder
 	logger            logr.Logger
-	decoder           *admission.Decoder
+	decoder           admission.Decoder
 }
 
-func NewConsoleAuthenticatorWebhook(lifecycleRecorder LifecycleEventRecorder, logger logr.Logger) *ConsoleAuthenticatorWebhook {
+func NewConsoleAuthenticatorWebhook(lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthenticatorWebhook {
+	decoder := admission.NewDecoder(scheme)
+
 	return &ConsoleAuthenticatorWebhook{
 		lifecycleRecorder: lifecycleRecorder,
 		logger:            logger,
+		decoder:           decoder,
 	}
-}
-
-func (c *ConsoleAuthenticatorWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -38,7 +37,7 @@ func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.
 	}(time.Now())
 
 	csl := &Console{}
-	if err := (*c.decoder).Decode(req, csl); err != nil {
+	if err := c.decoder.Decode(req, csl); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 

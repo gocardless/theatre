@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -21,23 +22,21 @@ type ConsoleAttachObserverWebhook struct {
 	recorder          record.EventRecorder
 	lifecycleRecorder LifecycleEventRecorder
 	logger            logr.Logger
-	decoder           *admission.Decoder
+	decoder           admission.Decoder
 	requestTimeout    time.Duration
 }
 
-func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration) *ConsoleAttachObserverWebhook {
+func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration, scheme *runtime.Scheme) *ConsoleAttachObserverWebhook {
+	decoder := admission.NewDecoder(scheme)
+
 	return &ConsoleAttachObserverWebhook{
 		client:            c,
 		recorder:          recorder,
 		lifecycleRecorder: lifecycleRecorder,
 		logger:            logger,
+		decoder:           decoder,
 		requestTimeout:    requestTimeout,
 	}
-}
-
-func (c *ConsoleAttachObserverWebhook) InjectDecoder(d *admission.Decoder) error {
-	c.decoder = d
-	return nil
 }
 
 func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -54,7 +53,7 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 
 	attachOptions := &corev1.PodAttachOptions{}
 
-	if err := (*c.decoder).Decode(req, attachOptions); err != nil {
+	if err := c.decoder.Decode(req, attachOptions); err != nil {
 		logger.Error(err, "failed to decode attach options")
 		return admission.Errored(http.StatusBadRequest, err)
 	}

@@ -120,6 +120,7 @@ func main() {
 		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-authenticator"),
+			mgr.GetScheme(),
 		),
 	})
 
@@ -129,6 +130,7 @@ func main() {
 			mgr.GetClient(),
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-authorisation"),
+			mgr.GetScheme(),
 		),
 	})
 
@@ -136,6 +138,7 @@ func main() {
 	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
 		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
 			logger.WithName("webhooks").WithName("console-template"),
+			mgr.GetScheme(),
 		),
 	})
 
@@ -147,6 +150,7 @@ func main() {
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-attach-observer"),
 			10*time.Second,
+			mgr.GetScheme(),
 		),
 	})
 

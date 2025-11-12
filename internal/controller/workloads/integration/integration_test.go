@@ -485,11 +485,18 @@ var _ = Describe("Console", func() {
 			// fake the Job status as we wait for this job condition in our
 			// controller
 			now := metav1.Now()
+
 			job.Status = batchv1.JobStatus{
+				StartTime:      &now,
 				CompletionTime: &now,
 				Conditions: []batchv1.JobCondition{
 					{
-						Type: batchv1.JobComplete,
+						Type:   batchv1.JobSuccessCriteriaMet,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   batchv1.JobComplete,
+						Status: corev1.ConditionTrue,
 					},
 				},
 			}

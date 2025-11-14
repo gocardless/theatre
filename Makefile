@@ -104,7 +104,7 @@ bin/%: ## Build a binary
 	CGO_ENABLED=0 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 clean: ## Clean up the build artifacts
-	rm -rvf $(PROG) $(PROG:%=%.linux) $(PROG:%=%.darwin)
+	rm -rvf $(PROG) $(PROG:%=%.linux) $(PROG:%=%.darwin) hack/boilerplate.go.txt
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go

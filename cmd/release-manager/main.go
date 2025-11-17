@@ -8,6 +8,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 	releasecontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
+	releasewebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/release"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -55,7 +56,7 @@ func main() {
 
 	// Webhook configuration
 	manager.GetWebhookServer().Register("/mutate-releases", &admission.Webhook{
-		Handler: nil,
+		Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
 	})
 
 	if err = (&releasecontroller.ReleaseReconciler{

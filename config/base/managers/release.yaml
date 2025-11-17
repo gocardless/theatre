@@ -1,0 +1,130 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-manager
+rules:
+  - apiGroups:
+      - deploy.gocardless.com
+    resources:
+      - releases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - deploy.gocardless.com
+    resources:
+      - releases/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - deploy.gocardless.com
+    resources:
+      - releases/finalizers
+    verbs:
+      - update
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: release-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: release-manager
+subjects:
+  - kind: ServiceAccount
+    name: release-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: release-manager-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: theatre-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: release-manager
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: release-manager
+spec:
+  dnsNames:
+    - theatre-release-manager.theatre-system.svc
+  issuerRef:
+    kind: Issuer
+    name: theatre-webhooks
+  secretName: theatre-release-manager-certificate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-manager
+  labels:
+    group: deploy.crd.gocardless.com
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      group: deploy.crd.gocardless.com
+  template:
+    metadata:
+      labels:
+        group: deploy.crd.gocardless.com
+    spec:
+      serviceAccountName: release-manager
+      terminationGracePeriodSeconds: 10
+      containers:
+        - command:
+            - /usr/local/bin/release-manager
+          args:
+            - --metrics-address=0.0.0.0
+          image: eu.gcr.io/gc-containers/gocardless/theatre:latest
+          imagePullPolicy: Always
+          name: manager
+          env: []
+          ports:
+            - name: https
+              containerPort: 9443
+            - name: http-metrics
+              containerPort: 9525
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      volumes:
+        - name: cert
+          secret:
+            secretName: theatre-release-manager-certificate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-manager
+spec:
+  selector:
+    app: theatre
+    group: deploy.crd.gocardless.com
+  ports:
+    - port: 443
+      targetPort: 9443

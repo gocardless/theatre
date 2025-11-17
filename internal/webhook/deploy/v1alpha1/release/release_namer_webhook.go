@@ -49,7 +49,6 @@ func getReleaseName(release deployv1alpha1.Release) (string, error) {
 }
 
 func (i *ReleaseNamerWebhook) Handle(ctx context.Context, req admission.Request) (resp admission.Response) {
-
 	release := &deployv1alpha1.Release{}
 	if err := i.decoder.Decode(req, release); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)

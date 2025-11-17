@@ -25,8 +25,8 @@ import (
 
 // ReleaseSpec defines the desired state of Release
 type ReleaseSpec struct {
-	// UtopiaServiceTargetRelease specifies the utopia target service for the release i.e.
-	// the name of the utopia service target that this release is from.
+	// UtopiaServiceTargetRelease specifies the utopia.services[].spec.environments[].targets[].release
+	// field of each utopia service. These are namespace unique and are used to identify the release
 	// +kubebuilder:validation:Required
 	UtopiaServiceTargetRelease string `json:"utopiaServiceTargetRelease"`
 	// ApplicationRevision specifies the application revision of this release i.e.

@@ -14,6 +14,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -34,6 +36,9 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
+	webhookOpts := webhook.Options{Port: 9443}
+	webhookServer := webhook.NewServer(webhookOpts)
+
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
 		LeaderElectionID: "deploy.crds.gocardless.com",
@@ -41,13 +46,17 @@ func main() {
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),
 		},
-
-		// TODO: setup the webhook
+		WebhookServer: webhookServer,
 	})
 
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
 	}
+
+	// Webhook configuration
+	manager.GetWebhookServer().Register("/mutate-releases", &admission.Webhook{
+		Handler: nil,
+	})
 
 	if err = (&releasecontroller.ReleaseReconciler{
 		Client: manager.GetClient(),

@@ -107,8 +107,8 @@ spec:
                 type: object
               utopiaServiceTargetRelease:
                 description: |-
-                  UtopiaServiceTargetRelease specifies the utopia target service for the release i.e.
-                  the name of the utopia service target that this release is from.
+                  UtopiaServiceTargetRelease specifies the utopia.services[].spec.environments[].targets[].release
+                  field of each utopia service. These are namespace unique and are used to identify the release
                 type: string
             required:
             - applicationRevision

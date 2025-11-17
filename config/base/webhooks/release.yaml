@@ -2,13 +2,12 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: release
+  name: release-mutate
   annotations:
     cert-manager.io/inject-ca-from: theatre-system/theatre-release-manager
 webhooks:
   - admissionReviewVersions:
       - v1
-      - v1beta1
     clientConfig:
       caBundle: Cg==
       service:
@@ -25,6 +24,37 @@ webhooks:
           - v1alpha1
         operations:
           - CREATE
+        resources:
+          - releases
+        scope: "*"
+    sideEffects: None
+    timeoutSeconds: 10
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: release-validate
+  annotations:
+    cert-manager.io/inject-ca-from: theatre-system/theatre-release-manager
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-release-manager
+        namespace: theatre-system
+        path: /validate-releases
+        port: 443
+    failurePolicy: Fail
+    name: release.deploy.crd.gocardless.com
+    rules:
+      - apiGroups:
+          - deploy.gocardless.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - UPDATE
         resources:
           - releases
         scope: "*"

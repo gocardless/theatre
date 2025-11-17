@@ -59,6 +59,10 @@ func main() {
 		Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
 	})
 
+	manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{
+		Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
+	})
+
 	if err = (&releasecontroller.ReleaseReconciler{
 		Client: manager.GetClient(),
 		Scheme: scheme,

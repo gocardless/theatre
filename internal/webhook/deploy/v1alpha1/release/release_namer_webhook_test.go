@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	logr "github.com/go-logr/logr"
@@ -86,24 +87,29 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 			It("Should successfully alter the object name if all fields are provided", func() {
 				resp := releaseNamerWebhook.Handle(ctx, admission.Request{
 					AdmissionRequest: v1.AdmissionRequest{
-						Object: runtime.RawExtension{
-							Object: obj,
-						},
+						Object: ObjectToRaw(obj),
 					},
 				})
 				Expect(resp.Allowed).To(BeTrue())
 				Expect(resp.Patches).To(HaveLen(1))
-				Expect(resp.Patches[0].Path).To(Equal("/metadata/name"))
-				Expect(resp.Patches[0].Value).To(Equal("default-e083a2c-b7717db"))
+				Expect(resp.Patches[0].Path).To(Equal("/metadata"))
+				Expect(resp.Patches[0].Value).To(Equal(map[string]interface{}{
+					"name": "default-e083a2c-b7717db",
+				}))
 			})
 
 			It("Should fail if required fields are not provided", func() {
-				// obj = &deployv1alpha1.Release{}
+				emptyRelease := &deployv1alpha1.Release{
+					Spec: deployv1alpha1.ReleaseSpec{
+						UtopiaServiceTargetRelease: "",
+						ApplicationRevision:        deployv1alpha1.Revision{},
+						InfrastructureRevision:     deployv1alpha1.Revision{},
+					},
+				}
+
 				resp := releaseNamerWebhook.Handle(ctx, admission.Request{
 					AdmissionRequest: v1.AdmissionRequest{
-						Object: runtime.RawExtension{
-							Object: obj,
-						},
+						Object: ObjectToRaw(emptyRelease),
 					},
 				})
 				Expect(resp.Allowed).To(BeFalse())
@@ -114,9 +120,7 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 			It("Should fail if object in request is not a Release", func() {
 				resp := releaseNamerWebhook.Handle(ctx, admission.Request{
 					AdmissionRequest: v1.AdmissionRequest{
-						Object: runtime.RawExtension{
-							Object: &consolev1alpha1.Console{},
-						},
+						Object: ObjectToRaw(&consolev1alpha1.Console{}),
 					},
 				})
 				Expect(resp.Allowed).To(BeFalse())
@@ -125,3 +129,11 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 		})
 	})
 })
+
+func ObjectToRaw(obj runtime.Object) runtime.RawExtension {
+	objRaw, err := json.Marshal(obj)
+	Expect(err).ToNot(HaveOccurred())
+	return runtime.RawExtension{
+		Raw: objRaw,
+	}
+}

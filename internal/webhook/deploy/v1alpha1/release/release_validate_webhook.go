@@ -64,8 +64,7 @@ func (i *ReleaseValidateWebhook) Handle(ctx context.Context, req admission.Reque
 		if err := i.validateSpecImmutable(oldRelease.Spec, release.Spec); err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
-
-		return admission.Errored(http.StatusBadRequest, fmt.Errorf("Release spec is immutable"))
 	}
+
 	return admission.Allowed("")
 }

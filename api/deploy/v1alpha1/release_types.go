@@ -68,17 +68,15 @@ type Phase string
 
 // TODO: active/inactive
 const (
-	PhaseApplied     Phase = "Applied"
-	PhaseProgressing Phase = "Progressing"
-	PhaseSuperseded  Phase = "Superseded"
+	PhaseActive   Phase = "Active"
+	PhaseInactive Phase = "Inactive"
 )
 
 type ReleaseStatus struct {
-	// Phase is the current phase of the release. Applied indicates the release
-	// is currently live in the cluster, Progressing indicates the release is
-	// currently being applied to the cluster, and Superseded indicates the
-	// release is no longer the latest release.
-	// +kubebuilder:validation:Enum:=Applied;Progressing;Superseded
+	// Phase is the current phase of the release. Active indicates the release
+	// is currently live in the cluster, Inactive indicates the release is no
+	// longer the latest release.
+	// +kubebuilder:validation:Enum:=Active;Inactive
 	// +kubebuilder:validation:Required
 	Phase Phase `json:"phase"`
 	// Message is a human-readable message indicating the state of the release.

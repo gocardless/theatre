@@ -129,14 +129,12 @@ spec:
                 type: string
               phase:
                 description: |-
-                  Phase is the current phase of the release. Applied indicates the release
-                  is currently live in the cluster, Progressing indicates the release is
-                  currently being applied to the cluster, and Superseded indicates the
-                  release is no longer the latest release.
+                  Phase is the current phase of the release. Active indicates the release
+                  is currently live in the cluster, Inactive indicates the release is no
+                  longer the latest release.
                 enum:
-                - Applied
-                - Progressing
-                - Superseded
+                - Active
+                - Inactive
                 type: string
             required:
             - phase

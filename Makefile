@@ -22,7 +22,7 @@ endif
 
 .PHONY: build build-darwin build-linux build-all clean fmt vet test \
 	acceptance-e2e acceptance-run acceptance-prepare acceptance-destory \
-	generate manifests install-tools deploy help \
+	generate manifests deploy help \
 	lint lint-fix lint-config run \
 	docker-build docker-push build-installer kustomize controller-gen \
 	setup-envtest envtest golangci-lint
@@ -140,6 +140,8 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4.0
 GINKGO_VERSION ?= v1.16.5
+
+install-tools: kustomize controller-gen setup-envtest golangci-lint setup-ginkgo
 
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)

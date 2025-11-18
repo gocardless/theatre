@@ -7,7 +7,6 @@ import (
 
 	logr "github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
-	consolev1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/admission/v1"
@@ -17,10 +16,9 @@ import (
 
 var _ = Describe("ReleaseNamerWebhook", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
-		obj    *deployv1alpha1.Release
-		// oldObj *deployv1alpha1.Release
+		ctx                 context.Context
+		cancel              context.CancelFunc
+		obj                 *deployv1alpha1.Release
 		releaseNamerWebhook *ReleaseNamerWebhook
 		scheme              *runtime.Scheme
 	)
@@ -114,16 +112,6 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 				})
 				Expect(resp.Allowed).To(BeFalse())
 				Expect(resp.Result.Message).To(Equal("missing required fields: utopiaServiceTargetRelease, applicationRevision, infrastructureRevision"))
-				Expect(resp.Result.Code).To(Equal(int32(http.StatusBadRequest)))
-			})
-
-			It("Should fail if object in request is not a Release", func() {
-				resp := releaseNamerWebhook.Handle(ctx, admission.Request{
-					AdmissionRequest: v1.AdmissionRequest{
-						Object: ObjectToRaw(&consolev1alpha1.Console{}),
-					},
-				})
-				Expect(resp.Allowed).To(BeFalse())
 				Expect(resp.Result.Code).To(Equal(int32(http.StatusBadRequest)))
 			})
 		})

@@ -22,6 +22,12 @@ import (
 var (
 	scheme        = runtime.NewScheme()
 	app           = kingpin.New("release-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	scheme               = runtime.NewScheme()
+	app                  = kingpin.New("release-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	maxReleasesPerTarget = app.Flag("max-releases-per-target", "Maximum number of releases to keep per target. All releases older than this will be deleted by the reconciler.").
+				Default("10").
+				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET").
+				Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
@@ -64,9 +70,10 @@ func main() {
 	})
 
 	if err = (&releasecontroller.ReleaseReconciler{
-		Client: manager.GetClient(),
-		Scheme: scheme,
-		Log:    logger,
+		Client:               manager.GetClient(),
+		Scheme:               scheme,
+		Log:                  logger,
+		MaxReleasesPerTarget: *maxReleasesPerTarget,
 	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}

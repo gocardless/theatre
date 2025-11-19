@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,6 +53,7 @@ func (r *ReleaseReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 
 	if release.Status.Phase == "" {
 		release.Status.Phase = deployv1alpha1.PhaseActive
+		release.Status.LastAppliedTime = metav1.Now()
 
 		err := r.Status().Update(ctx, release)
 		if err != nil {
@@ -78,6 +80,8 @@ func (r *ReleaseReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 			if otherRelease.Name != release.Name {
 				if otherRelease.Status.Phase == deployv1alpha1.PhaseActive {
 					otherRelease.Status.Phase = deployv1alpha1.PhaseInactive
+					otherRelease.Status.SupersededBy = release.Name
+					otherRelease.Status.SupersededTime = metav1.Now()
 					err := r.Status().Update(ctx, &otherRelease)
 					if err != nil {
 						logger.Error(err, "failed to set release as inactive", "release", otherRelease.Name)

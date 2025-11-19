@@ -136,6 +136,14 @@ spec:
                 - Active
                 - Inactive
                 type: string
+              supersededBy:
+                description: SupersededBy is the name of the release that superseded
+                  this release.
+                type: string
+              supersededTime:
+                description: SupersededTime is the time when this release was superseded.
+                format: date-time
+                type: string
             required:
             - phase
             type: object

@@ -19,6 +19,21 @@ type ReleaseReconciler struct {
 
 func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Release")
+
+	err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		"spec.utopiaServiceTargetRelease",
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{release.Spec.UtopiaServiceTargetRelease}
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deployv1alpha1.Release{}).
 		Complete(
@@ -45,8 +60,15 @@ func (r *ReleaseReconciler) Reconcile(logger logr.Logger, ctx context.Context, r
 		}
 		// Mark all other releases as inactive
 		var releaseList deployv1alpha1.ReleaseList
-		// TODO: maybe filter by label
-		err = r.List(ctx, &releaseList, client.InNamespace(req.Namespace))
+		err = r.List(ctx, &releaseList,
+			client.InNamespace(req.Namespace),
+			client.MatchingFields(map[string]string{
+				"spec.utopiaServiceTargetRelease": release.Spec.UtopiaServiceTargetRelease,
+			}),
+		)
+
+		logger.Info("listed releases", "count", len(releaseList.Items))
+
 		if err != nil {
 			logger.Error(err, "failed to list releases")
 			return ctrl.Result{}, err

@@ -84,6 +84,12 @@ type ReleaseStatus struct {
 	// LastAppliedTime is the last time the release was applied to the cluster.
 	// +kubebuilder:validation:Optional
 	LastAppliedTime metav1.Time `json:"lastAppliedTime,omitempty"`
+	// SupersededBy is the name of the release that superseded this release.
+	// +kubebuilder:validation:Optional
+	SupersededBy string `json:"supersededBy,omitempty"`
+	// SupersededTime is the time when this release was superseded.
+	// +kubebuilder:validation:Optional
+	SupersededTime metav1.Time `json:"supersededTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

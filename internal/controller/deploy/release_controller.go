@@ -37,6 +37,20 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		return err
 	}
 
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		"status.phase",
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{string(release.Status.Phase)}
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deployv1alpha1.Release{}).
 		Complete(
@@ -47,44 +61,6 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 				},
 			),
 		)
-}
-
-func (r *ReleaseReconciler) handleNewRelease(logger logr.Logger, ctx context.Context, release *deployv1alpha1.Release) error {
-	release.Status.Phase = deployv1alpha1.PhaseActive
-	release.Status.LastAppliedTime = metav1.Now()
-
-	err := r.Status().Update(ctx, release)
-	if err != nil {
-		return err
-	}
-	// Mark all other releases as inactive
-	var releaseList deployv1alpha1.ReleaseList
-	err = r.List(ctx, &releaseList,
-		client.InNamespace(release.Namespace),
-		client.MatchingFields(map[string]string{
-			"spec.utopiaServiceTargetRelease": release.Spec.UtopiaServiceTargetRelease,
-		}),
-	)
-
-	if err != nil {
-		return err
-	}
-
-	for _, otherRelease := range releaseList.Items {
-		if otherRelease.Name != release.Name {
-			if otherRelease.Status.Phase == deployv1alpha1.PhaseActive {
-				otherRelease.Status.Phase = deployv1alpha1.PhaseInactive
-				otherRelease.Status.SupersededBy = release.Name
-				otherRelease.Status.SupersededTime = metav1.Now()
-				err := r.Status().Update(ctx, &otherRelease)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 func (r *ReleaseReconciler) trimExtraReleases(logger logr.Logger, ctx context.Context, namespace string, target string) error {
@@ -133,14 +109,68 @@ func (r *ReleaseReconciler) trimExtraReleases(logger logr.Logger, ctx context.Co
 	return nil
 }
 
+func isNewRelease(phase deployv1alpha1.Phase) bool {
+	return phase == ""
+}
+
+func (r *ReleaseReconciler) markReleaseActive(ctx context.Context, release *deployv1alpha1.Release) error {
+	release.Status.LastAppliedTime = metav1.Now()
+	release.Status.SupersededBy = ""
+	release.Status.SupersededTime = metav1.Time{}
+	release.Status.Phase = deployv1alpha1.PhaseActive
+	return r.Status().Update(ctx, release)
+}
+
+func (r *ReleaseReconciler) markReleaseSuperseded(ctx context.Context, release *deployv1alpha1.Release, supersededBy string) error {
+	release.Status.SupersededBy = supersededBy
+	release.Status.SupersededTime = metav1.Now()
+	release.Status.Phase = deployv1alpha1.PhaseInactive
+	return r.Status().Update(ctx, release)
+}
+
+func (r *ReleaseReconciler) supersedePreviousReleases(ctx context.Context, activeRelease *deployv1alpha1.Release) error {
+	// Mark all other releases as inactive
+	var releaseList deployv1alpha1.ReleaseList
+	err := r.List(ctx, &releaseList,
+		client.InNamespace(activeRelease.Namespace),
+		client.MatchingFields(map[string]string{
+			"spec.utopiaServiceTargetRelease": activeRelease.Spec.UtopiaServiceTargetRelease,
+			"status.phase":                    string(deployv1alpha1.PhaseActive),
+		}),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	for _, otherRelease := range releaseList.Items {
+		if otherRelease.Name != activeRelease.Name {
+			if otherRelease.Status.Phase == deployv1alpha1.PhaseActive {
+				err := r.markReleaseSuperseded(ctx, &otherRelease, activeRelease.Name)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *ReleaseReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
 	logger.Info("reconciling release")
 
-	if release.Status.Phase == "" {
-		err := r.handleNewRelease(logger, ctx, release)
+	if isNewRelease(release.Status.Phase) {
+		err := r.markReleaseActive(ctx, release)
 		if err != nil {
-			logger.Error(err, "failed to handle new release")
+			logger.Error(err, "failed to mark release active")
+			return ctrl.Result{}, err
+		}
+
+		err = r.supersedePreviousReleases(ctx, release)
+		if err != nil {
+			logger.Error(err, "failed to supersede previous releases")
 			return ctrl.Result{}, err
 		}
 

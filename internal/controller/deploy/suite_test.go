@@ -62,7 +62,7 @@ var _ = BeforeSuite(func() {
 		Client:               k8sClient,
 		Scheme:               scheme.Scheme,
 		Log:                  logr.Discard(),
-		MaxReleasesPerTarget: 5,
+		MaxReleasesPerTarget: 3,
 	}
 
 	err = reconciler.SetupWithManager(ctx, manager)

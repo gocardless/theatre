@@ -1,10 +1,16 @@
 package deploy
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+
+	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -36,7 +42,7 @@ var _ = Describe("ReleaseController", func() {
 	})
 
 	AfterEach(func() {
-		err := k8sClient.Delete(ctx, &obj)
+		err := k8sClient.DeleteAllOf(ctx, &v1alpha1.Release{}, client.InNamespace("releases"))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -120,4 +126,58 @@ var _ = Describe("ReleaseController", func() {
 		})
 	})
 
+	Context("Cull releases", func() {
+		It("Should keep the number of releases below the configured limit", func() {
+			Expect(createRelease(ctx, "default")).ToNot(BeNil())
+			Expect(createRelease(ctx, "default")).ToNot(BeNil())
+			Expect(createRelease(ctx, "default")).ToNot(BeNil())
+			release := createRelease(ctx, "default")
+
+			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{NamespacedName: client.ObjectKey{Namespace: "releases"}}, release)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify that only 3 releases exist (culling happened)
+			Eventually(func() int {
+				releases := &v1alpha1.ReleaseList{}
+				Expect(k8sClient.List(ctx, releases, client.InNamespace("releases"))).To(Succeed())
+				return len(releases.Items)
+			}).Should(Equal(3))
+		})
+	})
 })
+
+func generateCommitSHA() string {
+	bytes := make([]byte, 20)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(bytes)
+}
+
+func generateRelease(target string) *v1alpha1.Release {
+	appSHA := generateCommitSHA()
+	infraSHA := generateCommitSHA()
+	return &v1alpha1.Release{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      target + "-" + infraSHA[:7] + "-" + appSHA[:7],
+			Namespace: "releases",
+		},
+		Spec: v1alpha1.ReleaseSpec{
+			UtopiaServiceTargetRelease: target,
+			ApplicationRevision: v1alpha1.Revision{
+				ID: appSHA,
+			},
+			InfrastructureRevision: v1alpha1.Revision{
+				ID: infraSHA,
+			},
+		},
+	}
+}
+
+func createRelease(ctx context.Context, target string) *v1alpha1.Release {
+	release := generateRelease(target)
+	err := k8sClient.Create(ctx, release)
+	Expect(err).NotTo(HaveOccurred())
+	return release
+}

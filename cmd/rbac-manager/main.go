@@ -17,11 +17,13 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
-	"github.com/gocardless/theatre/v4/cmd"
-	directoryrolebinding "github.com/gocardless/theatre/v4/controllers/rbac/directoryrolebinding"
-	"github.com/gocardless/theatre/v4/pkg/signals"
+	rbacv1alpha1 "github.com/gocardless/theatre/v5/api/rbac/v1alpha1"
+	"github.com/gocardless/theatre/v5/cmd"
+	directoryrolebinding "github.com/gocardless/theatre/v5/internal/controller/rbac"
+	"github.com/gocardless/theatre/v5/pkg/signals"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -73,12 +75,16 @@ func main() {
 		)
 	}
 
+	webhookServer := webhook.NewServer(webhook.Options{Port: 9443})
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               9443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "rbac.crds.gocardless.com",
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		},
+		WebhookServer:    webhookServer,
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "rbac.crds.gocardless.com",
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)

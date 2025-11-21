@@ -11,14 +11,17 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // this is required to auth against GCP
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	rbacv1alpha1 "github.com/gocardless/theatre/v4/apis/rbac/v1alpha1"
-	workloadsv1alpha1 "github.com/gocardless/theatre/v4/apis/workloads/v1alpha1"
-	"github.com/gocardless/theatre/v4/cmd"
-	consolecontroller "github.com/gocardless/theatre/v4/controllers/workloads/console"
-	"github.com/gocardless/theatre/v4/pkg/signals"
-	"github.com/gocardless/theatre/v4/pkg/workloads/console/events"
+	rbacv1alpha1 "github.com/gocardless/theatre/v5/api/rbac/v1alpha1"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v5/cmd"
+	consolecontroller "github.com/gocardless/theatre/v5/internal/controller/workloads"
+	internalworkloadsv1alpha1 "github.com/gocardless/theatre/v5/internal/webhook/workloads/v1alpha1"
+	"github.com/gocardless/theatre/v5/pkg/signals"
+	"github.com/gocardless/theatre/v5/pkg/workloads/console/events"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -80,12 +83,16 @@ func main() {
 	idBuilder := workloadsv1alpha1.NewConsoleIdBuilder(*contextName)
 	lifecycleRecorder := workloadsv1alpha1.NewLifecycleEventRecorder(*contextName, logger, publisher, idBuilder)
 
+	webhookServer := webhook.NewServer(webhook.Options{Port: 443})
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		MetricsBindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
-		Port:               443,
-		LeaderElection:     commonOpts.ManagerLeaderElection,
-		LeaderElectionID:   "workloads.crds.gocardless.com",
-		Scheme:             scheme,
+		LeaderElection:   commonOpts.ManagerLeaderElection,
+		LeaderElectionID: "workloads.crds.gocardless.com",
+		Scheme:           scheme,
+		WebhookServer:    webhookServer,
+		Metrics: metricsserver.Options{
+			BindAddress: fmt.Sprintf("%s:%d", commonOpts.MetricAddress, commonOpts.MetricPort),
+		},
 	})
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
@@ -108,36 +115,40 @@ func main() {
 
 	// console authenticator webhook
 	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleAuthenticatorWebhook(
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-authenticator"),
+			mgr.GetScheme(),
 		),
 	})
 
 	// console authorisation webhook
 	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleAuthorisationWebhook(
 			mgr.GetClient(),
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-authorisation"),
+			mgr.GetScheme(),
 		),
 	})
 
 	// console template webhook
 	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleTemplateValidationWebhook(
 			logger.WithName("webhooks").WithName("console-template"),
+			mgr.GetScheme(),
 		),
 	})
 
 	// console attach webhook
 	mgr.GetWebhookServer().Register("/observe-console-attach", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAttachObserverWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleAttachObserverWebhook(
 			mgr.GetClient(),
 			mgr.GetEventRecorderFor("console-attach-observer"),
 			lifecycleRecorder,
 			logger.WithName("webhooks").WithName("console-attach-observer"),
 			10*time.Second,
+			mgr.GetScheme(),
 		),
 	})
 

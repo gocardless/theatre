@@ -23,10 +23,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	"github.com/gocardless/theatre/v4/pkg/signals"
+	"github.com/gocardless/theatre/v5/pkg/signals"
 
-	vaultManagerAcceptance "github.com/gocardless/theatre/v4/cmd/vault-manager/acceptance"
-	workloadsManagerAcceptance "github.com/gocardless/theatre/v4/cmd/workloads-manager/acceptance"
+	vaultManagerAcceptance "github.com/gocardless/theatre/v5/cmd/vault-manager/acceptance"
+	workloadsManagerAcceptance "github.com/gocardless/theatre/v5/cmd/workloads-manager/acceptance"
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
 	prepareConfigFile    = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile    = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
-	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.24.13").String()
+	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.32.2").String()
 	prepareVerbose       = prepare.Flag("verbose", "Use a higher log level when creating the cluster").Short('v').Bool()
 
 	destroy = app.Command("destroy", "Destroys the test Kubernetes cluster and other resources")
@@ -132,6 +132,19 @@ func main() {
 
 		if err := pipeOutput(applyCmd).Run(); err != nil {
 			app.Fatalf("failed to install setup manifests into cluster: %v", err)
+		}
+
+		logger.Log("msg", "install theatre CRDs")
+		installCRDs, err := exec.CommandContext(ctx, "kustomize", "build", "config/crd").Output()
+		if err != nil {
+			app.Fatalf("failed to kustomize theatre CRDs: %v", err)
+		}
+
+		createCmd := exec.CommandContext(ctx, "kubectl", "--context", fmt.Sprintf("kind-%s", *clusterName), "create", "-f", "-")
+		createCmd.Stdin = bytes.NewReader(installCRDs)
+
+		if err := pipeOutput(createCmd).Run(); err != nil {
+			app.Fatalf("failed to install theatre CRDs into cluster: %v", err)
 		}
 
 		logger.Log("msg", "waiting for setup resources to run")

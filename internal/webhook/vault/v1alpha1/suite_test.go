@@ -9,5 +9,5 @@ import (
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "api/vault/v1alpha1")
+	RunSpecs(t, "webhook/vault/v1alpha1")
 }

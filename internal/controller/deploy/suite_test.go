@@ -29,7 +29,7 @@ var (
 
 func TestDeploy(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Deploy Suite")
+	RunSpecs(t, "controllers/deploy")
 }
 
 var _ = BeforeSuite(func() {

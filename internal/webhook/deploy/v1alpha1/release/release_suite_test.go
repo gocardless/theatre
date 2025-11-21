@@ -9,5 +9,5 @@ import (
 
 func TestRelease(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Release Suite")
+	RunSpecs(t, "webhook/deploy/v1alpha1/release")
 }

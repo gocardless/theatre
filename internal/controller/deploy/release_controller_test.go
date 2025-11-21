@@ -52,19 +52,32 @@ var _ = Describe("ReleaseController", func() {
 		It("Should set a release as active, and update its status", func() {
 			Expect(obj).NotTo(BeNil())
 			Expect(reconciler.markReleaseActive(ctx, &obj)).To(Succeed())
-			Expect(obj.Status.Phase).To(Equal(v1alpha1.PhaseActive))
-			Expect(obj.Status.LastAppliedTime).ToNot(BeNil())
-			Expect(obj.Status.SupersededBy).To(Equal(""))
-			Expect(obj.Status.SupersededTime).To(Equal(metav1.Time{}))
+
+			Eventually(func() v1alpha1.ReleaseStatus {
+				releaseFromClient := v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, &releaseFromClient)).To(Succeed())
+				return releaseFromClient.Status
+			}).Should(SatisfyAll(
+				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
+				HaveField("LastAppliedTime", Not(BeNil())),
+				HaveField("SupersededBy", Equal("")),
+				HaveField("SupersededTime", Equal(metav1.Time{})),
+			))
 		})
 
 		It("Should set a release as superseded, and update its status", func() {
 			Expect(obj).NotTo(BeNil())
 			Expect(reconciler.markReleaseSuperseded(ctx, &obj, "superseded-by")).To(Succeed())
-			Expect(obj.Status.Phase).To(Equal(v1alpha1.PhaseInactive))
-			Expect(obj.Status.LastAppliedTime).ToNot(BeNil())
-			Expect(obj.Status.SupersededBy).To(Equal("superseded-by"))
-			Expect(obj.Status.SupersededTime).ToNot(BeNil())
+
+			Eventually(func() v1alpha1.ReleaseStatus {
+				releaseFromClient := v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, &releaseFromClient))
+				return releaseFromClient.Status
+			}).Should(SatisfyAll(
+				HaveField("Phase", Equal(v1alpha1.PhaseInactive)),
+				HaveField("SupersededBy", Equal("superseded-by")),
+				HaveField("SupersededTime", Not(BeNil())),
+			))
 		})
 	})
 
@@ -99,8 +112,11 @@ var _ = Describe("ReleaseController", func() {
 
 			Expect(newRelease.Status.Phase).To(Equal(v1alpha1.PhaseActive))
 
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, &obj)).To(Succeed())
-			Expect(obj.Status.Phase).To(Equal(v1alpha1.PhaseInactive))
+			Eventually(func() v1alpha1.ReleaseStatus {
+				inactiveRelease := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, inactiveRelease)).To(Succeed())
+				return inactiveRelease.Status
+			}).Should(HaveField("Phase", Equal(v1alpha1.PhaseInactive)))
 		})
 	})
 

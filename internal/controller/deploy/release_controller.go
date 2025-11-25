@@ -64,7 +64,6 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 }
 
 func (r *ReleaseReconciler) trimExtraReleases(logger logr.Logger, ctx context.Context, namespace string, target string) error {
-
 	releases := &deployv1alpha1.ReleaseList{}
 	err := r.List(ctx, releases,
 		client.InNamespace(namespace),

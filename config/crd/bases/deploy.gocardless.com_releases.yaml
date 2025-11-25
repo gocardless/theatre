@@ -118,6 +118,41 @@ spec:
           status:
             description: Status defines the observed state of Release
             properties:
+              history:
+                description: History is a list of previous statuses of the release.
+                items:
+                  properties:
+                    lastAppliedTime:
+                      description: LastAppliedTime is the last time the release was
+                        applied to the cluster.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message is a human-readable message indicating
+                        the state of the release.
+                      type: string
+                    phase:
+                      description: |-
+                        Phase is the current phase of the release. Active indicates the release
+                        is currently live in the cluster, Inactive indicates the release is no
+                        longer the latest release.
+                      enum:
+                      - Active
+                      - Inactive
+                      type: string
+                    supersededBy:
+                      description: SupersededBy is the name of the release that superseded
+                        this release.
+                      type: string
+                    supersededTime:
+                      description: SupersededTime is the time when this release was
+                        superseded.
+                      format: date-time
+                      type: string
+                  required:
+                  - phase
+                  type: object
+                type: array
               lastAppliedTime:
                 description: LastAppliedTime is the last time the release was applied
                   to the cluster.

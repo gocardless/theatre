@@ -28,6 +28,10 @@ var (
 				Default("10").
 				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET").
 				Int()
+	maxHistoryLimit = app.Flag("max-history-limit", "Maximum number of status.history entries to keep per release. All history entries older than this will be deleted by the reconciler.").
+			Default("50").
+			Envar("RELEASE_MANAGER_MAX_HISTORY_LIMIT").
+			Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
@@ -74,6 +78,7 @@ func main() {
 		Scheme:               scheme,
 		Log:                  logger,
 		MaxReleasesPerTarget: *maxReleasesPerTarget,
+		MaxHistoryLimit:      *maxHistoryLimit,
 	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}

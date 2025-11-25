@@ -71,7 +71,7 @@ const (
 	PhaseInactive Phase = "Inactive"
 )
 
-type ReleaseStatus struct {
+type ReleaseStatusEntry struct {
 	// Phase is the current phase of the release. Active indicates the release
 	// is currently live in the cluster, Inactive indicates the release is no
 	// longer the latest release.
@@ -90,6 +90,15 @@ type ReleaseStatus struct {
 	// SupersededTime is the time when this release was superseded.
 	// +kubebuilder:validation:Optional
 	SupersededTime metav1.Time `json:"supersededTime,omitempty"`
+}
+
+type ReleaseStatus struct {
+	ReleaseStatusEntry `json:",inline"`
+
+	// History is a list of previous statuses of the release.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=50
+	History []ReleaseStatusEntry `json:"history,omitempty"`
 }
 
 // +kubebuilder:object:root=true

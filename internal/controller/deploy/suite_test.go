@@ -63,6 +63,7 @@ var _ = BeforeSuite(func() {
 		Scheme:               scheme.Scheme,
 		Log:                  logr.Discard(),
 		MaxReleasesPerTarget: 3,
+		MaxHistoryLimit:      3,
 	}
 
 	err = reconciler.SetupWithManager(ctx, manager)

@@ -519,6 +519,67 @@ var _ = Describe("ReleaseController", func() {
 			}).Should(BeTrue())
 		})
 	})
+
+	Context("ReleaseStatusHistory", func() {
+		Context("prependToHistory", func() {
+			It("Should prepend the current status to the history array if not previous history", func() {
+				release := createRelease(ctx, "history")
+				reconciler.prependToHistory(release)
+
+				lastHistoryEntry := release.Status.History[0]
+
+				Expect(lastHistoryEntry.Phase).To(Equal(release.Status.Phase))
+				Expect(lastHistoryEntry.Message).To(Equal(release.Status.Message))
+				Expect(lastHistoryEntry.LastAppliedTime).To(Equal(release.Status.LastAppliedTime))
+				Expect(lastHistoryEntry.SupersededBy).To(Equal(release.Status.SupersededBy))
+				Expect(lastHistoryEntry.SupersededTime).To(Equal(release.Status.SupersededTime))
+			})
+
+			It("Should prepend to the current status to the history if there is a previous history", func() {
+				recordedTime := metav1.Now()
+
+				release := createRelease(ctx, "history")
+				release.Status.Phase = v1alpha1.PhaseActive
+				release.Status.Message = "Active release"
+				release.Status.LastAppliedTime = recordedTime
+				reconciler.prependToHistory(release)
+				previousHistoryEntry := release.Status.History[0]
+
+				supersededTime := metav1.Now()
+				mockReleaseName := "history-infraSha-appSha"
+				release.Status.Phase = v1alpha1.PhaseInactive
+				release.Status.Message = "Superseded by " + mockReleaseName
+				release.Status.LastAppliedTime = recordedTime
+				release.Status.SupersededBy = mockReleaseName
+				release.Status.SupersededTime = supersededTime
+				reconciler.prependToHistory(release)
+
+				latestHistoryEntry := release.Status.History[0]
+
+				Expect(previousHistoryEntry.Phase).To(Equal(v1alpha1.PhaseActive))
+				Expect(previousHistoryEntry.Message).To(Equal("Active release"))
+				Expect(previousHistoryEntry.LastAppliedTime).To(Equal(recordedTime))
+
+				Expect(latestHistoryEntry.Phase).To(Equal(v1alpha1.PhaseInactive))
+				Expect(latestHistoryEntry.Message).To(Equal("Superseded by " + mockReleaseName))
+				Expect(latestHistoryEntry.LastAppliedTime).To(Equal(recordedTime))
+				Expect(latestHistoryEntry.SupersededBy).To(Equal(mockReleaseName))
+				Expect(latestHistoryEntry.SupersededTime).To(Equal(supersededTime))
+
+			})
+
+			It("Should keep the history under the configured maximum", func() {
+				release := createRelease(ctx, "history")
+				reconciler.prependToHistory(release)
+				reconciler.prependToHistory(release)
+				reconciler.prependToHistory(release)
+				reconciler.prependToHistory(release)
+				reconciler.prependToHistory(release)
+
+				Expect(len(release.Status.History)).To(Equal(reconciler.MaxHistoryLimit))
+			})
+		})
+	})
 })
 
 func generateCommitSHA() string {

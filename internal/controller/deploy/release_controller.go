@@ -18,6 +18,7 @@ type ReleaseReconciler struct {
 	Log                  logr.Logger
 	Scheme               *runtime.Scheme
 	MaxReleasesPerTarget int
+	MaxHistoryLimit      int
 }
 
 func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -112,6 +113,22 @@ func isNewRelease(phase deployv1alpha1.Phase) bool {
 	return phase == ""
 }
 
+func (r *ReleaseReconciler) prependToHistory(release *deployv1alpha1.Release) {
+	entry := deployv1alpha1.ReleaseStatusEntry{
+		Phase:           release.Status.Phase,
+		Message:         release.Status.Message,
+		LastAppliedTime: release.Status.LastAppliedTime,
+		SupersededBy:    release.Status.SupersededBy,
+		SupersededTime:  release.Status.SupersededTime,
+	}
+
+	release.Status.History = append([]deployv1alpha1.ReleaseStatusEntry{entry}, release.Status.History...)
+
+	if len(release.Status.History) > r.MaxHistoryLimit {
+		release.Status.History = release.Status.History[len(release.Status.History)-r.MaxHistoryLimit:]
+	}
+}
+
 func (r *ReleaseReconciler) markReleaseActive(ctx context.Context, release *deployv1alpha1.Release) error {
 	release.Status.LastAppliedTime = metav1.Now()
 	release.Status.SupersededBy = ""
@@ -121,6 +138,7 @@ func (r *ReleaseReconciler) markReleaseActive(ctx context.Context, release *depl
 }
 
 func (r *ReleaseReconciler) markReleaseSuperseded(ctx context.Context, release *deployv1alpha1.Release, supersededBy string) error {
+	r.prependToHistory(release)
 	release.Status.SupersededBy = supersededBy
 	release.Status.SupersededTime = metav1.Now()
 	release.Status.Phase = deployv1alpha1.PhaseInactive

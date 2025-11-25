@@ -518,6 +518,37 @@ var _ = Describe("ReleaseController", func() {
 					r2.Status.Phase == v1alpha1.PhaseActive
 			}).Should(BeTrue())
 		})
+
+		It("Should update history when a release is marked inactive", func() {
+			release1 := createRelease(ctx, "history")
+			release2 := createRelease(ctx, "history")
+
+			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
+				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release1.Name},
+			}, release1)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
+				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release2.Name},
+			}, release2)
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() v1alpha1.ReleaseStatus {
+				r1 := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: "releases"}, r1)).To(Succeed())
+				return r1.Status
+			}).Should(SatisfyAll(
+				HaveField("Phase", Equal(v1alpha1.PhaseInactive)),
+			))
+
+			Eventually(func() v1alpha1.ReleaseStatus {
+				r2 := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: "releases"}, r2)).To(Succeed())
+				return r2.Status
+			}).Should(SatisfyAll(
+				HaveField("Phase", v1alpha1.PhaseActive),
+			))
+		})
 	})
 
 	Context("ReleaseStatusHistory", func() {

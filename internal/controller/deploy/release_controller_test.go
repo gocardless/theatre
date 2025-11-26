@@ -561,7 +561,7 @@ var _ = Describe("ReleaseController", func() {
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
 				HaveField("LastAppliedTime", Not(BeNil())),
-				HaveField("SupersededBy", Equal(BeNil())),
+				HaveField("SupersededBy", Equal("")),
 				HaveField("SupersededTime", Equal(metav1.Time{})),
 			))
 

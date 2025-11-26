@@ -13,8 +13,10 @@ resources:
   - managers/rbac.yaml
   - managers/vault.yaml
   - managers/workloads.yaml
+  - managers/release.yaml
   - webhooks/vault.yaml
   - webhooks/workloads.yaml
+  - webhooks/release.yaml
   - rbac/leader-election.yaml
   - cert-manager/certificate.yaml
 

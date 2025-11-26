@@ -99,7 +99,7 @@ bin/%: ## Build a binary
 	CGO_ENABLED=0 $(BUILD_COMMAND) -o $@ ./cmd/$*/.
 
 clean: ## Clean up the build artifacts
-	rm -rvf $(PROG) $(PROG:%=%.linux) $(PROG:%=%.darwin) hack/boilerplate.go.txt
+	rm -rvf $(PROG) $(PROG:%=%.linux) $(PROG:%=%.darwin)
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

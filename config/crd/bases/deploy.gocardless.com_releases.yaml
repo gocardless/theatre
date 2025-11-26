@@ -152,6 +152,7 @@ spec:
                   required:
                   - phase
                   type: object
+                maxItems: 50
                 type: array
               lastAppliedTime:
                 description: LastAppliedTime is the last time the release was applied

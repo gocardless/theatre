@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -15,6 +16,11 @@ import (
 )
 
 var ErrCannotSupersedeNewRelease = errors.New("cannot supersede a new release that has no phase set")
+
+const (
+	MessageReleaseActive     = "Release is active"
+	MessageReleaseSuperseded = "Release is superseded by %s"
+)
 
 type ReleaseReconciler struct {
 	client.Client
@@ -137,6 +143,7 @@ func (r *ReleaseReconciler) markReleaseActive(ctx context.Context, release *depl
 	release.Status.SupersededBy = ""
 	release.Status.SupersededTime = metav1.Time{}
 	release.Status.Phase = deployv1alpha1.PhaseActive
+	release.Status.Message = MessageReleaseActive
 	return r.Status().Update(ctx, release)
 }
 
@@ -149,6 +156,7 @@ func (r *ReleaseReconciler) markReleaseSuperseded(ctx context.Context, release *
 	release.Status.SupersededBy = supersededBy
 	release.Status.SupersededTime = metav1.Now()
 	release.Status.Phase = deployv1alpha1.PhaseInactive
+	release.Status.Message = fmt.Sprintf(MessageReleaseSuperseded, supersededBy)
 	return r.Status().Update(ctx, release)
 }
 

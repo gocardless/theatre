@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -70,6 +71,7 @@ var _ = Describe("ReleaseController", func() {
 				return releaseFromClient.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
+				HaveField("Message", Equal(MessageReleaseActive)),
 				HaveField("LastAppliedTime", Not(BeNil())),
 				HaveField("SupersededBy", Equal("")),
 				HaveField("SupersededTime", Equal(metav1.Time{})),
@@ -87,6 +89,7 @@ var _ = Describe("ReleaseController", func() {
 				return releaseFromClient.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseInactive)),
+				HaveField("Message", Equal(fmt.Sprintf(MessageReleaseSuperseded, "superseded-by"))),
 				HaveField("SupersededBy", Equal("superseded-by")),
 				HaveField("SupersededTime", Not(BeNil())),
 			))
@@ -557,7 +560,7 @@ var _ = Describe("ReleaseController", func() {
 				return r1.Status.History[0]
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
-				HaveField("LastAppliedTime", Equal(Not(BeNil()))),
+				HaveField("LastAppliedTime", Not(BeNil())),
 				HaveField("SupersededBy", Equal(BeNil())),
 				HaveField("SupersededTime", Equal(metav1.Time{})),
 			))

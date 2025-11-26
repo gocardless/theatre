@@ -20,8 +20,6 @@ import (
 )
 
 var (
-	scheme        = runtime.NewScheme()
-	app           = kingpin.New("release-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
 	scheme               = runtime.NewScheme()
 	app                  = kingpin.New("release-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
 	maxReleasesPerTarget = app.Flag("max-releases-per-target", "Maximum number of releases to keep per target. All releases older than this will be deleted by the reconciler.").

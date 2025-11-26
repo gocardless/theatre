@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -12,6 +13,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var ErrCannotSupersedeNewRelease = errors.New("cannot supersede a new release that has no phase set")
 
 type ReleaseReconciler struct {
 	client.Client
@@ -138,6 +141,10 @@ func (r *ReleaseReconciler) markReleaseActive(ctx context.Context, release *depl
 }
 
 func (r *ReleaseReconciler) markReleaseSuperseded(ctx context.Context, release *deployv1alpha1.Release, supersededBy string) error {
+	if isNewRelease(release.Status.Phase) {
+		return ErrCannotSupersedeNewRelease
+	}
+
 	r.prependToHistory(release)
 	release.Status.SupersededBy = supersededBy
 	release.Status.SupersededTime = metav1.Now()

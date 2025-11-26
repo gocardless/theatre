@@ -15,6 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	DefaultNamespace = "releases"
+)
+
 var _ = Describe("ReleaseController", func() {
 
 	var (
@@ -25,7 +29,7 @@ var _ = Describe("ReleaseController", func() {
 		obj = v1alpha1.Release{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-release",
-				Namespace: "releases",
+				Namespace: DefaultNamespace,
 			},
 			Spec: v1alpha1.ReleaseSpec{
 				UtopiaServiceTargetRelease: "default",
@@ -62,7 +66,7 @@ var _ = Describe("ReleaseController", func() {
 
 			Eventually(func() v1alpha1.ReleaseStatus {
 				releaseFromClient := v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, &releaseFromClient)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: DefaultNamespace}, &releaseFromClient)).To(Succeed())
 				return releaseFromClient.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
@@ -72,19 +76,25 @@ var _ = Describe("ReleaseController", func() {
 			))
 		})
 
-		It("Should set a release as superseded, and update its status", func() {
+		It("Should set a release as superseded, and update its status if previously active", func() {
 			Expect(obj).NotTo(BeNil())
+			Expect(reconciler.markReleaseActive(ctx, &obj)).To(Succeed())
 			Expect(reconciler.markReleaseSuperseded(ctx, &obj, "superseded-by")).To(Succeed())
 
 			Eventually(func() v1alpha1.ReleaseStatus {
 				releaseFromClient := v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, &releaseFromClient))
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: DefaultNamespace}, &releaseFromClient))
 				return releaseFromClient.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseInactive)),
 				HaveField("SupersededBy", Equal("superseded-by")),
 				HaveField("SupersededTime", Not(BeNil())),
 			))
+		})
+
+		It("Should error out if the release is new", func() {
+			Expect(obj).NotTo(BeNil())
+			Expect(reconciler.markReleaseSuperseded(ctx, &obj, "superseded-by")).To(MatchError(ErrCannotSupersedeNewRelease))
 		})
 	})
 
@@ -95,7 +105,7 @@ var _ = Describe("ReleaseController", func() {
 			newRelease := v1alpha1.Release{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-release-2",
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				},
 				Spec: v1alpha1.ReleaseSpec{
 					UtopiaServiceTargetRelease: "default",
@@ -120,7 +130,7 @@ var _ = Describe("ReleaseController", func() {
 
 			Eventually(func() v1alpha1.ReleaseStatus {
 				inactiveRelease := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: "releases"}, inactiveRelease)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-release", Namespace: DefaultNamespace}, inactiveRelease)).To(Succeed())
 				return inactiveRelease.Status
 			}).Should(HaveField("Phase", Equal(v1alpha1.PhaseInactive)))
 		})
@@ -292,7 +302,7 @@ var _ = Describe("ReleaseController", func() {
 
 			result, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
 				NamespacedName: client.ObjectKey{
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 					Name:      release.Name,
 				},
 			}, release)
@@ -305,7 +315,7 @@ var _ = Describe("ReleaseController", func() {
 				fetchedRelease := &v1alpha1.Release{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, fetchedRelease)).To(Succeed())
 				return fetchedRelease.Status.Phase
 			}).Should(Equal(v1alpha1.PhaseActive))
@@ -316,7 +326,7 @@ var _ = Describe("ReleaseController", func() {
 			Expect(release.Status.Phase).To(BeEmpty())
 
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release.Name},
 			}, release)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -325,7 +335,7 @@ var _ = Describe("ReleaseController", func() {
 				fetchedRelease := &v1alpha1.Release{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, fetchedRelease)).To(Succeed())
 				return fetchedRelease.Status
 			}).Should(SatisfyAll(
@@ -342,7 +352,7 @@ var _ = Describe("ReleaseController", func() {
 			// Create a new release and reconcile it
 			newRelease := createRelease(ctx, "reconcile-target-3")
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: newRelease.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: newRelease.Name},
 			}, newRelease)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -351,7 +361,7 @@ var _ = Describe("ReleaseController", func() {
 				fetchedOldRelease := &v1alpha1.Release{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      oldRelease.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, fetchedOldRelease)).To(Succeed())
 				return fetchedOldRelease.Status
 			}).Should(SatisfyAll(
@@ -365,7 +375,7 @@ var _ = Describe("ReleaseController", func() {
 				fetchedNewRelease := &v1alpha1.Release{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      newRelease.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, fetchedNewRelease)).To(Succeed())
 				return fetchedNewRelease.Status.Phase
 			}).Should(Equal(v1alpha1.PhaseActive))
@@ -377,7 +387,7 @@ var _ = Describe("ReleaseController", func() {
 			Expect(createRelease(ctx, "default")).ToNot(BeNil())
 			release := createRelease(ctx, "default")
 
-			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{NamespacedName: client.ObjectKey{Namespace: "releases"}}, release)
+			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{NamespacedName: client.ObjectKey{Namespace: DefaultNamespace}}, release)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify that only 3 releases exist (culling happened)
@@ -398,7 +408,7 @@ var _ = Describe("ReleaseController", func() {
 			Eventually(func() v1alpha1.ReleaseStatus {
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, fetchedRelease)).To(Succeed())
 				return fetchedRelease.Status
 			}).Should(SatisfyAll(
@@ -410,7 +420,7 @@ var _ = Describe("ReleaseController", func() {
 
 			// Reconcile again - should not change anything
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release.Name},
 			}, fetchedRelease)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -418,7 +428,7 @@ var _ = Describe("ReleaseController", func() {
 			refetchedRelease := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
 				Name:      release.Name,
-				Namespace: "releases",
+				Namespace: DefaultNamespace,
 			}, refetchedRelease)).To(Succeed())
 
 			Expect(refetchedRelease.Status.Phase).To(Equal(v1alpha1.PhaseActive))
@@ -435,12 +445,12 @@ var _ = Describe("ReleaseController", func() {
 			fetchedRelease := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
 				Name:      release.Name,
-				Namespace: "releases",
+				Namespace: DefaultNamespace,
 			}, fetchedRelease)).To(Succeed())
 
 			// Reconcile - should not change anything since it's inactive
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release.Name},
 			}, fetchedRelease)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -450,7 +460,7 @@ var _ = Describe("ReleaseController", func() {
 				refetchedRelease := &v1alpha1.Release{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
-					Namespace: "releases",
+					Namespace: DefaultNamespace,
 				}, refetchedRelease)).To(Succeed())
 				return refetchedRelease.Status
 			}).Should(SatisfyAll(
@@ -465,14 +475,14 @@ var _ = Describe("ReleaseController", func() {
 			// Create first release and reconcile
 			release1 := createRelease(ctx, target)
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release1.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release1.Name},
 			}, release1)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create second release and reconcile
 			release2 := createRelease(ctx, target)
 			_, err = reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release2.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release2.Name},
 			}, release2)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -481,8 +491,8 @@ var _ = Describe("ReleaseController", func() {
 				r1 := &v1alpha1.Release{}
 				r2 := &v1alpha1.Release{}
 
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: "releases"}, r1)).To(Succeed())
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: "releases"}, r2)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: DefaultNamespace}, r2)).To(Succeed())
 
 				return r1.Status.Phase == v1alpha1.PhaseInactive &&
 					r2.Status.Phase == v1alpha1.PhaseActive &&
@@ -497,12 +507,12 @@ var _ = Describe("ReleaseController", func() {
 
 			// Reconcile both
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release1.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release1.Name},
 			}, release1)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release2.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release2.Name},
 			}, release2)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -511,8 +521,8 @@ var _ = Describe("ReleaseController", func() {
 				r1 := &v1alpha1.Release{}
 				r2 := &v1alpha1.Release{}
 
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: "releases"}, r1)).To(Succeed())
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: "releases"}, r2)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: DefaultNamespace}, r2)).To(Succeed())
 
 				return r1.Status.Phase == v1alpha1.PhaseActive &&
 					r2.Status.Phase == v1alpha1.PhaseActive
@@ -524,29 +534,41 @@ var _ = Describe("ReleaseController", func() {
 			release2 := createRelease(ctx, "history")
 
 			_, err := reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release1.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release1.Name},
 			}, release1)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = reconciler.Reconcile(logr.Discard(), ctx, ctrl.Request{
-				NamespacedName: client.ObjectKey{Namespace: "releases", Name: release2.Name},
+				NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release2.Name},
 			}, release2)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() v1alpha1.ReleaseStatus {
 				r1 := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: "releases"}, r1)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1)).To(Succeed())
 				return r1.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", Equal(v1alpha1.PhaseInactive)),
 			))
 
+			Eventually(func() v1alpha1.ReleaseStatusEntry {
+				r1 := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1)).To(Succeed())
+				return r1.Status.History[0]
+			}).Should(SatisfyAll(
+				HaveField("Phase", Equal(v1alpha1.PhaseActive)),
+				HaveField("LastAppliedTime", Equal(Not(BeNil()))),
+				HaveField("SupersededBy", Equal(BeNil())),
+				HaveField("SupersededTime", Equal(metav1.Time{})),
+			))
+
 			Eventually(func() v1alpha1.ReleaseStatus {
 				r2 := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: "releases"}, r2)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: DefaultNamespace}, r2)).To(Succeed())
 				return r2.Status
 			}).Should(SatisfyAll(
 				HaveField("Phase", v1alpha1.PhaseActive),
+				HaveField("History", HaveLen(0)),
 			))
 		})
 	})
@@ -628,7 +650,7 @@ func generateRelease(target string) *v1alpha1.Release {
 	return &v1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      target + "-" + infraSHA[:7] + "-" + appSHA[:7],
-			Namespace: "releases",
+			Namespace: DefaultNamespace,
 		},
 		Spec: v1alpha1.ReleaseSpec{
 			UtopiaServiceTargetRelease: target,

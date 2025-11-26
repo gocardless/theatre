@@ -37,7 +37,6 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 			},
 		}
 
-		// oldObj = &deployv1alpha1.Release{}
 		releaseNamerWebhook = NewReleaseNamerWebhook(
 			logr.New(logr.Discard().GetSink()),
 			scheme,

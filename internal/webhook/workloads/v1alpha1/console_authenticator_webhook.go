@@ -8,18 +8,19 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // +kubebuilder:object:generate=false
 type ConsoleAuthenticatorWebhook struct {
-	lifecycleRecorder LifecycleEventRecorder
+	lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
 	logger            logr.Logger
 	decoder           admission.Decoder
 }
 
-func NewConsoleAuthenticatorWebhook(lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthenticatorWebhook {
+func NewConsoleAuthenticatorWebhook(lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthenticatorWebhook {
 	decoder := admission.NewDecoder(scheme)
 
 	return &ConsoleAuthenticatorWebhook{
@@ -36,7 +37,7 @@ func (c *ConsoleAuthenticatorWebhook) Handle(ctx context.Context, req admission.
 		logger.Info("completed request", "event", "request.end", "duration", time.Since(start).Seconds())
 	}(time.Now())
 
-	csl := &Console{}
+	csl := &workloadsv1alpha1.Console{}
 	if err := c.decoder.Decode(req, csl); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}

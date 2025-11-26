@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/logging"
 	rbacutils "github.com/gocardless/theatre/v5/pkg/rbac"
 )
@@ -21,12 +22,12 @@ import (
 // +kubebuilder:object:generate=false
 type ConsoleAuthorisationWebhook struct {
 	client            client.Client
-	lifecycleRecorder LifecycleEventRecorder
+	lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
 	logger            logr.Logger
 	decoder           admission.Decoder
 }
 
-func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthorisationWebhook {
+func NewConsoleAuthorisationWebhook(c client.Client, lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder, logger logr.Logger, scheme *runtime.Scheme) *ConsoleAuthorisationWebhook {
 	decoder := admission.NewDecoder(scheme)
 
 	return &ConsoleAuthorisationWebhook{
@@ -45,13 +46,13 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	}(time.Now())
 
 	// request console authorisation object
-	updatedAuth := &ConsoleAuthorisation{}
+	updatedAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
 	if err := c.decoder.Decode(req, updatedAuth); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// existing console authorisation object
-	existingAuth := &ConsoleAuthorisation{}
+	existingAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
 	if err := c.decoder.Decode(req, existingAuth); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
@@ -85,20 +86,20 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 	return admission.ValidationResponse(true, "")
 }
 
-func (c *ConsoleAuthorisationWebhook) getConsole(ctx context.Context, name, namespace string) (*Console, error) {
+func (c *ConsoleAuthorisationWebhook) getConsole(ctx context.Context, name, namespace string) (*workloadsv1alpha1.Console, error) {
 	namespacedName := client.ObjectKey{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	csl := &Console{}
+	csl := &workloadsv1alpha1.Console{}
 
 	return csl, c.client.Get(ctx, namespacedName, csl)
 }
 
 type ConsoleAuthorisationUpdate struct {
-	existingAuth *ConsoleAuthorisation
-	updatedAuth  *ConsoleAuthorisation
+	existingAuth *workloadsv1alpha1.ConsoleAuthorisation
+	updatedAuth  *workloadsv1alpha1.ConsoleAuthorisation
 	user         string
 	owner        string
 }

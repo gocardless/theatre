@@ -22,6 +22,7 @@ import (
 	rbacv1alpha1 "github.com/gocardless/theatre/v5/api/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	consolecontroller "github.com/gocardless/theatre/v5/internal/controller/workloads"
+	internalworkloadsv1alpha1 "github.com/gocardless/theatre/v5/internal/webhook/workloads/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/workloads/console/events"
 )
 
@@ -81,7 +82,7 @@ var _ = BeforeSuite(func() {
 
 	// console authenticator webhook
 	mgr.GetWebhookServer().Register("/mutate-consoles", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthenticatorWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleAuthenticatorWebhook(
 			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authenticator"),
 			mgr.GetScheme(),
@@ -90,7 +91,7 @@ var _ = BeforeSuite(func() {
 
 	// console authorisation webhook
 	mgr.GetWebhookServer().Register("/validate-consoleauthorisations", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleAuthorisationWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleAuthorisationWebhook(
 			mgr.GetClient(),
 			lifecycleRecorder,
 			ctrl.Log.WithName("webhooks").WithName("console-authorisation"),
@@ -100,7 +101,7 @@ var _ = BeforeSuite(func() {
 
 	// console template webhook
 	mgr.GetWebhookServer().Register("/validate-consoletemplates", &admission.Webhook{
-		Handler: workloadsv1alpha1.NewConsoleTemplateValidationWebhook(
+		Handler: internalworkloadsv1alpha1.NewConsoleTemplateValidationWebhook(
 			ctrl.Log.WithName("webhooks").WithName("console-template"),
 			mgr.GetScheme(),
 		),

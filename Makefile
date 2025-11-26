@@ -22,7 +22,7 @@ endif
 
 .PHONY: build build-darwin build-linux build-all clean fmt vet test \
 	acceptance-e2e acceptance-run acceptance-prepare acceptance-destory \
-	generate manifests install-tools deploy help \
+	generate manifests deploy help \
 	lint lint-fix lint-config run \
 	docker-build docker-push build-installer kustomize controller-gen \
 	setup-envtest envtest golangci-lint
@@ -48,13 +48,8 @@ help: ## Display this help.
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
-hack/boilerplate.go.txt:
-	echo "/*" > $@
-	cat LICENSE >> $@
-	echo "*/" >> $@
-
-generate: controller-gen hack/boilerplate.go.txt ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object paths="./..."
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -106,9 +101,6 @@ bin/%: ## Build a binary
 clean: ## Clean up the build artifacts
 	rm -rvf $(PROG) $(PROG:%=%.linux) $(PROG:%=%.darwin) hack/boilerplate.go.txt
 
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
-
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
@@ -148,6 +140,8 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4.0
 GINKGO_VERSION ?= v1.16.5
+
+install-tools: kustomize controller-gen setup-envtest golangci-lint setup-ginkgo
 
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)

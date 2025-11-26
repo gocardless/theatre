@@ -9,10 +9,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 )
 
-func mustConsoleAuthorisationFixture(path string) *ConsoleAuthorisation {
-	consoleAuthorisation := &ConsoleAuthorisation{}
+func mustConsoleAuthorisationFixture(path string) *workloadsv1alpha1.ConsoleAuthorisation {
+	consoleAuthorisation := &workloadsv1alpha1.ConsoleAuthorisation{}
 
 	consoleAuthorisationFixtureYAML, _ := os.ReadFile(path)
 

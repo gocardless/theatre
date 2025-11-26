@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -35,7 +36,7 @@ func (c *ConsoleTemplateValidationWebhook) Handle(ctx context.Context, req admis
 		logger.Info("request completed", "event", "request.end", "duration", time.Since(start).Seconds())
 	}(time.Now())
 
-	template := &ConsoleTemplate{}
+	template := &workloadsv1alpha1.ConsoleTemplate{}
 	if err := c.decoder.Decode(req, template); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}

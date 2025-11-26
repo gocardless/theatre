@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -20,13 +21,13 @@ import (
 type ConsoleAttachObserverWebhook struct {
 	client            client.Client
 	recorder          record.EventRecorder
-	lifecycleRecorder LifecycleEventRecorder
+	lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder
 	logger            logr.Logger
 	decoder           admission.Decoder
 	requestTimeout    time.Duration
 }
 
-func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration, scheme *runtime.Scheme) *ConsoleAttachObserverWebhook {
+func NewConsoleAttachObserverWebhook(c client.Client, recorder record.EventRecorder, lifecycleRecorder workloadsv1alpha1.LifecycleEventRecorder, logger logr.Logger, requestTimeout time.Duration, scheme *runtime.Scheme) *ConsoleAttachObserverWebhook {
 	decoder := admission.NewDecoder(scheme)
 
 	return &ConsoleAttachObserverWebhook{
@@ -84,7 +85,7 @@ func (c *ConsoleAttachObserverWebhook) Handle(ctx context.Context, req admission
 	defer cancel()
 
 	// Get the console associated to publish events
-	csl := &Console{}
+	csl := &workloadsv1alpha1.Console{}
 	if err := c.client.Get(rctx, client.ObjectKey{
 		Namespace: req.Namespace,
 		Name:      pod.Labels["console-name"],

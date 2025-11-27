@@ -172,9 +172,8 @@ spec:
                 type: array
               fromReleaseName:
                 description: |-
-                  FromReleaseName is the release being rolled back from. This is a reference to the
-                  Release resource name. While this could be derived, explicitly storing
-                  it provides clarity and an audit trail.
+                  FromReleaseName is the release being rolled back from. This is a reference
+                  to the Release resource name.
                 type: string
               history:
                 description: History is a list of previous statuses of the rollback.

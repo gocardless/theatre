@@ -118,10 +118,38 @@ spec:
           status:
             description: Status defines the observed state of Release
             properties:
+              healthStatus:
+                default: Unknown
+                description: HealthStatus indicates whether the release is healthy
+                  or not, as determined by an external monitoring system.
+                enum:
+                - Healthy
+                - Unhealthy
+                - Unknown
+                type: string
+              healthStatusLastChecked:
+                description: HealthStatusLastChecked is the last time the health status
+                  was checked by the external system.
+                format: date-time
+                type: string
               history:
                 description: History is a list of previous statuses of the release.
                 items:
                   properties:
+                    healthStatus:
+                      default: Unknown
+                      description: HealthStatus indicates whether the release is healthy
+                        or not, as determined by an external monitoring system.
+                      enum:
+                      - Healthy
+                      - Unhealthy
+                      - Unknown
+                      type: string
+                    healthStatusLastChecked:
+                      description: HealthStatusLastChecked is the last time the health
+                        status was checked by the external system.
+                      format: date-time
+                      type: string
                     lastAppliedTime:
                       description: LastAppliedTime is the last time the release was
                         applied to the cluster.

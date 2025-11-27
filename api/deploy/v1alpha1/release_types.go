@@ -55,6 +55,14 @@ const (
 	PhaseInactive Phase = "Inactive"
 )
 
+type HealthStatus string
+
+const (
+	HealthStatusHealthy   HealthStatus = "Healthy"
+	HealthStatusUnhealthy HealthStatus = "Unhealthy"
+	HealthStatusUnknown   HealthStatus = "Unknown"
+)
+
 type ReleaseStatusEntry struct {
 	// Phase is the current phase of the release. Active indicates the release
 	// is currently live in the cluster, Inactive indicates the release is no
@@ -62,18 +70,32 @@ type ReleaseStatusEntry struct {
 	// +kubebuilder:validation:Enum:=Active;Inactive
 	// +kubebuilder:validation:Required
 	Phase Phase `json:"phase"`
+
 	// Message is a human-readable message indicating the state of the release.
 	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
+
 	// LastAppliedTime is the last time the release was applied to the cluster.
 	// +kubebuilder:validation:Optional
 	LastAppliedTime metav1.Time `json:"lastAppliedTime,omitempty"`
+
 	// SupersededBy is the name of the release that superseded this release.
 	// +kubebuilder:validation:Optional
 	SupersededBy string `json:"supersededBy,omitempty"`
+
 	// SupersededTime is the time when this release was superseded.
 	// +kubebuilder:validation:Optional
 	SupersededTime metav1.Time `json:"supersededTime,omitempty"`
+
+	// HealthStatus indicates whether the release is healthy or not, as determined by an external monitoring system.
+	// +kubebuilder:validation:Enum:=Healthy;Unhealthy;Unknown
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=Unknown
+	HealthStatus HealthStatus `json:"healthStatus,omitempty"`
+
+	// HealthStatusLastChecked is the last time the health status was checked by the external system.
+	// +kubebuilder:validation:Optional
+	HealthStatusLastChecked *metav1.Time `json:"healthStatusLastChecked,omitempty"`
 }
 
 type ReleaseStatus struct {

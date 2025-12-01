@@ -25,6 +25,65 @@ spec:
               may reject unrecognized values.
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
+          config:
+            description: ReleaseConfig the release configuration
+            properties:
+              revisions:
+                additionalProperties:
+                  properties:
+                    id:
+                      description: ID is the unique identifier of the revision (e.g.,
+                        commit SHA, image digest, chart version)
+                      type: string
+                    metadata:
+                      description: Metadata contains additional optional information
+                        about the revision
+                      properties:
+                        author:
+                          description: Author is the author of the commit, if available.
+                            The field is optional.
+                          type: string
+                        branch:
+                          description: Branch is the branch of the commit, if available.
+                            The field is optional.
+                          type: string
+                        message:
+                          description: Message is the message of the commit, if available.
+                            The field is optional.
+                          type: string
+                        tags:
+                          description: Tags are additional tags associated with this
+                            revision
+                          items:
+                            type: string
+                          maxItems: 10
+                          type: array
+                      type: object
+                    source:
+                      description: Source identifies where this revision comes from
+                        (e.g., repository URL, registry URL)
+                      type: string
+                    type:
+                      description: Type specifies the kind of revision source (git,
+                        container_image, helm_chart)
+                      type: string
+                  required:
+                  - id
+                  type: object
+                description: |-
+                  Revisions is a map of revision names to their specifications
+                  Each source must be unique across all revisions
+                maxProperties: 10
+                minProperties: 1
+                type: object
+              targetName:
+                description: TargetName is a namespace-unique identifier for this
+                  release target
+                type: string
+            required:
+            - revisions
+            - targetName
+            type: object
           kind:
             description: |-
               Kind is a string value representing the REST resource this object represents.
@@ -34,53 +93,6 @@ spec:
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
-            type: object
-          revisions:
-            additionalProperties:
-              properties:
-                id:
-                  description: ID is the unique identifier of the revision (e.g.,
-                    commit SHA, image digest, chart version)
-                  type: string
-                metadata:
-                  description: Metadata contains additional optional information about
-                    the revision
-                  properties:
-                    author:
-                      description: Author is the author of the commit, if available.
-                        The field is optional.
-                      type: string
-                    branch:
-                      description: Branch is the branch of the commit, if available.
-                        The field is optional.
-                      type: string
-                    message:
-                      description: Message is the message of the commit, if available.
-                        The field is optional.
-                      type: string
-                    tags:
-                      description: Tags are additional tags associated with this revision
-                      items:
-                        type: string
-                      maxItems: 10
-                      type: array
-                  type: object
-                source:
-                  description: Source identifies where this revision comes from (e.g.,
-                    repository URL, registry URL)
-                  type: string
-                type:
-                  description: Type specifies the kind of revision source (git, container_image,
-                    helm_chart)
-                  type: string
-              required:
-              - id
-              type: object
-            description: |-
-              Revisions is a map of revision names to their specifications
-              Each source must be unique across all revisions
-            maxProperties: 10
-            minProperties: 1
             type: object
           status:
             description: Status defines the observed state of Release
@@ -178,14 +190,8 @@ spec:
             required:
             - phase
             type: object
-          targetName:
-            description: TargetName is a namespace-unique identifier for this release
-              target
-            type: string
         required:
-        - ""
-        - revisions
-        - targetName
+        - config
         type: object
     served: true
     storage: true

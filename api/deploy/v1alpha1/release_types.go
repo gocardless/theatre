@@ -132,7 +132,7 @@ type Release struct {
 
 	// ReleaseConfig the release configuration
 	// +required
-	ReleaseConfig `json:",inline"`
+	ReleaseConfig `json:"config,omitempty,omitzero"`
 
 	// Status defines the observed state of Release
 	// +optional

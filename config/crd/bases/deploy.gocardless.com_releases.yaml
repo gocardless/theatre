@@ -147,6 +147,10 @@ spec:
                       - Active
                       - Inactive
                       type: string
+                    startTime:
+                      description: StartTime is the time when the release was started.
+                      format: date-time
+                      type: string
                     supersededBy:
                       description: SupersededBy is the name of the release that superseded
                         this release.
@@ -178,6 +182,10 @@ spec:
                 enum:
                 - Active
                 - Inactive
+                type: string
+              startTime:
+                description: StartTime is the time when the release was started.
+                format: date-time
                 type: string
               supersededBy:
                 description: SupersededBy is the name of the release that superseded

@@ -109,7 +109,7 @@ type ReleaseStatusEntry struct {
 
 	// HealthStatusLastChecked is the last time the health status was checked by the external system.
 	// +kubebuilder:validation:Optional
-	HealthStatusLastChecked *metav1.Time `json:"healthStatusLastChecked,omitempty"`
+	HealthStatusLastChecked metav1.Time `json:"healthStatusLastChecked,omitempty"`
 }
 
 type ReleaseStatus struct {

@@ -89,6 +89,10 @@ type ReleaseStatusEntry struct {
 	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
 
+	// StartTime is the time when the release was started.
+	// +kubebuilder:validation:Optional
+	StartTime metav1.Time `json:"startTime,omitempty"`
+
 	// LastAppliedTime is the last time the release was applied to the cluster.
 	// +kubebuilder:validation:Optional
 	LastAppliedTime metav1.Time `json:"lastAppliedTime,omitempty"`

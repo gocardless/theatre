@@ -29,7 +29,10 @@ spec:
             description: ReleaseConfig the release configuration
             properties:
               revisions:
-                additionalProperties:
+                description: |-
+                  Revisions is a list of revisions to be released. Each revision.name must be
+                  unique across all revisions
+                items:
                   properties:
                     id:
                       description: ID is the unique identifier of the revision (e.g.,
@@ -51,14 +54,11 @@ spec:
                           description: Message is the message of the commit, if available.
                             The field is optional.
                           type: string
-                        tags:
-                          description: Tags are additional tags associated with this
-                            revision
-                          items:
-                            type: string
-                          maxItems: 10
-                          type: array
                       type: object
+                    name:
+                      description: Name is unique identifier for this revision. E.g.
+                        application-revision, chart-revision, etc.
+                      type: string
                     source:
                       description: Source identifies where this revision comes from
                         (e.g., repository URL, registry URL)
@@ -69,13 +69,11 @@ spec:
                       type: string
                   required:
                   - id
+                  - name
                   type: object
-                description: |-
-                  Revisions is a map of revision names to their specifications
-                  Each source must be unique across all revisions
-                maxProperties: 10
-                minProperties: 1
-                type: object
+                maxItems: 10
+                minItems: 1
+                type: array
               targetName:
                 description: TargetName is a namespace-unique identifier for this
                   release target

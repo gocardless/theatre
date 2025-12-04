@@ -13,17 +13,21 @@ type ReleaseConfig struct {
 	// +kubebuilder:validation:Required
 	TargetName string `json:"targetName"`
 
-	// Revisions is a map of revision names to their specifications
-	// Each source must be unique across all revisions
+	// Revisions is a list of revisions to be released. Each revision.name must be
+	// unique across all revisions
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinProperties=1
-	// +kubebuilder:validation:MaxProperties=10
-	Revisions map[string]Revision `json:"revisions"`
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=10
+	Revisions []Revision `json:"revisions"`
 }
 
 type RevisionType string
 
 type Revision struct {
+	// Name is unique identifier for this revision. E.g. application-revision, chart-revision, etc.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
 	// ID is the unique identifier of the revision (e.g., commit SHA, image digest, chart version)
 	// +kubebuilder:validation:Required
 	ID string `json:"id"`
@@ -53,11 +57,6 @@ type RevisionMetadata struct {
 	// Message is the message of the commit, if available. The field is optional.
 	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
-
-	// Tags are additional tags associated with this revision
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxItems=10
-	Tags []string `json:"tags,omitempty"`
 }
 
 // ReleaseStatus defines the observed state of Release.

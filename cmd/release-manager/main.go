@@ -8,7 +8,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 
-	// releasewebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/release"
+	releasewebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/release"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -37,7 +37,7 @@ func init() {
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-	// logger := commonOptions.Logger()
+	logger := commonOptions.Logger()
 
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
@@ -62,8 +62,7 @@ func main() {
 	if *enableReleaseUniquenessWebhooks {
 		// Webhook configuration
 		manager.GetWebhookServer().Register("/mutate-releases", &admission.Webhook{
-			// Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
-			Handler: nil,
+			Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
 		})
 
 		manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{

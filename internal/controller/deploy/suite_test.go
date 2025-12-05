@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +15,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var (
@@ -33,7 +34,9 @@ func TestDeploy(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	ctx, cancel = context.WithCancel(context.TODO())
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	ctx, cancel = context.WithCancel(context.Background())
 
 	// var err error
 	err := deployv1alpha1.AddToScheme(scheme.Scheme)
@@ -61,8 +64,9 @@ var _ = BeforeSuite(func() {
 	reconciler = &ReleaseReconciler{
 		Client:               k8sClient,
 		Scheme:               scheme.Scheme,
-		Log:                  logr.Discard(),
+		Log:                  ctrl.Log.WithName("controllers").WithName("Release"),
 		MaxReleasesPerTarget: 3,
+		CullingStrategy:      CullingStrategyDeploymentEndTime,
 	}
 
 	err = reconciler.SetupWithManager(ctx, manager)

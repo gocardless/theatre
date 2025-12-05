@@ -171,4 +171,48 @@ var _ = Describe("Helpers", func() {
 
 	})
 
+	Context("releaseConfigsEqual", func() {
+		var a, b deployv1alpha1.ReleaseConfig
+
+		BeforeEach(func() {
+			a = deployv1alpha1.ReleaseConfig{
+				TargetName: "test-target",
+				Revisions: []deployv1alpha1.Revision{
+					{Name: "application", ID: "abc123"},
+					{Name: "infrastructure", ID: "xyz789"},
+				},
+			}
+			b = deployv1alpha1.ReleaseConfig{
+				TargetName: "test-target",
+				Revisions: []deployv1alpha1.Revision{
+					{Name: "application", ID: "abc123"},
+					{Name: "infrastructure", ID: "xyz789"},
+				},
+			}
+		})
+
+		It("Should be equal for identical configs", func() {
+			Expect(releaseConfigsEqual(a, b)).To(BeTrue())
+		})
+
+		It("Should not be equal if targetNames are different", func() {
+			b.TargetName = "different-target"
+			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
+		})
+
+		It("Should not be equal if revisions are different", func() {
+			b.Revisions[0].ID = "different-id"
+			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
+		})
+
+		It("Should not be equal if number of revisions are different", func() {
+			b.Revisions = append(b.Revisions, deployv1alpha1.Revision{Name: "additional", ID: "extra123"})
+			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
+		})
+
+		It("Should not be equal if revision names are different", func() {
+			b.Revisions[0].Name = "different-app"
+			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
+		})
+	})
 })

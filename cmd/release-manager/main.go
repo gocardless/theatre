@@ -66,8 +66,7 @@ func main() {
 		})
 
 		manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{
-			// Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
-			Handler: nil,
+			Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
 		})
 	}
 

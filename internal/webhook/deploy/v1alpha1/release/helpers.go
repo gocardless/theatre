@@ -86,3 +86,34 @@ func generateReleaseName(release deployv1alpha1.Release) (string, error) {
 
 	return fmt.Sprintf("%s-%s", targetName, releaseHash), nil
 }
+
+func releaseConfigsEqual(a, b deployv1alpha1.ReleaseConfig) bool {
+	if a.TargetName != b.TargetName {
+		return false
+	}
+
+	if len(a.Revisions) != len(b.Revisions) {
+		return false
+	}
+
+	// Create maps for easier comparison
+	aRevs := make(map[string]deployv1alpha1.Revision)
+	bRevs := make(map[string]deployv1alpha1.Revision)
+
+	for _, rev := range a.Revisions {
+		aRevs[rev.Name] = rev
+	}
+
+	for _, rev := range b.Revisions {
+		bRevs[rev.Name] = rev
+	}
+
+	// Compare each revision
+	for name, aRev := range aRevs {
+		if bRev, exists := bRevs[name]; !exists || aRev.ID != bRev.ID {
+			return false
+		}
+	}
+
+	return true
+}

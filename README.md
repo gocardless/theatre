@@ -187,3 +187,41 @@ make test
   [Example acceptance test](cmd/workloads-manager/acceptance/acceptance.go).
 
 [ginkgo]: https://onsi.github.io/ginkgo
+
+
+## Upgrading theatre
+
+### Upgrading from v4 to v5
+
+Theatre v5 is using the Kubebuilder v3 with its new layout, which introduces the
+following changes:
+#### Go module is now upgraded from github.com/gocardless/theatre/v4 to github.com/gocardless/theatre/v5
+The go module is now upgraded from github.com/gocardless/theatre/v4 to github.com/gocardless/theatre/v5, including all code references.
+
+
+#### `apis` folder is now called `api`
+Meaning that if you are importing any packages from `github.com/gocardless/theatre/v4/apis`, they should now be imported from `github.com/gocardless/theatre/v5/api`.
+
+#### `internal` folder has been added
+The unexported internal folder has been added to the project layout, containing the controllers and webhooks. If you were previously importing the controllers or webhooks you won't be able to do so any more.
+
+#### `pkg` folder
+No changes here, any packages imported from the `github.com/gocardless/theatre/v4/pkg` should continue to work as expected in v5 by using `github.com/gocardless/theatre/v5/pkg`.
+
+#### CRDs have to be imported manually from `config/crd`
+The CRDs are no longer included in the `config/base` kustomization and have to be imported manually from `config/crd`.
+
+```yaml
+# Before
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - github.com/gocardless/theatre/config/base?ref=v4.x.x
+
+# After
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - github.com/gocardless/theatre/config/crd?ref=v5.x.x
+  - github.com/gocardless/theatre/config/base?ref=v5.x.x
+```

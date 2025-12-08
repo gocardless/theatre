@@ -15,6 +15,8 @@ resources:
   - managers/workloads.yaml
   - webhooks/vault.yaml
   - webhooks/workloads.yaml
+  - webhooks/release-mutating.yaml
+  - webhooks/release-validating.yaml
   - rbac/leader-election.yaml
   - cert-manager/certificate.yaml
 

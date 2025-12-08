@@ -25,7 +25,7 @@ var (
 	enableReleaseUniquenessWebhooks = app.Flag(
 		"enable-release-uniqueness-webhooks",
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
-			" release.config field and validated for uniqueness across the namespace.",
+			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("true").Bool()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
@@ -59,14 +59,14 @@ func main() {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
+	manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{
+		Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
+	})
+
 	if *enableReleaseUniquenessWebhooks {
 		// Webhook configuration
 		manager.GetWebhookServer().Register("/mutate-releases", &admission.Webhook{
 			Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
-		})
-
-		manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{
-			Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
 		})
 	}
 

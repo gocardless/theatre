@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
+	"time"
 
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo"
@@ -39,6 +41,7 @@ var _ = Describe("ReleaseController", func() {
 
 		err := k8sClient.Create(ctx, &obj)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(reconciler.initRelease(ctx, &obj)).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -46,23 +49,88 @@ var _ = Describe("ReleaseController", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Context("Annotations", func() {
-		It("Should update status.phase when annotated with {base}/release-activate", func() {
+	Context("handleAnnotations", func() {
+		var (
+			stringTimestamp string
+			metav1Timestamp metav1.Time
+		)
+
+		BeforeEach(func() {
+			stringTimestamp = "2025-12-08T14:42:00Z"
+			timestamp, err := time.Parse(time.RFC3339, stringTimestamp)
+			Expect(err).NotTo(HaveOccurred())
+			metav1Timestamp = metav1.NewTime(timestamp)
+		})
+
+		It("Should update status.phase when annotated with "+v1alpha1.AnnotationKeyReleaseActivate, func() {
 			obj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetPhase: "",
+				v1alpha1.AnnotationKeyReleaseActivate: "",
 			}
 			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
 			Expect(obj).To(HaveField("Status.Phase", v1alpha1.PhaseActive))
 			Expect(obj).To(HaveField("Status.Message", MessageReleaseActive))
-			Expect(obj).To(Not(HaveKey("Metadata.Annotations." + v1alpha1.AnnotationKeyReleaseSetPhase)))
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseActivate)))
 		})
 
-		It("Should update status.deployStartTime when annotated with {base}/release-deploy-start-time", func() {
-			// Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
-			Skip("to be implemented")
+		It("Should update status.deploymentStartTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
+			obj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: stringTimestamp,
+			}
+			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(obj.Status.DeploymentStartTime.Unix()).To(Equal(metav1Timestamp.Unix()))
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)))
 		})
 
-		It("Should update status.deployEndTime when annotated with {base}/release-deploy-end-time", func() {
+		It("Should error when passing invalid time when annotated with"+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
+			obj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
+			}
+			Expect(reconciler.handleAnnotations(ctx, &obj)).Error()
+		})
+
+		It("Should error when passing invalid time when annotated with"+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
+			obj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: "not-a-timestamp",
+			}
+			Expect(reconciler.handleAnnotations(ctx, &obj)).Error()
+		})
+
+		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
+			obj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
+			}
+			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(obj.Status.DeploymentEndTime.Unix()).To(Equal(metav1Timestamp.Unix()))
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)))
+		})
+
+		It("Should update all status fields when annotated with "+strings.Join([]string{
+			v1alpha1.AnnotationKeyReleaseActivate,
+			v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime,
+			v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime,
+		}, ","), func() {
+			startTimestamp := "2025-12-08T14:32:00Z"
+			metav1StartTimestamp := getMetaV1Timestamp(startTimestamp)
+			endTimestamp := "2025-12-08T14:42:00Z"
+			metav1EndTimestamp := getMetaV1Timestamp(endTimestamp)
+
+			obj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseActivate:               "",
+				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
+			}
+			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(obj.Status.Phase).To(Equal(v1alpha1.PhaseActive))
+			Expect(obj.Status.Message).To(Equal(MessageReleaseActive))
+			Expect(obj.Status.DeploymentStartTime.Unix()).To(Equal(metav1StartTimestamp.Unix()))
+			Expect(obj.Status.DeploymentEndTime.Unix()).To(Equal(metav1EndTimestamp.Unix()))
+
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseActivate)))
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)))
+			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)))
+		})
+
+		It("Should supersede previous releases when annotated with "+v1alpha1.AnnotationKeyReleaseActivate, func() {
 			// Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
 			Skip("to be implemented")
 		})
@@ -688,4 +756,10 @@ func createRelease(ctx context.Context, target string) *v1alpha1.Release {
 	err := k8sClient.Create(ctx, release)
 	Expect(err).NotTo(HaveOccurred())
 	return release
+}
+
+func getMetaV1Timestamp(ts string) metav1.Time {
+	timestamp, err := time.Parse(time.RFC3339, ts)
+	Expect(err).NotTo(HaveOccurred())
+	return metav1.NewTime(timestamp)
 }

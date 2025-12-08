@@ -2,10 +2,12 @@ package deploy
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -185,13 +187,67 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 // 	return nil
 // }
 
+func (r *ReleaseReconciler) initRelease(ctx context.Context, release *deployv1alpha1.Release) error {
+	release.Status.Phase = deployv1alpha1.PhaseInactive
+	release.Status.Message = ""
+	release.Status.HealthStatus = deployv1alpha1.HealthStatusUnknown
+
+	return r.Status().Update(ctx, release)
+}
+
 func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, release *deployv1alpha1.Release) error {
+	modified := false
+
+	if _, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseActivate]; ok {
+		release.Status.Phase = deployv1alpha1.PhaseActive
+		release.Status.Message = MessageReleaseActive
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseActivate)
+		modified = true
+	}
+
+	if startTimestamp, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime]; ok {
+		startTime, err := time.Parse(time.RFC3339, startTimestamp)
+		if err != nil {
+			return err
+		}
+		release.Status.DeploymentStartTime = metav1.NewTime(startTime)
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)
+		modified = true
+	}
+
+	if startTimestamp, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]; ok {
+		startTime, err := time.Parse(time.RFC3339, startTimestamp)
+		if err != nil {
+			return err
+		}
+		release.Status.DeploymentEndTime = metav1.NewTime(startTime)
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)
+		modified = true
+	}
+
+	if modified {
+		return r.Status().Update(ctx, release)
+	}
+
 	return nil
 }
 
 func (r *ReleaseReconciler) Reconcile(logger logr.Logger, ctx context.Context, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
 	logger.Info("reconciling release")
+
+	// The release has been just created. Initialise status fields.
+	if release.Status.Phase == "" {
+		err := r.initRelease(ctx, release)
+		if err != nil {
+			logger.Error(err, "failed to initialise release")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// TODO: add a check if the release is being deleted
+
+	r.handleAnnotations(ctx, release)
 
 	// if isNewRelease(release.Status.Phase) {
 	// 	err := r.markReleaseActive(ctx, release)

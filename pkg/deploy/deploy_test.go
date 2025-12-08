@@ -1,4 +1,4 @@
-package release
+package deploy
 
 import (
 	"strings"
@@ -90,20 +90,20 @@ var _ = Describe("Helpers", func() {
 
 	Context("hashString", func() {
 		It("Should hash a string and return hex representation", func() {
-			result := hashString("test")
+			result := hashString([]byte("test"))
 			Expect(result).To(HaveLen(7))
 			Expect(result).To(MatchRegexp("^[0-9a-f]+$"))
 		})
 
 		It("Should produce consistent hashes for the same input", func() {
-			result1 := hashString("test")
-			result2 := hashString("test")
+			result1 := hashString([]byte("test"))
+			result2 := hashString([]byte("test"))
 			Expect(result1).To(Equal(result2))
 		})
 
 		It("Should produce different hashes for different inputs", func() {
-			result1 := hashString("test")
-			result2 := hashString("different")
+			result1 := hashString([]byte("test"))
+			result2 := hashString([]byte("different"))
 			Expect(result1).NotTo(Equal(result2))
 		})
 	})
@@ -123,17 +123,17 @@ var _ = Describe("Helpers", func() {
 		})
 
 		It("Should generate a release name", func() {
-			name, err := generateReleaseName(release)
+			name, err := GenerateReleaseName(release)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(name).NotTo(BeEmpty())
-			Expect(name).To(Equal("test-target-e341d4d"))
+			Expect(name).To(Equal("test-target-3978d50"))
 		})
 
 		It("Should generate consistent release names for the same input", func() {
 			releaseCopy := release.DeepCopy()
 
-			name1, err1 := generateReleaseName(release)
-			name2, err2 := generateReleaseName(*releaseCopy)
+			name1, err1 := GenerateReleaseName(release)
+			name2, err2 := GenerateReleaseName(*releaseCopy)
 
 			Expect(err1).NotTo(HaveOccurred())
 			Expect(err2).NotTo(HaveOccurred())
@@ -149,8 +149,8 @@ var _ = Describe("Helpers", func() {
 
 			release2.ReleaseConfig.Revisions[0], release2.ReleaseConfig.Revisions[1] = release2.ReleaseConfig.Revisions[1], release2.ReleaseConfig.Revisions[0]
 
-			name1, err1 := generateReleaseName(*release1)
-			name2, err2 := generateReleaseName(*release2)
+			name1, err1 := GenerateReleaseName(*release1)
+			name2, err2 := GenerateReleaseName(*release2)
 
 			Expect(err1).NotTo(HaveOccurred())
 			Expect(err2).NotTo(HaveOccurred())
@@ -159,60 +159,15 @@ var _ = Describe("Helpers", func() {
 
 		It("Should error when invalid a revision is provided", func() {
 			release.ReleaseConfig.Revisions = append(release.ReleaseConfig.Revisions, deployv1alpha1.Revision{Name: "", ID: ""})
-			_, err := generateReleaseName(release)
+			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should error when invalid targetName is provided", func() {
 			release.ReleaseConfig.TargetName = ""
-			_, err := generateReleaseName(release)
+			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})
 
-	})
-
-	Context("releaseConfigsEqual", func() {
-		var a, b deployv1alpha1.ReleaseConfig
-
-		BeforeEach(func() {
-			a = deployv1alpha1.ReleaseConfig{
-				TargetName: "test-target",
-				Revisions: []deployv1alpha1.Revision{
-					{Name: "application", ID: "abc123"},
-					{Name: "infrastructure", ID: "xyz789"},
-				},
-			}
-			b = deployv1alpha1.ReleaseConfig{
-				TargetName: "test-target",
-				Revisions: []deployv1alpha1.Revision{
-					{Name: "application", ID: "abc123"},
-					{Name: "infrastructure", ID: "xyz789"},
-				},
-			}
-		})
-
-		It("Should be equal for identical configs", func() {
-			Expect(releaseConfigsEqual(a, b)).To(BeTrue())
-		})
-
-		It("Should not be equal if targetNames are different", func() {
-			b.TargetName = "different-target"
-			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
-		})
-
-		It("Should not be equal if revisions are different", func() {
-			b.Revisions[0].ID = "different-id"
-			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
-		})
-
-		It("Should not be equal if number of revisions are different", func() {
-			b.Revisions = append(b.Revisions, deployv1alpha1.Revision{Name: "additional", ID: "extra123"})
-			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
-		})
-
-		It("Should not be equal if revision names are different", func() {
-			b.Revisions[0].Name = "different-app"
-			Expect(releaseConfigsEqual(a, b)).To(BeFalse())
-		})
 	})
 })

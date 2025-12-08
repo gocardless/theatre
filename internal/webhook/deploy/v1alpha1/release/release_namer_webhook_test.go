@@ -7,6 +7,7 @@ import (
 
 	logr "github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	"github.com/gocardless/theatre/v5/pkg/deploy"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/admission/v1"
@@ -76,7 +77,7 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 		})
 
 		It("Should exit early if release name is already set", func() {
-			name, err := generateReleaseName(*obj)
+			name, err := deploy.GenerateReleaseName(*obj)
 			Expect(err).ToNot(HaveOccurred())
 			obj.Name = name
 
@@ -92,7 +93,7 @@ var _ = Describe("ReleaseNamerWebhook", func() {
 		It("Should rename release when name is already set but invalid", func() {
 			obj.Name = "invalid-name-with-special-chars"
 
-			generatedName, err := generateReleaseName(*obj)
+			generatedName, err := deploy.GenerateReleaseName(*obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(generatedName)).To(BeNumerically(">", 0))
 

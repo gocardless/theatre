@@ -1,9 +1,8 @@
-package release
+package deploy
 
 import (
 	"crypto/sha256"
 	"fmt"
-	"sort"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -54,13 +53,16 @@ func validateRevisions(revisions []deployv1alpha1.Revision) error {
 	return nil
 }
 
-func hashString(s string) string {
+func hashString(b []byte) string {
 	// Placeholder implementation - will be replaced with actual hashing
-	hash := sha256.Sum256([]byte(s))
+	hash := sha256.Sum256(b)
 	return fmt.Sprintf("%x", hash)[:7]
 }
 
-func generateReleaseName(release deployv1alpha1.Release) (string, error) {
+// Generates a name for a release based on its target name and revision IDs.
+// The generated name hash the format of `{targetName}-{hash}`, where hash is a
+// SHA-256 hash of the appended revision Names and IDs.
+func GenerateReleaseName(release deployv1alpha1.Release) (string, error) {
 	// Sort revision IDs to ensure consistent ordering
 	targetName := release.ReleaseConfig.TargetName
 	if err := validateTargetName(targetName); err != nil {
@@ -72,48 +74,7 @@ func generateReleaseName(release deployv1alpha1.Release) (string, error) {
 		return "", err
 	}
 
-	sort.Slice(revisions, func(i, j int) bool {
-		return revisions[i].Name < revisions[j].Name
-	})
-
-	uniqueReleaseIdentifier := ""
-	for _, revision := range revisions {
-		uniqueReleaseIdentifier += revision.Name
-		uniqueReleaseIdentifier += revision.ID
-	}
-
-	releaseHash := hashString(uniqueReleaseIdentifier)
+	releaseHash := hashString(release.Serialise())
 
 	return fmt.Sprintf("%s-%s", targetName, releaseHash), nil
-}
-
-func releaseConfigsEqual(a, b deployv1alpha1.ReleaseConfig) bool {
-	if a.TargetName != b.TargetName {
-		return false
-	}
-
-	if len(a.Revisions) != len(b.Revisions) {
-		return false
-	}
-
-	// Create maps for easier comparison
-	aRevs := make(map[string]deployv1alpha1.Revision)
-	bRevs := make(map[string]deployv1alpha1.Revision)
-
-	for _, rev := range a.Revisions {
-		aRevs[rev.Name] = rev
-	}
-
-	for _, rev := range b.Revisions {
-		bRevs[rev.Name] = rev
-	}
-
-	// Compare each revision
-	for name, aRev := range aRevs {
-		if bRev, exists := bRevs[name]; !exists || aRev.ID != bRev.ID {
-			return false
-		}
-	}
-
-	return true
 }

@@ -37,8 +37,9 @@ func (i *ReleaseValidateWebhook) Handle(ctx context.Context, req admission.Reque
 			return admission.Errored(http.StatusBadRequest, err)
 		}
 
-		if !releaseConfigsEqual(oldRelease.ReleaseConfig, release.ReleaseConfig) {
-			return admission.Errored(http.StatusBadRequest, fmt.Errorf("release .config is immutable"))
+		if !oldRelease.ReleaseConfig.Equals(&release.ReleaseConfig) {
+			return admission.Errored(http.StatusBadRequest, fmt.Errorf("release .config.targetName, config.revision[].name and"+
+				" config.revision[].id are immutable"))
 		}
 	}
 

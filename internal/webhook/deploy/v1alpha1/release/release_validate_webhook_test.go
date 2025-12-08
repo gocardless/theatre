@@ -59,7 +59,7 @@ var _ = Describe("ReleaseValidateWebhook", func() {
 				},
 			})
 			Expect(resp.Allowed).To(BeFalse())
-			Expect(resp.Result.Message).To(ContainSubstring("release .config is immutable"))
+			Expect(resp.Result.Message).To(ContainSubstring("release .config.targetName, config.revision[].name and config.revision[].id are immutable"))
 			Expect(resp.Result.Code).To(Equal(int32(http.StatusBadRequest)))
 		})
 
@@ -74,7 +74,7 @@ var _ = Describe("ReleaseValidateWebhook", func() {
 				},
 			})
 			Expect(resp.Allowed).To(BeFalse())
-			Expect(resp.Result.Message).To(ContainSubstring("release .config is immutable"))
+			Expect(resp.Result.Message).To(ContainSubstring("release .config.targetName, config.revision[].name and config.revision[].id are immutable"))
 			Expect(resp.Result.Code).To(Equal(int32(http.StatusBadRequest)))
 		})
 

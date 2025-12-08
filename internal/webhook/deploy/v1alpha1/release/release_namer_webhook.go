@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	"github.com/gocardless/theatre/v5/pkg/deploy"
 	"k8s.io/apimachinery/pkg/runtime"
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -30,7 +31,7 @@ func (i *ReleaseNamerWebhook) Handle(ctx context.Context, req admission.Request)
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	releaseName, err := generateReleaseName(*release)
+	releaseName, err := deploy.GenerateReleaseName(*release)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}

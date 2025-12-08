@@ -28,4 +28,13 @@ resources:
     kind: Console
     path: github.com/gocardless/theatre/api/workloads/v1alpha1
     version: v1alpha1
+  - api:
+      crdVersion: v1
+      namespaced: true
+    controller: true
+    domain: crd.gocardless.com
+    group: deploy
+    kind: Release
+    path: github.com/gocardless/theatre/api/deploy/v1alpha1
+    version: v1alpha1
 version: "3"

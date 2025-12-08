@@ -20,9 +20,6 @@ type ReleaseConfig struct {
 	// +kubebuilder:validation:MaxItems=10
 	Revisions []Revision `json:"revisions"`
 }
-
-type RevisionType string
-
 type Revision struct {
 	// Name is unique identifier for this revision. E.g. application-revision, chart-revision, etc.
 	// +kubebuilder:validation:Required
@@ -38,7 +35,7 @@ type Revision struct {
 
 	// Type specifies the kind of revision source (git, container_image, helm_chart)
 	// +kubebuilder:validation:Optional
-	Type RevisionType `json:"type"`
+	Type string `json:"type"`
 
 	// Metadata contains additional optional information about the revision
 	// +kubebuilder:validation:Optional

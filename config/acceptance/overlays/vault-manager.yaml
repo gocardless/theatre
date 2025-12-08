@@ -11,9 +11,6 @@ spec:
         - name: manager
           image: theatre:latest
           imagePullPolicy: Never
-          args:
-            - --theatre-image=$(THEATRE_IMAGE)
-            - --metrics-address=0.0.0.0
           resources:
             requests:
               cpu: "100m"

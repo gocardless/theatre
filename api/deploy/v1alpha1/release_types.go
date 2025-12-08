@@ -81,32 +81,25 @@ type ReleaseStatusEntry struct {
 	// is currently live in the cluster, Inactive indicates the release is no
 	// longer the latest release.
 	// +kubebuilder:validation:Enum:=Active;Inactive
-	// +kubebuilder:validation:Required
 	Phase Phase `json:"phase"`
 
 	// Message is a human-readable message indicating the state of the release.
-	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
 
 	// DeploymentStartTime is the time when the release was started.
-	// +kubebuilder:validation:Optional
 	DeploymentStartTime metav1.Time `json:"deploymentStartTime,omitempty"`
 
 	// DeploymentEndTime is the time when the release was completed.
-	// +kubebuilder:validation:Optional
 	DeploymentEndTime metav1.Time `json:"deploymentEndTime,omitempty"`
 
 	// SupersededBy is the name of the release that superseded this release.
-	// +kubebuilder:validation:Optional
 	SupersededBy string `json:"supersededBy,omitempty"`
 
 	// SupersededTime is the time when this release was superseded.
-	// +kubebuilder:validation:Optional
 	SupersededTime metav1.Time `json:"supersededTime,omitempty"`
 
 	// HealthStatus indicates whether the release is healthy or not, as determined by an external monitoring system.
 	// +kubebuilder:validation:Enum:=Healthy;Unhealthy;Unknown
-	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=Unknown
 	HealthStatus HealthStatus `json:"healthStatus,omitempty"`
 
@@ -115,13 +108,20 @@ type ReleaseStatusEntry struct {
 	HealthStatusLastChecked metav1.Time `json:"healthStatusLastChecked,omitempty"`
 }
 
+type HistoryEntry struct {
+	// The id of the history entry
+	ID int `json:"id"`
+
+	// Spread the rest of the release status entry fields into this struct
+	ReleaseStatusEntry `json:",inline"`
+}
+
 type ReleaseStatus struct {
 	ReleaseStatusEntry `json:",inline"`
 
 	// History is a list of previous statuses of the release.
-	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxItems=50
-	History []ReleaseStatusEntry `json:"history,omitempty"`
+	History []HistoryEntry `json:"history,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -58,28 +58,22 @@ type RevisionMetadata struct {
 
 // ReleaseStatus defines the observed state of Release.
 
-type Phase string
-
 const (
-	PhaseActive   Phase = "Active"
-	PhaseInactive Phase = "Inactive"
+	ReleaseConditionActive  = "Active"
+	ReleaseConditionHealthy = "Healthy"
 )
 
-type HealthStatus string
-
 const (
-	HealthStatusHealthy   HealthStatus = "Healthy"
-	HealthStatusUnhealthy HealthStatus = "Unhealthy"
-	HealthStatusUnknown   HealthStatus = "Unknown"
+	// Common reasons for Active condition
+	ReasonDeployed   = "Deployed"
+	ReasonSuperseded = "Superseded"
+
+	// Common reasons for Healthy condition
+	ReasonSuccessfulAnalysis = "SuccessfulAnalysis"
+	ReasonFailedAnalysis     = "FailedAnalysis"
 )
 
-type ReleaseStatusEntry struct {
-	// Phase is the current phase of the release. Active indicates the release
-	// is currently live in the cluster, Inactive indicates the release is no
-	// longer the latest release.
-	// +kubebuilder:validation:Enum:=Active;Inactive
-	Phase Phase `json:"phase"`
-
+type CommonStatusFields struct {
 	// Message is a human-readable message indicating the state of the release.
 	Message string `json:"message,omitempty"`
 
@@ -90,31 +84,38 @@ type ReleaseStatusEntry struct {
 	DeploymentEndTime metav1.Time `json:"deploymentEndTime,omitempty"`
 
 	// SupersededBy is the name of the release that superseded this release.
-	SupersededBy string `json:"supersededBy,omitempty"`
+	SupersededBy SupersededObj `json:"supersededBy,omitempty"`
+}
+type HistoryEntry struct {
+	// Unique ID of the history entry
+	ID int `json:"id"`
+	// Timestamp of when the history entry was added
+	Timestamp metav1.Time `json:"timestamp,omitempty"`
 
-	// SupersededTime is the time when this release was superseded.
-	SupersededTime metav1.Time `json:"supersededTime,omitempty"`
-
-	// HealthStatus indicates whether the release is healthy or not, as determined by an external monitoring system.
-	// +kubebuilder:validation:Enum:=Healthy;Unhealthy;Unknown
-	// +kubebuilder:default:=Unknown
-	HealthStatus HealthStatus `json:"healthStatus,omitempty"`
-
-	// HealthStatusLastChecked is the last time the health status was checked by the external system.
-	// +kubebuilder:validation:Optional
-	HealthStatusLastChecked metav1.Time `json:"healthStatusLastChecked,omitempty"`
+	CommonStatusFields `json:",inline"`
 }
 
-type HistoryEntry struct {
-	// The id of the history entry
-	ID int `json:"id"`
-
-	// Spread the rest of the release status entry fields into this struct
-	ReleaseStatusEntry `json:",inline"`
+type SupersededObj struct {
+	// Release which superseded this release
+	ReleaseName string `json:"releaseName,omitempty"`
+	// Timestamp of the release which superseded this release
+	Timestamp metav1.Time `json:"timestamp,omitempty"`
 }
 
 type ReleaseStatus struct {
-	ReleaseStatusEntry `json:",inline"`
+	// Conditions represent the latest available observations of a release's state.
+	// Known conditions are:
+	// * Active
+	// * Healthy
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:listType=map
+	// +kubebuilder:validation:listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// The generation observed by the release controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	CommonStatusFields `json:",inline"`
 
 	// History is a list of previous statuses of the release.
 	// +kubebuilder:validation:MaxItems=50

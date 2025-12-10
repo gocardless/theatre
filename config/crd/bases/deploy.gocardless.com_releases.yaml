@@ -190,7 +190,7 @@ spec:
                       description: SupersededBy is the name of the release that superseded
                         this release.
                       properties:
-                        releaseName:
+                        releaseRef:
                           description: Release which superseded this release
                           type: string
                         timestamp:
@@ -220,7 +220,7 @@ spec:
                 description: SupersededBy is the name of the release that superseded
                   this release.
                 properties:
-                  releaseName:
+                  releaseRef:
                     description: Release which superseded this release
                     type: string
                   timestamp:

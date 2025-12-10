@@ -7,6 +7,34 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// Condition types for Release resources
+const (
+	// ReleaseConditionActive indicates whether the release is currently active in the cluster.
+	// Status=True means the release is actively serving traffic.
+	// Status=False means the release has been superseded by another release.
+	ReleaseConditionActive = "Active"
+
+	// ReleaseConditionHealthy indicates whether the release has passed health analysis.
+	// Status=True means the release passed health checks/analysis.
+	// Status=False means the release failed health checks/analysis.
+	// Status=Unknown means health status has not been determined yet.
+	ReleaseConditionHealthy = "Healthy"
+
+	// Reasons for condition status changes
+
+	// ReasonDeployed indicates the release was successfully deployed and is now active.
+	ReasonDeployed = "Deployed"
+
+	// ReasonSuperseded indicates the release was superseded by a newer release.
+	ReasonSuperseded = "Superseded"
+
+	// ReasonSuccessfulAnalysis indicates the release passed health analysis checks.
+	ReasonSuccessfulAnalysis = "SuccessfulAnalysis"
+
+	// ReasonFailedAnalysis indicates the release failed health analysis checks.
+	ReasonFailedAnalysis = "FailedAnalysis"
+)
+
 // ReleaseConfig defines the desired state of Release
 type ReleaseConfig struct {
 	// TargetName is a namespace-unique identifier for this release target
@@ -55,24 +83,6 @@ type RevisionMetadata struct {
 	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
 }
-
-// ReleaseStatus defines the observed state of Release.
-
-const (
-	ReleaseConditionActive  = "Active"
-	ReleaseConditionHealthy = "Healthy"
-)
-
-const (
-	// Common reasons for Active condition
-	ReasonDeployed   = "Deployed"
-	ReasonSuperseded = "Superseded"
-
-	// Common reasons for Healthy condition
-	ReasonSuccessfulAnalysis = "SuccessfulAnalysis"
-	ReasonFailedAnalysis     = "FailedAnalysis"
-)
-
 type CommonStatusFields struct {
 	// Message is a human-readable message indicating the state of the release.
 	Message string `json:"message,omitempty"`

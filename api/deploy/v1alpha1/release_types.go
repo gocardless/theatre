@@ -107,7 +107,7 @@ type HistoryEntry struct {
 
 type SupersededObj struct {
 	// Release which superseded this release
-	ReleaseName string `json:"releaseName,omitempty"`
+	ReleaseRef string `json:"releaseRef,omitempty"`
 	// Timestamp of the release which superseded this release
 	Timestamp metav1.Time `json:"timestamp,omitempty"`
 }

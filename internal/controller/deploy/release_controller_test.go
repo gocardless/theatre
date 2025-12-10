@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -66,7 +67,7 @@ var _ = Describe("ReleaseController", func() {
 			obj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseActivate: "",
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).To(Succeed())
 			Expect(obj).To(HaveField("Status.Phase", v1alpha1.PhaseActive))
 			Expect(obj).To(HaveField("Status.Message", MessageReleaseActive))
 			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseActivate)))
@@ -76,7 +77,7 @@ var _ = Describe("ReleaseController", func() {
 			obj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: stringTimestamp,
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).To(Succeed())
 			Expect(obj.Status.DeploymentStartTime.Unix()).To(Equal(metav1Timestamp.Unix()))
 			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)))
 		})
@@ -85,21 +86,21 @@ var _ = Describe("ReleaseController", func() {
 			obj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).Error()
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).Error()
 		})
 
 		It("Should error when passing invalid time when annotated with"+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
 			obj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: "not-a-timestamp",
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).Error()
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).Error()
 		})
 
 		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
 			obj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).To(Succeed())
 			Expect(obj.Status.DeploymentEndTime.Unix()).To(Equal(metav1Timestamp.Unix()))
 			Expect(obj.ObjectMeta.Annotations).To(Not(HaveKey(v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)))
 		})
@@ -119,7 +120,7 @@ var _ = Describe("ReleaseController", func() {
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
 				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
 			}
-			Expect(reconciler.handleAnnotations(ctx, &obj)).To(Succeed())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).To(Succeed())
 			Expect(obj.Status.Phase).To(Equal(v1alpha1.PhaseActive))
 			Expect(obj.Status.Message).To(Equal(MessageReleaseActive))
 			Expect(obj.Status.DeploymentStartTime.Unix()).To(Equal(metav1StartTimestamp.Unix()))

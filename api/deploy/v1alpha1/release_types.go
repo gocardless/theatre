@@ -93,8 +93,11 @@ type CommonStatusFields struct {
 	// DeploymentEndTime is the time when the release was completed.
 	DeploymentEndTime metav1.Time `json:"deploymentEndTime,omitempty"`
 
-	// SupersededBy is the name of the release that superseded this release.
-	SupersededBy SupersededObj `json:"supersededBy,omitempty"`
+	// PreviousRelease is the name of the release that was superseded by this release.
+	PreviousRelease ReleaseTransition `json:"previousRelease,omitempty"`
+
+	// NextRelease is the name of the release that superseded this release.
+	NextRelease ReleaseTransition `json:"nextRelease,omitempty"`
 }
 type HistoryEntry struct {
 	// Unique ID of the history entry
@@ -105,11 +108,12 @@ type HistoryEntry struct {
 	CommonStatusFields `json:",inline"`
 }
 
-type SupersededObj struct {
+// This is common struct type used to indicate any previous and next releases
+type ReleaseTransition struct {
 	// Release which superseded this release
 	ReleaseRef string `json:"releaseRef,omitempty"`
-	// Timestamp of the release which superseded this release
-	Timestamp metav1.Time `json:"timestamp,omitempty"`
+	// When the release transitioned to this state
+	TransitionTime metav1.Time `json:"transitionTime,omitempty"`
 }
 
 type ReleaseStatus struct {

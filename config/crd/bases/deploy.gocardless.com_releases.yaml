@@ -186,16 +186,27 @@ spec:
                       description: Message is a human-readable message indicating
                         the state of the release.
                       type: string
-                    supersededBy:
-                      description: SupersededBy is the name of the release that superseded
+                    nextRelease:
+                      description: NextRelease is the name of the release that superseded
                         this release.
                       properties:
                         releaseRef:
                           description: Release which superseded this release
                           type: string
-                        timestamp:
-                          description: Timestamp of the release which superseded this
-                            release
+                        transitionTime:
+                          description: When the release transitioned to this state
+                          format: date-time
+                          type: string
+                      type: object
+                    previousRelease:
+                      description: PreviousRelease is the name of the release that
+                        was superseded by this release.
+                      properties:
+                        releaseRef:
+                          description: Release which superseded this release
+                          type: string
+                        transitionTime:
+                          description: When the release transitioned to this state
                           format: date-time
                           type: string
                       type: object
@@ -212,19 +223,31 @@ spec:
                 description: Message is a human-readable message indicating the state
                   of the release.
                 type: string
-              observedGeneration:
-                description: The generation observed by the release controller.
-                format: int64
-                type: integer
-              supersededBy:
-                description: SupersededBy is the name of the release that superseded
+              nextRelease:
+                description: NextRelease is the name of the release that superseded
                   this release.
                 properties:
                   releaseRef:
                     description: Release which superseded this release
                     type: string
-                  timestamp:
-                    description: Timestamp of the release which superseded this release
+                  transitionTime:
+                    description: When the release transitioned to this state
+                    format: date-time
+                    type: string
+                type: object
+              observedGeneration:
+                description: The generation observed by the release controller.
+                format: int64
+                type: integer
+              previousRelease:
+                description: PreviousRelease is the name of the release that was superseded
+                  by this release.
+                properties:
+                  releaseRef:
+                    description: Release which superseded this release
+                    type: string
+                  transitionTime:
+                    description: When the release transitioned to this state
                     format: date-time
                     type: string
                 type: object

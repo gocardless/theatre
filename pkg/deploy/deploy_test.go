@@ -21,7 +21,7 @@ var _ = Describe("Helpers", func() {
 		})
 
 		It("Should return an error if too long", func() {
-			longName := "a" + strings.Repeat("b", 244) // 246 characters, exceeding the limit
+			longName := "a" + strings.Repeat("b", 245) // 246 characters, exceeding the limit
 			err := validateTargetName(longName)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("target name too long"))

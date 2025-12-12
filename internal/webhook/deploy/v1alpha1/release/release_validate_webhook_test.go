@@ -78,21 +78,6 @@ var _ = Describe("ReleaseValidateWebhook", func() {
 			Expect(resp.Result.Code).To(Equal(int32(http.StatusBadRequest)))
 		})
 
-	})
-
-	Context("When running a non-update operation", func() {
-		It("Should allow the operation", func() {
-			resp := releaseValidateWebhook.Handle(ctx, admission.Request{
-				AdmissionRequest: v1.AdmissionRequest{
-					Operation: v1.Create,
-					Object:    objectToRaw(obj),
-				},
-			})
-			Expect(resp.Allowed).To(BeTrue())
-		})
-	})
-
-	Context("When running any operation", func() {
 		It("Should allow labels and annotations to be updated", func() {
 			obj.Labels = map[string]string{"foo": "bar"}
 			obj.Annotations = map[string]string{"foo": "bar"}
@@ -101,6 +86,18 @@ var _ = Describe("ReleaseValidateWebhook", func() {
 					Operation: v1.Update,
 					Object:    objectToRaw(obj),
 					OldObject: objectToRaw(oldObj),
+				},
+			})
+			Expect(resp.Allowed).To(BeTrue())
+		})
+	})
+
+	Context("When running a non-update operation", func() {
+		It("Should allow the operation", func() {
+			resp := releaseValidateWebhook.Handle(ctx, admission.Request{
+				AdmissionRequest: v1.AdmissionRequest{
+					Operation: v1.Create,
+					Object:    objectToRaw(obj),
 				},
 			})
 			Expect(resp.Allowed).To(BeTrue())

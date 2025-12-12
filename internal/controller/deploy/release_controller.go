@@ -2,11 +2,17 @@ package deploy
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,19 +45,23 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		return err
 	}
 
-	// err = mgr.GetFieldIndexer().IndexField(
-	// 	ctx,
-	// 	&deployv1alpha1.Release{},
-	// 	"status.phase",
-	// 	func(rawObj client.Object) []string {
-	// 		release := rawObj.(*deployv1alpha1.Release)
-	// 		return []string{string(release.Status.Phase)}
-	// 	},
-	// )
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		"status.conditions.active",
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
+			if condition == nil {
+				return []string{}
+			}
+			return []string{string(condition.Status)}
+		},
+	)
 
-	// if err != nil {
-	// 	return err
-	// }
+	if err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deployv1alpha1.Release{}).
@@ -176,71 +186,106 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 // 	return r.Status().Update(ctx, release)
 // }
 
-// func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.Logger, release *deployv1alpha1.Release) error {
-// 	modified := false
+func (r *ReleaseReconciler) findActiveRelease(ctx context.Context, namespace string, target string) (*deployv1alpha1.Release, error) {
+	releases := &deployv1alpha1.ReleaseList{}
+	err := r.List(ctx, releases,
+		client.InNamespace(namespace),
+		client.MatchingFields(map[string]string{
+			"config.targetName":        target,
+			"status.conditions.active": string(metav1.ConditionTrue),
+		}),
+	)
 
-// 	logger.Info("handling annotations")
+	if err != nil {
+		return nil, err
+	}
 
-// 	if _, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseActivate]; ok {
-// 		logger.Info("activating release", "release", release.Name)
-// 		release.Status.Phase = deployv1alpha1.PhaseActive
-// 		release.Status.Message = MessageReleaseActive
-// 		release.Status.SupersededBy = ""
-// 		release.Status.SupersededTime = metav1.Time{}
-// 		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseActivate)
+	if len(releases.Items) == 0 {
+		return nil, nil
+	}
 
-// 		err := r.supersedePreviousReleases(ctx, release)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		modified = true
-// 	}
+	if len(releases.Items) > 1 {
+		return nil, fmt.Errorf("expected 1 active release for target %s, found %d", target, len(releases.Items))
+	}
 
-// 	if startTimestamp, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime]; ok {
-// 		startTime, err := time.Parse(time.RFC3339, startTimestamp)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		release.Status.DeploymentStartTime = metav1.NewTime(startTime)
-// 		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)
-// 		modified = true
-// 	}
+	return &releases.Items[0], nil
+}
 
-// 	if startTimestamp, ok := release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]; ok {
-// 		startTime, err := time.Parse(time.RFC3339, startTimestamp)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		release.Status.DeploymentEndTime = metav1.NewTime(startTime)
-// 		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)
-// 		modified = true
-// 	}
+func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.Logger, release *deployv1alpha1.Release) error {
+	modified := false
 
-// 	if modified {
-// 		releaseStatus := release.Status
+	logger.Info("handling annotations")
 
-// 		err := r.Update(ctx, release)
-// 		if err != nil {
-// 			logger.Error(err, "failed to update resource")
-// 			return err
-// 		}
+	if release.AnnotatedWithActivate() {
+		logger.Info("activating release", "release", release.Name)
+		activeRelease, err := r.findActiveRelease(ctx, release.Namespace, release.ReleaseConfig.TargetName)
+		if err != nil {
+			return err
+		}
+		if activeRelease != nil {
+			messageSuperseded := fmt.Sprintf(MessageReleaseSuperseded, release.Name)
+			activeRelease.Deactivate(messageSuperseded, *release)
+			err = r.updateReleaseStatus(ctx, activeRelease)
+			if err != nil {
+				return err
+			}
+		}
 
-// 		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-// 			updatedRelease := &deployv1alpha1.Release{}
-// 			err = r.Get(ctx, client.ObjectKeyFromObject(release), updatedRelease)
-// 			if err != nil {
-// 				logger.Error(err, "failed to retrieve object from API")
-// 				return err
-// 			}
+		release.Activate(MessageReleaseActive, activeRelease)
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseActivate)
 
-// 			updatedRelease.Status = releaseStatus
+		if err != nil {
+			return err
+		}
 
-// 			return r.Status().Update(ctx, updatedRelease)
-// 		})
-// 	}
+		modified = true
+	}
 
-// 	return nil
-// }
+	if release.AnnotatedWithSetDeploymentStartTime() {
+		startTime, err := time.Parse(time.RFC3339, release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime])
+		if err != nil {
+			return err
+		}
+		release.Status.DeploymentStartTime = metav1.NewTime(startTime)
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentStartTime)
+		modified = true
+	}
+
+	if release.AnnotatedWithSetDeploymentEndTime() {
+		endTime, err := time.Parse(time.RFC3339, release.Annotations[deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime])
+		if err != nil {
+			return err
+		}
+		release.Status.DeploymentEndTime = metav1.NewTime(endTime)
+		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseSetDeploymentEndTime)
+		modified = true
+	}
+
+	if modified {
+		releaseStatus := release.Status
+
+		err := r.Update(ctx, release)
+		if err != nil {
+			logger.Error(err, "failed to update resource")
+			return err
+		}
+
+		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			updatedRelease := &deployv1alpha1.Release{}
+			err = r.Get(ctx, client.ObjectKeyFromObject(release), updatedRelease)
+			if err != nil {
+				logger.Error(err, "failed to retrieve object from API")
+				return err
+			}
+
+			updatedRelease.Status = releaseStatus
+
+			return r.updateReleaseStatus(ctx, updatedRelease)
+		})
+	}
+
+	return nil
+}
 
 func (r *ReleaseReconciler) initialiseReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {
 	release.InitialiseStatus(MessageReleaseCreated)
@@ -256,7 +301,10 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
 	logger.Info("reconciling release")
 
-	logger.Info("release", "release.metadata.generation", release.ObjectMeta.Generation)
+	if release.DeletionTimestamp != nil {
+		logger.Info("release marked for deletion, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
 
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
@@ -268,25 +316,11 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		}
 	}
 
-	// if release.DeletionTimestamp != nil {
-	// 	logger.Info("release marked for deletion, skipping reconciliation")
-	// 	return ctrl.Result{}, nil
-	// }
+	err := r.handleAnnotations(ctx, logger, release)
 
-	// // The release has been just created. Initialise status fields.
-	// if release.Status.Phase == "" {
-	// 	err := r.initRelease(ctx, release)
-	// 	if err != nil {
-	// 		logger.Error(err, "failed to initialise release")
-	// 		return ctrl.Result{}, err
-	// 	}
-	// }
-
-	// err := r.handleAnnotations(ctx, logger, release)
-
-	// if err != nil {
-	// 	logger.Error(err, "failed to update status field of release")
-	// }
+	if err != nil {
+		logger.Error(err, "failed to update status field of release")
+	}
 
 	// if isNewRelease(release.Status.Phase) {
 	// 	err := r.markReleaseActive(ctx, release)

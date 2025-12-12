@@ -54,7 +54,6 @@ func validateRevisions(revisions []deployv1alpha1.Revision) error {
 }
 
 func hashString(b []byte) string {
-	// Placeholder implementation - will be replaced with actual hashing
 	hash := sha256.Sum256(b)
 	return fmt.Sprintf("%x", hash)[:7]
 }

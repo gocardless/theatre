@@ -22,6 +22,9 @@ const (
 
 	// Reasons for condition status changes
 
+	// ReasonCreated indicates the release was successfully created.
+	ReasonCreated = "Created"
+
 	// ReasonDeployed indicates the release was successfully deployed and is now active.
 	ReasonDeployed = "Deployed"
 

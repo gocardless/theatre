@@ -23,3 +23,5 @@ go.work
 *.swp
 *.swo
 *~
+
+tmp/*

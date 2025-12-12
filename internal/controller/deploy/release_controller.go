@@ -2,13 +2,10 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
-	meta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -246,42 +243,12 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 // }
 
 func (r *ReleaseReconciler) initialiseReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {
-	release.Status.Message = MessageReleaseCreated
-	release.Status.ObservedGeneration = release.ObjectMeta.Generation
-
-	conditionActive := metav1.Condition{
-		Type:               deployv1alpha1.ReleaseConditionActive,
-		Status:             metav1.ConditionFalse,
-		Reason:             deployv1alpha1.ReasonCreated,
-		Message:            MessageReleaseCreated,
-		ObservedGeneration: release.ObjectMeta.Generation,
-	}
-
-	changed := meta.SetStatusCondition(&release.Status.Conditions, conditionActive)
-
-	if !changed {
-		return fmt.Errorf("failed to set 'Active' status condition")
-	}
-
-	conditionHealthy := metav1.Condition{
-		Type:               deployv1alpha1.ReleaseConditionHealthy,
-		Status:             metav1.ConditionUnknown,
-		Reason:             deployv1alpha1.ReasonCreated,
-		Message:            MessageReleaseCreated,
-		ObservedGeneration: release.ObjectMeta.Generation,
-	}
-
-	changed = meta.SetStatusCondition(&release.Status.Conditions, conditionHealthy)
-
-	if !changed {
-		return fmt.Errorf("failed to set 'Healthy' status condition")
-	}
-
+	release.InitialiseStatus(MessageReleaseCreated)
 	return r.updateReleaseStatus(ctx, release)
 }
 
 func (r *ReleaseReconciler) updateReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {
-	release.Status.ObservedGeneration = release.ObjectMeta.Generation
+	release.UpdateObservedGeneration()
 	return r.Status().Update(ctx, release)
 }
 

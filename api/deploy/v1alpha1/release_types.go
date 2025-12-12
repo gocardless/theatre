@@ -25,8 +25,11 @@ const (
 	// ReasonDeployed indicates the release was successfully deployed and is now active.
 	ReasonDeployed = "Deployed"
 
-	// ReasonSuperseded indicates the release was superseded by a newer release.
+	// ReasonSuperseded indicates the release was superseded by a different release.
 	ReasonSuperseded = "Superseded"
+
+	// ReasonRollback indicates the release is active due to a rollback
+	ReasonRollback = "Rollback"
 
 	// ReasonSuccessfulAnalysis indicates the release passed health analysis checks.
 	ReasonSuccessfulAnalysis = "SuccessfulAnalysis"

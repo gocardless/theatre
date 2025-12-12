@@ -10,14 +10,14 @@ import (
 
 // validateTargetName validates that the target name is within the allowed length
 // and follows DNS subdomain rules, with some buffer for suffixes.
-// The target name must be at most (DNS1123SubdomainMaxLength - 7) characters to allow
-// for suffixes like "-release" to be appended safely.
+// The target name must be at most (DNS1123SubdomainMaxLength - 8) characters to allow
+// for suffixes like "-18c1c1d" to be appended safely.
 func validateTargetName(targetName string) error {
-	if len(targetName) > (validation.DNS1123SubdomainMaxLength - 7) {
+	if len(targetName) > (validation.DNS1123SubdomainMaxLength - 8) {
 		return fmt.Errorf("target name too long: %d characters (max %d)", len(targetName), validation.DNS1123SubdomainMaxLength)
 	}
 
-	errors := validation.IsDNS1123Label(targetName)
+	errors := validation.IsDNS1123Subdomain(targetName)
 	if len(errors) > 0 {
 		return fmt.Errorf("invalid target name: %s", errors[0])
 	}

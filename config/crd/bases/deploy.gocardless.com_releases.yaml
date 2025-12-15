@@ -210,10 +210,6 @@ spec:
                           format: date-time
                           type: string
                       type: object
-                    timestamp:
-                      description: Timestamp of when the history entry was added
-                      format: date-time
-                      type: string
                   required:
                   - id
                   type: object

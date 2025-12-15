@@ -12,7 +12,7 @@ type RollbackSpec struct {
 	// ToReleaseName is the target release to rollback to. This is a reference to
 	// the Release resource name.
 	// +kubebuilder:validation:Required
-	ToReleaseName string `json:"toReleaseName"`
+	ToReleaseName string `json:"toReleaseName,omitempty"`
 
 	// Reason is a human-readable message explaining why the rollback was initiated.
 	// +kubebuilder:validation:Required
@@ -49,22 +49,13 @@ const (
 	RollbackPhaseFailed RollbackPhase = "Failed"
 )
 
-// RollbackStatusEntry defines a single status entry for the rollback
-type RollbackStatusEntry struct {
-	// Phase is the current phase of the rollback operation.
-	// +kubebuilder:validation:Enum:=InProgress;Success;Failed
-	Phase RollbackPhase `json:"phase"`
-
+// RollbackStatus defines the observed state of Rollback
+type RollbackStatus struct {
 	// Message is a human-readable message indicating the state of the rollback.
 	Message string `json:"message,omitempty"`
 
 	// Timestamp is when this status was recorded.
 	Timestamp metav1.Time `json:"timestamp,omitempty"`
-}
-
-// RollbackStatus defines the observed state of Rollback
-type RollbackStatus struct {
-	RollbackStatusEntry `json:",inline"`
 
 	// ObservedGeneration reflects the generation of the most recently observed Rollback spec.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -96,9 +87,6 @@ type RollbackStatus struct {
 	// Conditions represent the latest observations of the rollback's state.
 	// Known condition types are: "CIJobSubmitted", "RollbackInProgress", "RollbackComplete".
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// History is a list of previous statuses of the rollback.
-	History []RollbackStatusEntry `json:"history,omitempty"`
 }
 
 // +kubebuilder:object:root=true

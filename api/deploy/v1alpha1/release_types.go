@@ -105,8 +105,6 @@ type CommonStatusFields struct {
 type HistoryEntry struct {
 	// Unique ID of the history entry
 	ID int `json:"id"`
-	// Timestamp of when the history entry was added
-	Timestamp metav1.Time `json:"timestamp,omitempty"`
 
 	CommonStatusFields `json:",inline"`
 }

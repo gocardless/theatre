@@ -111,7 +111,7 @@ type HistoryEntry struct {
 
 // This is common struct type used to indicate any previous and next releases
 type ReleaseTransition struct {
-	// Release which superseded this release
+	// Other Release associated with this transition
 	ReleaseRef string `json:"releaseRef,omitempty"`
 	// When the release transitioned to this state
 	TransitionTime metav1.Time `json:"transitionTime,omitempty"`

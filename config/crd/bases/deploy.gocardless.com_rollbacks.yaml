@@ -175,31 +175,6 @@ spec:
                   FromReleaseName is the release being rolled back from. This is a reference
                   to the Release resource name.
                 type: string
-              history:
-                description: History is a list of previous statuses of the rollback.
-                items:
-                  description: RollbackStatusEntry defines a single status entry for
-                    the rollback
-                  properties:
-                    message:
-                      description: Message is a human-readable message indicating
-                        the state of the rollback.
-                      type: string
-                    phase:
-                      description: Phase is the current phase of the rollback operation.
-                      enum:
-                      - InProgress
-                      - Success
-                      - Failed
-                      type: string
-                    timestamp:
-                      description: Timestamp is when this status was recorded.
-                      format: date-time
-                      type: string
-                  required:
-                  - phase
-                  type: object
-                type: array
               lastHTTPCallTime:
                 description: LastHTTPCallTime is when the controller last attempted
                   to call the CI system.
@@ -214,13 +189,6 @@ spec:
                   recently observed Rollback spec.
                 format: int64
                 type: integer
-              phase:
-                description: Phase is the current phase of the rollback operation.
-                enum:
-                - InProgress
-                - Success
-                - Failed
-                type: string
               startTime:
                 description: StartTime is when the rollback operation started.
                 format: date-time
@@ -231,7 +199,6 @@ spec:
                 type: string
             required:
             - fromReleaseName
-            - phase
             type: object
         required:
         - spec

@@ -104,30 +104,39 @@ func (r *Release) Deactivate(message string, nextRelease Release) {
 	})
 }
 
+func (r *Release) getLastHistoryEntryId() int {
+	if len(r.Status.History) == 0 {
+		return 0
+	}
+	return r.Status.History[len(r.Status.History)-1].ID
+}
+
 func (r *Release) PushHistoryEntry() {
-	he := HistoryEntry{
+	entry := HistoryEntry{
+		ID:        r.getLastHistoryEntryId() + 1,
 		Timestamp: metav1.Now(),
 	}
 
 	if r.Status.Message != "" {
-		he.Message = r.Status.Message
+		entry.Message = r.Status.Message
 	}
 
 	if !r.Status.DeploymentStartTime.IsZero() {
-		he.DeploymentStartTime = r.Status.DeploymentStartTime
+		entry.DeploymentStartTime = r.Status.DeploymentStartTime
 	}
 
 	if !r.Status.DeploymentEndTime.IsZero() {
-		he.DeploymentEndTime = r.Status.DeploymentEndTime
+		entry.DeploymentEndTime = r.Status.DeploymentEndTime
 	}
 
 	if r.Status.PreviousRelease.ReleaseRef != "" {
-		he.PreviousRelease = r.Status.PreviousRelease
+		entry.PreviousRelease = r.Status.PreviousRelease
 	}
 
 	if r.Status.NextRelease.ReleaseRef != "" {
-		he.NextRelease = r.Status.NextRelease
+		entry.NextRelease = r.Status.NextRelease
 	}
 
-	r.Status.History = append(r.Status.History, he)
+	r.Status.History = append(r.Status.History, entry)
+}
 }

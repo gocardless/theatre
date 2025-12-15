@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"sort"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -139,4 +141,31 @@ func (r *Release) PushHistoryEntry() {
 
 	r.Status.History = append(r.Status.History, entry)
 }
+
+// Sorts releases by effective time, where effective time is the deployment
+// end time if set, else the creation time. This ensures that the most
+// recently ended or created releases are sorted first, and that releases are
+// sorted by creation time if they have the same end time.
+func (rl *ReleaseList) Sort() {
+	sort.Slice(rl.Items, func(i, j int) bool {
+		iEnd := rl.Items[i].Status.DeploymentEndTime
+		jEnd := rl.Items[j].Status.DeploymentEndTime
+		iCreated := rl.Items[i].ObjectMeta.CreationTimestamp
+		jCreated := rl.Items[j].ObjectMeta.CreationTimestamp
+
+		iEffective := iCreated
+		if !iEnd.IsZero() {
+			iEffective = iEnd
+		}
+		jEffective := jCreated
+		if !jEnd.IsZero() {
+			jEffective = jEnd
+		}
+
+		if !iEffective.Equal(&jEffective) {
+			return iEffective.After(jEffective.Time)
+		}
+
+		return iCreated.After(jCreated.Time)
+	})
 }

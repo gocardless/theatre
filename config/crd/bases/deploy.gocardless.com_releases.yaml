@@ -36,6 +36,27 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .config.targetName
+      name: Target_Name
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Active")].status
+      name: Active
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Healthy")].status
+      name: Healthy
+      type: string
+    - jsonPath: .status.signature
+      name: Signature
+      type: string
+    - jsonPath: .status.deploymentStartTime
+      name: Started_At
+      type: string
+    - jsonPath: .status.deploymentEndTime
+      name: Ended_At
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:

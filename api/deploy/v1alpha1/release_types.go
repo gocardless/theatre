@@ -134,6 +134,13 @@ type ReleaseStatus struct {
 // +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.nextRelease.transitionTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Target_Name",type="string",JSONPath=".config.targetName"
+// +kubebuilder:printcolumn:name="Active",type="string",JSONPath=".status.conditions[?(@.type==\"Active\")].status"
+// +kubebuilder:printcolumn:name="Healthy",type="string",JSONPath=".status.conditions[?(@.type==\"Healthy\")].status"
+// +kubebuilder:printcolumn:name="Signature",type="string",JSONPath=".status.signature"
+// +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.deploymentStartTime"
+// +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.deploymentEndTime"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Release struct {
 	metav1.TypeMeta `json:",inline"`
 

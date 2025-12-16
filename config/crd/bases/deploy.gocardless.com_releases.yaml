@@ -165,56 +165,6 @@ spec:
                   started.
                 format: date-time
                 type: string
-              history:
-                description: History is a list of previous statuses of the release.
-                items:
-                  properties:
-                    deploymentEndTime:
-                      description: DeploymentEndTime is the time when the release
-                        was completed.
-                      format: date-time
-                      type: string
-                    deploymentStartTime:
-                      description: DeploymentStartTime is the time when the release
-                        was started.
-                      format: date-time
-                      type: string
-                    id:
-                      description: Unique ID of the history entry
-                      type: integer
-                    message:
-                      description: Message is a human-readable message indicating
-                        the state of the release.
-                      type: string
-                    nextRelease:
-                      description: NextRelease is the name of the release that superseded
-                        this release.
-                      properties:
-                        releaseRef:
-                          description: Release which superseded this release
-                          type: string
-                        transitionTime:
-                          description: When the release transitioned to this state
-                          format: date-time
-                          type: string
-                      type: object
-                    previousRelease:
-                      description: PreviousRelease is the name of the release that
-                        was superseded by this release.
-                      properties:
-                        releaseRef:
-                          description: Release which superseded this release
-                          type: string
-                        transitionTime:
-                          description: When the release transitioned to this state
-                          format: date-time
-                          type: string
-                      type: object
-                  required:
-                  - id
-                  type: object
-                maxItems: 50
-                type: array
               message:
                 description: Message is a human-readable message indicating the state
                   of the release.
@@ -247,6 +197,11 @@ spec:
                     format: date-time
                     type: string
                 type: object
+              signature:
+                description: |-
+                  Signature is deterministic hash constructed out of the release revisions.
+                  The signature is constructed out of the sum of names and ids of each revision.
+                type: string
             type: object
         required:
         - config

@@ -47,13 +47,13 @@ func (c *ConsoleAuthorisationWebhook) Handle(ctx context.Context, req admission.
 
 	// request console authorisation object
 	updatedAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
-	if err := c.decoder.Decode(req, updatedAuth); err != nil {
+	if err := c.decoder.DecodeRaw(req.Object, updatedAuth); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// existing console authorisation object
 	existingAuth := &workloadsv1alpha1.ConsoleAuthorisation{}
-	if err := c.decoder.Decode(req, existingAuth); err != nil {
+	if err := c.decoder.DecodeRaw(req.OldObject, existingAuth); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 

@@ -86,28 +86,6 @@ type RevisionMetadata struct {
 	// +kubebuilder:validation:Optional
 	Message string `json:"message,omitempty"`
 }
-type CommonStatusFields struct {
-	// Message is a human-readable message indicating the state of the release.
-	Message string `json:"message,omitempty"`
-
-	// DeploymentStartTime is the time when the release was started.
-	DeploymentStartTime metav1.Time `json:"deploymentStartTime,omitempty"`
-
-	// DeploymentEndTime is the time when the release was completed.
-	DeploymentEndTime metav1.Time `json:"deploymentEndTime,omitempty"`
-
-	// PreviousRelease is the name of the release that was superseded by this release.
-	PreviousRelease ReleaseTransition `json:"previousRelease,omitempty"`
-
-	// NextRelease is the name of the release that superseded this release.
-	NextRelease ReleaseTransition `json:"nextRelease,omitempty"`
-}
-type HistoryEntry struct {
-	// Unique ID of the history entry
-	ID int `json:"id"`
-
-	CommonStatusFields `json:",inline"`
-}
 
 // This is common struct type used to indicate any previous and next releases
 type ReleaseTransition struct {
@@ -130,11 +108,24 @@ type ReleaseStatus struct {
 	// The generation observed by the release controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	CommonStatusFields `json:",inline"`
+	// Message is a human-readable message indicating the state of the release.
+	Message string `json:"message,omitempty"`
 
-	// History is a list of previous statuses of the release.
-	// +kubebuilder:validation:MaxItems=50
-	History []HistoryEntry `json:"history,omitempty"`
+	// DeploymentStartTime is the time when the release was started.
+	DeploymentStartTime metav1.Time `json:"deploymentStartTime,omitempty"`
+
+	// DeploymentEndTime is the time when the release was completed.
+	DeploymentEndTime metav1.Time `json:"deploymentEndTime,omitempty"`
+
+	// PreviousRelease is the name of the release that was superseded by this release.
+	PreviousRelease ReleaseTransition `json:"previousRelease,omitempty"`
+
+	// NextRelease is the name of the release that superseded this release.
+	NextRelease ReleaseTransition `json:"nextRelease,omitempty"`
+
+	// Signature is deterministic hash constructed out of the release revisions.
+	// The signature is constructed out of the sum of names and ids of each revision.
+	Signature string `json:"signature,omitempty"`
 }
 
 // +kubebuilder:object:root=true

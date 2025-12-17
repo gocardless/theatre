@@ -60,7 +60,7 @@ func (r *Release) InitialiseStatus(message string) {
 
 	conditionActive := metav1.Condition{
 		Type:               ReleaseConditionActive,
-		Status:             metav1.ConditionFalse,
+		Status:             metav1.ConditionUnknown,
 		Reason:             ReasonCreated,
 		Message:            message,
 		ObservedGeneration: r.ObjectMeta.Generation,

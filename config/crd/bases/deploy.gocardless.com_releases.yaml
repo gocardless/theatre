@@ -24,13 +24,13 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Healthy")].status
       name: Healthy
       type: string
-    - jsonPath: .status.signature
+    - jsonPath: .status.signatureShort
       name: Signature
       type: string
-    - jsonPath: .status.deploymentStartTime
+    - jsonPath: .status.previousRelease.transitionTime
       name: Started_At
       type: string
-    - jsonPath: .status.deploymentEndTime
+    - jsonPath: .status.nextRelease.transitionTime
       name: Ended_At
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -196,7 +196,7 @@ spec:
                   this release.
                 properties:
                   releaseRef:
-                    description: Release which superseded this release
+                    description: Other Release associated with this transition
                     type: string
                   transitionTime:
                     description: When the release transitioned to this state
@@ -212,7 +212,7 @@ spec:
                   by this release.
                 properties:
                   releaseRef:
-                    description: Release which superseded this release
+                    description: Other Release associated with this transition
                     type: string
                   transitionTime:
                     description: When the release transitioned to this state
@@ -223,6 +223,9 @@ spec:
                 description: |-
                   Signature is deterministic hash constructed out of the release revisions.
                   The signature is constructed out of the sum of names and ids of each revision.
+                type: string
+              signatureShort:
+                description: SignatureShort is a truncated version of the signature.
                 type: string
             type: object
         required:

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -13,6 +14,7 @@ import (
 func (rc *ReleaseConfig) Equals(other *ReleaseConfig) bool {
 	return bytes.Equal(rc.Serialise(), other.Serialise())
 }
+
 // The serialisation is used to determine if a release has changed.
 // For release uniqueness we only take into consideration the target name,
 // revision.name and revision.id.
@@ -43,12 +45,18 @@ func (r *Release) IsStatusInitialised() bool {
 	return r.Status.ObservedGeneration > 0
 }
 
+func (r *Release) generateSignature() string {
+	return fmt.Sprintf("%x", sha256.Sum256(r.ReleaseConfig.Serialise()))
+}
+
 func (r *Release) InitialiseStatus(message string) {
 	r.Status.Message = message
 	r.Status.ObservedGeneration = r.ObjectMeta.Generation
-	// TODO: implement signature
 
-	// r.Status.Signature =
+	// Generate signature and signature short
+	signature := r.generateSignature()
+	r.Status.Signature = signature
+	r.Status.SignatureShort = signature[:7]
 
 	conditionActive := metav1.Condition{
 		Type:               ReleaseConditionActive,

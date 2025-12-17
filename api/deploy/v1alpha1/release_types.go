@@ -136,8 +136,8 @@ type ReleaseStatus struct {
 // +kubebuilder:printcolumn:name="Active",type="string",JSONPath=".status.conditions[?(@.type==\"Active\")].status"
 // +kubebuilder:printcolumn:name="Healthy",type="string",JSONPath=".status.conditions[?(@.type==\"Healthy\")].status"
 // +kubebuilder:printcolumn:name="Signature",format="",type="string",JSONPath=".status.signatureShort"
-// +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.deploymentStartTime"
-// +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.deploymentEndTime"
+// +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.previousRelease.transitionTime"
+// +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.nextRelease.transitionTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 type Release struct {

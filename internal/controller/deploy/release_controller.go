@@ -220,14 +220,58 @@ func (r *ReleaseReconciler) updateReleaseStatus(ctx context.Context, release *de
 	return r.Status().Update(ctx, release)
 }
 
+func (r *ReleaseReconciler) findNotInitialisedReleases(ctx context.Context, release *deployv1alpha1.Release) (*[]deployv1alpha1.Release, error) {
+	var releaseList deployv1alpha1.ReleaseList
+
+	err := r.List(ctx, &releaseList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{
+		"config.targetName": release.ReleaseConfig.TargetName,
+	}))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var notInitialisedReleases []deployv1alpha1.Release
+
+	for _, release := range releaseList.Items {
+		if !release.IsStatusInitialised() {
+			notInitialisedReleases = append(notInitialisedReleases, release)
+		}
+	}
+
+	return &notInitialisedReleases, nil
+}
+
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
 	logger.Info("reconciling release")
 
+	// TODO: check if multiple releases haven't been initialised
+	// if multiple of them have the activate annotation, disregard it and try to:
+	// reconstruct timeline from deployment start and end times
+	// if no deployment start/end fall back on creationTimestamp
+	// if all creation timestamps are conflicting leave the releases and emit a warning
+	// if so, mark all but the most recent as superseded
+
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
+		notInitialisedReleases, err := r.findNotInitialisedReleases(ctx, release)
+		if err != nil {
+			logger.Error(err, "failed to find not initialised releases")
+			return ctrl.Result{}, err
+		}
 
-		err := r.initialiseReleaseStatus(ctx, release)
+		if len(*notInitialisedReleases) > 1 {
+			logger.Info("multiple releases not initialised, something went wrong, attempting to reconstruct timeline")
+			// handle multiple releases not initialised
+			// reconstruct timeline from deployment start and end times
+			// if no deployment start/end fall back on creationTimestamp
+			// if all creation timestamps are conflicting leave the releases and emit a warning
+			// if so, mark all but the most recent as superseded
+			return ctrl.Result{}, nil
+		}
+
+		err = r.initialiseReleaseStatus(ctx, release)
 		if err != nil {
 			logger.Error(err, "failed to initialise release")
 			return ctrl.Result{}, err

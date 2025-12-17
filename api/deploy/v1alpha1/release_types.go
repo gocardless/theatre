@@ -31,11 +31,11 @@ const (
 	// ReasonRollback indicates the release is active due to a rollback
 	ReasonRollback = "Rollback"
 
-	// ReasonSuccessfulAnalysis indicates the release passed health analysis checks.
-	ReasonSuccessfulAnalysis = "SuccessfulAnalysis"
+	// ReasonAnalysisSucceeded indicates the release passed health analysis checks.
+	ReasonAnalysisSucceeded = "AnalysisSucceeded"
 
-	// ReasonFailedAnalysis indicates the release failed health analysis checks.
-	ReasonFailedAnalysis = "FailedAnalysis"
+	// ReasonAnalysisFailed indicates the release failed health analysis checks.
+	ReasonAnalysisFailed = "AnalysisFailed"
 )
 
 // ReleaseConfig defines the desired state of Release
@@ -129,7 +129,6 @@ type ReleaseStatus struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Target_Name",type="string",JSONPath=".config.targetName"
 // +kubebuilder:printcolumn:name="Active",type="string",JSONPath=".status.conditions[?(@.type==\"Active\")].status"
 // +kubebuilder:printcolumn:name="Healthy",type="string",JSONPath=".status.conditions[?(@.type==\"Healthy\")].status"
@@ -137,6 +136,7 @@ type ReleaseStatus struct {
 // +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.deploymentStartTime"
 // +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.deploymentEndTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:subresource:status
 type Release struct {
 	metav1.TypeMeta `json:",inline"`
 

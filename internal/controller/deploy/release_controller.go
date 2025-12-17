@@ -224,11 +224,6 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
 	logger.Info("reconciling release")
 
-	if release.DeletionTimestamp != nil {
-		logger.Info("release marked for deletion, skipping reconciliation")
-		return ctrl.Result{}, nil
-	}
-
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
 

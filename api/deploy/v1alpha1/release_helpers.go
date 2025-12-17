@@ -14,7 +14,9 @@ func (r *Release) IsStatusInitialised() bool {
 func (r *Release) InitialiseStatus(message string) {
 	r.Status.Message = message
 	r.Status.ObservedGeneration = r.ObjectMeta.Generation
-	r.Status.History = []HistoryEntry{}
+	// TODO: implement signature
+
+	// r.Status.Signature =
 
 	conditionActive := metav1.Condition{
 		Type:               ReleaseConditionActive,
@@ -65,11 +67,6 @@ func (r *Release) SetDeploymentEndTime(timestamp metav1.Time) {
 }
 
 func (r *Release) Activate(message string, previousRelease *Release) {
-	// Push to the history if this isn't the first activation
-	if r.Status.NextRelease.ReleaseRef != "" {
-		r.PushHistoryEntry()
-	}
-
 	r.Status.Message = message
 	if previousRelease != nil {
 		r.Status.PreviousRelease = ReleaseTransition{
@@ -91,7 +88,6 @@ func (r *Release) Activate(message string, previousRelease *Release) {
 }
 
 func (r *Release) Deactivate(message string, nextRelease Release) {
-	r.PushHistoryEntry()
 	r.Status.Message = message
 	r.Status.NextRelease = ReleaseTransition{
 		ReleaseRef:     nextRelease.Name,
@@ -104,42 +100,6 @@ func (r *Release) Deactivate(message string, nextRelease Release) {
 		Message:            message,
 		ObservedGeneration: r.ObjectMeta.Generation,
 	})
-}
-
-func (r *Release) getLastHistoryEntryId() int {
-	if len(r.Status.History) == 0 {
-		return 0
-	}
-	return r.Status.History[len(r.Status.History)-1].ID
-}
-
-func (r *Release) PushHistoryEntry() {
-	entry := HistoryEntry{
-		ID:        r.getLastHistoryEntryId() + 1,
-		Timestamp: metav1.Now(),
-	}
-
-	if r.Status.Message != "" {
-		entry.Message = r.Status.Message
-	}
-
-	if !r.Status.DeploymentStartTime.IsZero() {
-		entry.DeploymentStartTime = r.Status.DeploymentStartTime
-	}
-
-	if !r.Status.DeploymentEndTime.IsZero() {
-		entry.DeploymentEndTime = r.Status.DeploymentEndTime
-	}
-
-	if r.Status.PreviousRelease.ReleaseRef != "" {
-		entry.PreviousRelease = r.Status.PreviousRelease
-	}
-
-	if r.Status.NextRelease.ReleaseRef != "" {
-		entry.NextRelease = r.Status.NextRelease
-	}
-
-	r.Status.History = append(r.Status.History, entry)
 }
 
 // Sorts releases by effective time, where effective time is the deployment

@@ -18,8 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// var ErrCannotSupersedeNewRelease = errors.New("cannot supersede a new release that has no phase set")
-
 type ReleaseReconciler struct {
 	client.Client
 	Log                  logr.Logger
@@ -75,116 +73,41 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		)
 }
 
-// func (r *ReleaseReconciler) trimExtraReleases(logger logr.Logger, ctx context.Context, namespace string, target string) error {
-// 	releases := &deployv1alpha1.ReleaseList{}
-// 	err := r.List(ctx, releases,
-// 		client.InNamespace(namespace),
-// 		client.MatchingFields(map[string]string{
-// 			"config.targetName": target,
-// 		}),
-// 	)
+func (r *ReleaseReconciler) trimExtraReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
+	releases := &deployv1alpha1.ReleaseList{}
+	err := r.List(ctx, releases,
+		client.InNamespace(namespace),
+		client.MatchingFields(map[string]string{
+			"config.targetName":        target,
+			"status.conditions.active": string(metav1.ConditionFalse),
+		}),
+	)
 
-// 	if err != nil {
-// 		return err
-// 	}
+	if err != nil {
+		return err
+	}
 
-// 	if len(releases.Items) <= r.MaxReleasesPerTarget {
-// 		return nil
-// 	}
+	logger.Info("found inactive releases", "count", len(releases.Items))
 
-// 	sort.Slice(releases.Items, func(i, j int) bool {
-// 		iActive := releases.Items[i].Status.Phase == deployv1alpha1.PhaseActive
-// 		jActive := releases.Items[j].Status.Phase == deployv1alpha1.PhaseActive
+	if len(releases.Items) < r.MaxReleasesPerTarget {
+		return nil
+	}
 
-// 		// If phases differ, Active comes first
-// 		if iActive != jActive {
-// 			return iActive
-// 		}
+	releases.Sort()
+	// trim releases to the configured maximum
+	releasesToDelete := releases.Items[r.MaxReleasesPerTarget:]
 
-// 		// If both have same phase, sort by LastAppliedTime descending (newer first)
-// 		return releases.Items[j].Status.DeploymentEndTime.Before(&releases.Items[i].Status.DeploymentEndTime)
-// 	})
+	for _, releaseToDelete := range releasesToDelete {
+		logger.Info("deleting release", "release", releaseToDelete.Name)
+		err := r.Delete(ctx, &releaseToDelete)
+		if err != nil {
+			logger.Error(err, "failed to delete release", "release", releaseToDelete.Name)
+			return err
+		}
+	}
 
-// 	// trim releases to max
-// 	releasesToDelete := releases.Items[r.MaxReleasesPerTarget:]
-
-// 	for _, releaseToDelete := range releasesToDelete {
-// 		logger.Info("deleting release", "release", releaseToDelete.Name)
-// 		err := r.Delete(ctx, &releaseToDelete)
-// 		if err != nil {
-// 			logger.Error(err, "failed to delete release", "release", releaseToDelete.Name)
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
-
-// func isNewRelease(phase deployv1alpha1.Phase) bool {
-// 	return phase == ""
-// }
-
-// func (r *ReleaseReconciler) prependToHistory(release *deployv1alpha1.Release) {
-// 	entry := deployv1alpha1.ReleaseStatusEntry{
-// 		Phase:               release.Status.Phase,
-// 		Message:             release.Status.Message,
-// 		DeploymentStartTime: release.Status.DeploymentStartTime,
-// 		DeploymentEndTime:   release.Status.DeploymentEndTime,
-// 		SupersededBy:        release.Status.SupersededBy,
-// 		SupersededTime:      release.Status.SupersededTime,
-// 	}
-
-// 	release.Status.History = append([]deployv1alpha1.ReleaseStatusEntry{entry}, release.Status.History...)
-
-// 	if len(release.Status.History) > r.MaxHistoryLimit {
-// 		release.Status.History = release.Status.History[len(release.Status.History)-r.MaxHistoryLimit:]
-// 	}
-// }
-
-// func (r *ReleaseReconciler) markReleaseSuperseded(ctx context.Context, release *deployv1alpha1.Release, supersededBy string) error {
-// 	release.Status.SupersededBy = supersededBy
-// 	release.Status.SupersededTime = metav1.Now()
-// 	release.Status.Phase = deployv1alpha1.PhaseInactive
-// 	release.Status.Message = fmt.Sprintf(MessageReleaseSuperseded, supersededBy)
-// 	return r.Status().Update(ctx, release)
-// }
-
-// func (r *ReleaseReconciler) supersedePreviousReleases(ctx context.Context, activeRelease *deployv1alpha1.Release) error {
-// 	// Mark all other releases as inactive
-// 	var releaseList deployv1alpha1.ReleaseList
-// 	err := r.List(ctx, &releaseList,
-// 		client.InNamespace(activeRelease.Namespace),
-// 		client.MatchingFields(map[string]string{
-// 			"config.targetName": activeRelease.ReleaseConfig.TargetName,
-// 			"status.phase":      string(deployv1alpha1.PhaseActive),
-// 		}),
-// 	)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	for _, otherRelease := range releaseList.Items {
-// 		if otherRelease.Name != activeRelease.Name {
-// 			if otherRelease.Status.Phase == deployv1alpha1.PhaseActive {
-// 				err := r.markReleaseSuperseded(ctx, &otherRelease, activeRelease.Name)
-// 				if err != nil {
-// 					return err
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	return nil
-// }
-
-// func (r *ReleaseReconciler) initRelease(ctx context.Context, release *deployv1alpha1.Release) error {
-// 	release.Status.Phase = deployv1alpha1.PhaseInactive
-// 	release.Status.Message = ""
-// 	release.Status.HealthStatus = deployv1alpha1.HealthStatusUnknown
-
-// 	return r.Status().Update(ctx, release)
-// }
+	return nil
+}
 
 func (r *ReleaseReconciler) findActiveRelease(ctx context.Context, namespace string, target string) (*deployv1alpha1.Release, error) {
 	releases := &deployv1alpha1.ReleaseList{}
@@ -266,7 +189,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 
 		err := r.Update(ctx, release)
 		if err != nil {
-			logger.Error(err, "failed to update resource")
+			logger.Error(err, "failed to update release")
 			return err
 		}
 
@@ -322,24 +245,11 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Error(err, "failed to update status field of release")
 	}
 
-	// if isNewRelease(release.Status.Phase) {
-	// 	err := r.markReleaseActive(ctx, release)
-	// 	if err != nil {
-	// 		logger.Error(err, "failed to mark release active")
-	// 		return ctrl.Result{}, err
-	// 	}
-
-	// 	err = r.supersedePreviousReleases(ctx, release)
-	// 	if err != nil {
-	// 		logger.Error(err, "failed to supersede previous releases")
-	// 		return ctrl.Result{}, err
-	// 	}
-
-	// err = r.trimExtraReleases(logger, ctx, req.Namespace, release.ReleaseConfig.TargetName)
-	// if err != nil {
-	// 	logger.Error(err, "failed to trim extra releases")
-	// 	return ctrl.Result{}, err
-	// }
+	err = r.trimExtraReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
+	if err != nil {
+		logger.Error(err, "failed to trim extra releases")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }

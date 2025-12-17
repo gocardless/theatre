@@ -148,23 +148,8 @@ func (r *Release) PushHistoryEntry() {
 // sorted by creation time if they have the same end time.
 func (rl *ReleaseList) Sort() {
 	sort.Slice(rl.Items, func(i, j int) bool {
-		iEnd := rl.Items[i].Status.DeploymentEndTime
-		jEnd := rl.Items[j].Status.DeploymentEndTime
 		iCreated := rl.Items[i].ObjectMeta.CreationTimestamp
 		jCreated := rl.Items[j].ObjectMeta.CreationTimestamp
-
-		iEffective := iCreated
-		if !iEnd.IsZero() {
-			iEffective = iEnd
-		}
-		jEffective := jCreated
-		if !jEnd.IsZero() {
-			jEffective = jEnd
-		}
-
-		if !iEffective.Equal(&jEffective) {
-			return iEffective.After(jEffective.Time)
-		}
 
 		return iCreated.After(jCreated.Time)
 	})

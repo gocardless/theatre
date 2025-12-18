@@ -22,6 +22,9 @@ const (
 
 	// Reasons for condition status changes
 
+	// ReasonCreated indicates the release was successfully created.
+	ReasonCreated = "Created"
+
 	// ReasonDeployed indicates the release was successfully deployed and is now active.
 	ReasonDeployed = "Deployed"
 
@@ -123,6 +126,9 @@ type ReleaseStatus struct {
 	// Signature is deterministic hash constructed out of the release revisions.
 	// The signature is constructed out of the sum of names and ids of each revision.
 	Signature string `json:"signature,omitempty"`
+
+	// SignatureShort is a truncated version of the signature.
+	SignatureShort string `json:"signatureShort,omitempty"`
 }
 
 // +kubebuilder:object:root=true

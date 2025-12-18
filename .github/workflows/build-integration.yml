@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - master
+      - pre-release-5.1.0
     types:
       - opened
       - reopened
@@ -17,6 +18,7 @@ on:
   push:
     branches:
       - master
+      - pre-release-5.1.0
 
   workflow_dispatch:
 
@@ -68,7 +70,7 @@ jobs:
           chmod a+x /usr/local/bin/kustomize /usr/local/bin/kubectl /usr/local/bin/kind
           EOF
       - name: Prepare the cluster
-        run: bin/acceptance.linux prepare --verbose && sleep 10
+        run: bin/acceptance.linux prepare --verbose && sleep 30
       - name: Run acceptance tests
         run: bin/acceptance.linux run --verbose
       - name: Show all pods

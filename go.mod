@@ -17,7 +17,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/sykesm/zap-logfmt v0.0.4
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/oauth2 v0.32.0
 	golang.org/x/sys v0.38.0
 	gomodules.xyz/jsonpatch/v3 v3.0.1

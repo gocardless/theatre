@@ -24,7 +24,7 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Healthy")].status
       name: Healthy
       type: string
-    - jsonPath: .status.signatureShort
+    - jsonPath: .status.signature
       name: Signature
       type: string
     - jsonPath: .status.previousRelease.transitionTime
@@ -203,10 +203,6 @@ spec:
                     format: date-time
                     type: string
                 type: object
-              observedGeneration:
-                description: The generation observed by the release controller.
-                format: int64
-                type: integer
               previousRelease:
                 description: PreviousRelease is the name of the release that was superseded
                   by this release.
@@ -223,9 +219,6 @@ spec:
                 description: |-
                   Signature is deterministic hash constructed out of the release revisions.
                   The signature is constructed out of the sum of names and ids of each revision.
-                type: string
-              signatureShort:
-                description: SignatureShort is a truncated version of the signature.
                 type: string
             type: object
         required:

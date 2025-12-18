@@ -105,9 +105,6 @@ type ReleaseStatus struct {
 	// +kubebuilder:validation:listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// The generation observed by the release controller.
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
 	// Message is a human-readable message indicating the state of the release.
 	Message string `json:"message,omitempty"`
 

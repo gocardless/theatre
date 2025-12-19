@@ -8,6 +8,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 
+	releasecontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	releasewebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/release"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +28,10 @@ var (
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("true").Bool()
+	maxReleasesPerTarget = app.Flag("max-releases-per-target-name", "Maximum number of releases to keep per target name. All releases older than this will be deleted by the reconciler.").
+				Default("10").
+				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET_NAME").
+				Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
@@ -57,6 +62,17 @@ func main() {
 
 	if err != nil {
 		app.Fatalf("failed to create manager: %v", err)
+	}
+
+	err = (&releasecontroller.ReleaseReconciler{
+		Client:               manager.GetClient(),
+		Scheme:               scheme,
+		Log:                  logger,
+		MaxReleasesPerTarget: *maxReleasesPerTarget,
+	}).SetupWithManager(ctx, manager)
+
+	if err != nil {
+		app.Fatalf("failed to create controller: %v", err)
 	}
 
 	manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{

@@ -110,6 +110,7 @@ func (r *ReleaseReconciler) trimExtraReleases(ctx context.Context, logger logr.L
 	return nil
 }
 
+// TODO: this should be refactored to either find the latest active release(s) or the latest release with a deployment end time
 func (r *ReleaseReconciler) findActiveRelease(ctx context.Context, namespace string, target string) (*deployv1alpha1.Release, error) {
 	releases := &deployv1alpha1.ReleaseList{}
 	err := r.List(ctx, releases,
@@ -145,7 +146,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			return err
 		}
 
-		if release.Status.DeploymentStartTime.IsZero() || !release.Status.DeploymentStartTime.Time.Equal(startTime) {
+		if release.Status.DeploymentStartTime.IsZero() || !release.Status.DeploymentStartTime.Time.UTC().Equal(startTime.UTC()) {
 			release.Status.DeploymentStartTime = metav1.NewTime(startTime)
 			modified = true
 		}
@@ -157,7 +158,9 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			return err
 		}
 
-		if release.Status.DeploymentEndTime.IsZero() || !release.Status.DeploymentEndTime.Time.Equal(endTime) {
+		logger.Info("setting deployment end time", "release", release.Name, "endTime", endTime.UTC(), "currentEndTime", release.Status.DeploymentEndTime.Time.UTC())
+
+		if release.Status.DeploymentEndTime.IsZero() || !release.Status.DeploymentEndTime.Time.UTC().Equal(endTime.UTC()) {
 			release.Status.DeploymentEndTime = metav1.NewTime(endTime)
 			modified = true
 
@@ -175,7 +178,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 
 				if activeRelease != nil {
 					messageSuperseded := fmt.Sprintf(MessageReleaseSuperseded, release.Name)
-					activeRelease.Deactivate(messageSuperseded, *release)
+					activeRelease.Deactivate(messageSuperseded, release)
 					err = r.updateReleaseStatus(ctx, activeRelease)
 					if err != nil {
 						return err
@@ -194,16 +197,16 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	return nil
 }
 
-func (r *ReleaseReconciler) initialiseReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {
+func (r *ReleaseReconciler) initialiseReleaseStatus(ctx context.Context, release deployv1alpha1.Release) error {
 	release.InitialiseStatus(MessageReleaseCreated)
-	return r.updateReleaseStatus(ctx, release)
+	return r.updateReleaseStatus(ctx, &release)
 }
 
 func (r *ReleaseReconciler) updateReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {
 	return r.Status().Update(ctx, release)
 }
 
-func (r *ReleaseReconciler) findNotInitialisedReleases(ctx context.Context, release *deployv1alpha1.Release) ([]deployv1alpha1.Release, error) {
+func (r *ReleaseReconciler) findPendingActivationReleases(ctx context.Context, release *deployv1alpha1.Release) ([]deployv1alpha1.Release, error) {
 	var releaseList deployv1alpha1.ReleaseList
 
 	err := r.List(ctx, &releaseList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{
@@ -214,25 +217,52 @@ func (r *ReleaseReconciler) findNotInitialisedReleases(ctx context.Context, rele
 		return nil, err
 	}
 
-	var notInitialisedReleases []deployv1alpha1.Release
+	var pendingActivation []deployv1alpha1.Release
 
 	for _, release := range releaseList.Items {
-		if !release.IsStatusInitialised() {
-			notInitialisedReleases = append(notInitialisedReleases, release)
+		if release.AnnotatedWithSetDeploymentEndTime() && release.Status.DeploymentEndTime.IsZero() {
+			pendingActivation = append(pendingActivation, release)
 		}
 	}
 
-	return notInitialisedReleases, nil
+	return pendingActivation, nil
 }
 
 func effectiveReleaseTime(r *deployv1alpha1.Release) time.Time {
-	if !r.Status.DeploymentEndTime.IsZero() {
-		return r.Status.DeploymentEndTime.Time
+	// if !r.Status.DeploymentEndTime.IsZero() {
+	return r.Status.DeploymentEndTime.Time
+	// }
+	// if !r.Status.DeploymentStartTime.IsZero() {
+	// 	return r.Status.DeploymentStartTime.Time
+	// }
+	// return r.CreationTimestamp.Time
+}
+
+// The function returns two slices, one of viable releases and one of unknown releases.
+// A viable release is a release that has a unique deployment end time. All other
+// releases are will be marked with a condition unknown as we cannot determine
+// which one should be activated.
+func partitionReleasesByEndTimeTies(releases []deployv1alpha1.Release) (viable []deployv1alpha1.Release, unknown []deployv1alpha1.Release) {
+	viable = make([]deployv1alpha1.Release, 0)
+	unknown = make([]deployv1alpha1.Release, 0)
+
+	releasesEndTimes := make(map[time.Time][]deployv1alpha1.Release)
+
+	for i := range releases {
+		if !releases[i].Status.DeploymentEndTime.IsZero() {
+			releasesEndTimes[releases[i].Status.DeploymentEndTime.Time] = append(releasesEndTimes[releases[i].Status.DeploymentEndTime.Time], releases[i])
+		}
 	}
-	if !r.Status.DeploymentStartTime.IsZero() {
-		return r.Status.DeploymentStartTime.Time
+
+	for i := range releases {
+		if !releases[i].Status.DeploymentEndTime.IsZero() && len(releasesEndTimes[releases[i].Status.DeploymentEndTime.Time]) > 1 {
+			unknown = append(unknown, releases[i])
+		} else {
+			viable = append(viable, releases[i])
+		}
 	}
-	return r.CreationTimestamp.Time
+
+	return
 }
 
 func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger logr.Logger, releases []deployv1alpha1.Release) error {
@@ -240,127 +270,81 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 		return nil
 	}
 
+	// Ensure every release has initialised conditions so we can reason about Active=True/False.
+	for i := range releases {
+		if !releases[i].IsStatusInitialised() {
+			releases[i].InitialiseStatus(MessageReleaseCreated)
+			releases[i].ParseAnnotations("Recreating timeline", nil)
+		}
+	}
+
 	namespace := releases[0].Namespace
 	target := releases[0].ReleaseConfig.TargetName
 
-	// Load all releases for the target (not only the not-initialised ones),
-	// because we must converge the whole target state.
-	all := &deployv1alpha1.ReleaseList{}
-	if err := r.List(ctx, all,
-		client.InNamespace(namespace),
-		client.MatchingFields(map[string]string{
-			"config.targetName": target,
-		}),
-	); err != nil {
-		return err
+	viable, unknown := partitionReleasesByEndTimeTies(releases)
+
+	for i := range unknown {
+		if err := r.updateReleaseStatus(ctx, &unknown[i]); err != nil {
+			return err
+		}
 	}
 
-	if len(all.Items) == 0 {
+	if len(viable) == 0 {
 		return nil
 	}
 
-	// Ensure every release has initialised conditions so we can reason about Active=True/False.
-	for i := range all.Items {
-		if !all.Items[i].IsStatusInitialised() {
-			all.Items[i].InitialiseStatus(MessageReleaseCreated)
+	sort.SliceStable(viable, func(i, j int) bool {
+		// Newest first
+		ti := effectiveReleaseTime(&viable[i])
+		tj := effectiveReleaseTime(&viable[j])
+		if !ti.Equal(tj) {
+			return ti.After(tj)
 		}
+
+		// Stable tie-breaker
+		return string(viable[i].UID) > string(viable[j].UID)
+	})
+
+	winner := viable[0]
+
+	// the winner is the one that should be active
+	winner.Activate(MessageReleaseActive, &viable[1])
+	// nextRelease := winner
+	for i := 1; i < len(viable); i++ {
+		viable[i].Deactivate(MessageReleaseSuperseded, nil)
+		// nextRelease = viable[i]
 	}
 
-	// Determine "currently active" candidates by status condition.
-	var activeIdx []int
-	for i := range all.Items {
-		cond := meta.FindStatusCondition(all.Items[i].Status.Conditions, deployv1alpha1.ReleaseConditionActive)
-		if cond != nil && cond.Status == metav1.ConditionTrue {
-			activeIdx = append(activeIdx, i)
-		}
+	activeRelease, err := r.findActiveRelease(ctx, namespace, target)
+	if err != nil {
+		return err
 	}
 
-	// Pick a winner:
-	// - if exactly one Active=True, keep it
-	// - otherwise deterministically choose newest by:
-	//   deploymentEndTime > deploymentStartTime > creationTimestamp, tie-break on UID
-	winnerIndex := -1
-	if len(activeIdx) == 1 {
-		winnerIndex = activeIdx[0]
-	} else {
-		sort.SliceStable(all.Items, func(i, j int) bool {
-			// Newest first
-			ti := effectiveReleaseTime(&all.Items[i])
-			tj := effectiveReleaseTime(&all.Items[j])
-			if !ti.Equal(tj) {
-				return ti.After(tj)
-			}
-
-			// Stable tie-breaker
-			return string(all.Items[i].UID) > string(all.Items[j].UID)
-		})
-		winnerIndex = 0
+	if activeRelease != nil {
+		activeRelease.Deactivate(MessageReleaseSuperseded, nil)
+		viable = append(viable, *activeRelease)
 	}
-
-	winner := all.Items[winnerIndex]
 
 	// Converge: exactly one active, all others inactive.
 	// We do this using Status().Update per object to avoid needing a single multi-object transaction.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Re-list inside retry to reduce conflict probability and work with newest resourceVersions.
-		current := &deployv1alpha1.ReleaseList{}
-		if err := r.List(ctx, current,
-			client.InNamespace(namespace),
-			client.MatchingFields(map[string]string{
-				"config.targetName": target,
-			}),
-		); err != nil {
-			return err
-		}
-
-		// Find the winner object in the re-listed set
-		var currentWinner *deployv1alpha1.Release
-		for i := range current.Items {
-			if current.Items[i].Name == winner.Name {
-				currentWinner = &current.Items[i]
-				break
-			}
-		}
-		if currentWinner == nil {
-			return fmt.Errorf("winner release %s disappeared during reconciliation", winner.Name)
-		}
-
-		// Initialise winner if needed, then activate it.
-		if !currentWinner.IsStatusInitialised() {
-			currentWinner.InitialiseStatus(MessageReleaseCreated)
-		}
-		// We do not attempt to preserve any previousRelease chain here, because during downtime
-		// we may not know the real predecessor. If you want, we can set it based on ordering.
-		currentWinner.Activate(MessageReleaseActive, nil)
-		if err := r.updateReleaseStatus(ctx, currentWinner); err != nil {
-			return err
-		}
 
 		// Deactivate everyone else
-		for i := range current.Items {
-			if current.Items[i].Name == currentWinner.Name {
-				continue
-			}
+		for i := range viable {
+			current := viable[i]
 
-			other := &current.Items[i]
-			if !other.IsStatusInitialised() {
-				other.InitialiseStatus(MessageReleaseCreated)
-			}
-
-			message := fmt.Sprintf(MessageReleaseSuperseded, currentWinner.Name)
-			other.Deactivate(message, *currentWinner)
-
-			if err := r.updateReleaseStatus(ctx, other); err != nil {
+			if err := r.updateReleaseStatus(ctx, &current); err != nil {
 				return err
 			}
+
 		}
 
 		logger.Info(
 			"recovered active release after downtime",
 			"target", target,
-			"winner", currentWinner.Name,
-			"activeCandidates", len(activeIdx),
-			"total", len(current.Items),
+			"winner", winner.Name,
+			"activeCandidates", len(viable),
+			"total", len(releases),
 		)
 
 		return nil
@@ -372,35 +356,29 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	logger.Info("reconciling release")
 
 	var err error
-	// TODO: check if multiple releases haven't been initialised
-	// if multiple of them have the activate annotation, disregard it and try to:
-	// reconstruct timeline from deployment start and end times
-	// if no deployment start/end fall back on creationTimestamp
-	// if all creation timestamps are conflicting leave the releases and emit a warning
-	// if so, mark all but the most recent as superseded
 
 	logger.Info("release is new, will initialise")
-	// pendingActivation, err := r.findPendingActivationReleases(ctx, release)
-	// if err != nil {
-	// 	logger.Error(err, "failed to find pending activation releases")
-	// 	return ctrl.Result{}, err
-	// }
+	pendingActivation, err := r.findPendingActivationReleases(ctx, release)
+	if err != nil {
+		logger.Error(err, "failed to find pending activation releases")
+		return ctrl.Result{}, err
+	}
 
 	// Multiple releases pending activation indicates something went wrong, e.g.
 	// the controller was offline. Attempt to reconstruct timeline
-	// if len(pendingActivation) > 1 {
-	// 	logger.Info("multiple releases pending activation, something went wrong, attempting to reconstruct timeline")
+	if len(pendingActivation) > 1 {
+		logger.Info("multiple releases pending activation, something went wrong, attempting to reconstruct timeline")
 
-	// 	err := r.safeReleaseActivation(ctx, logger, pendingActivation)
-	// 	if err != nil {
-	// 		logger.Error(err, "failed to reconcile multiple pending activation releases")
-	// 		return ctrl.Result{}, err
-	// 	}
-	// 	return ctrl.Result{}, nil
-	// }
+		err := r.safeReleaseActivation(ctx, logger, pendingActivation)
+		if err != nil {
+			logger.Error(err, "failed to reconcile multiple pending activation releases")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
 
 	if !release.IsStatusInitialised() {
-		err = r.initialiseReleaseStatus(ctx, release)
+		err = r.initialiseReleaseStatus(ctx, *release)
 		if err != nil {
 			logger.Error(err, "failed to initialise release")
 			return ctrl.Result{}, err

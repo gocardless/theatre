@@ -23,9 +23,6 @@ spec:
     - jsonPath: .spec.toReleaseName
       name: To
       type: string
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
     - jsonPath: .spec.reason
       name: Reason
       priority: 1
@@ -114,7 +111,7 @@ spec:
               conditions:
                 description: |-
                   Conditions represent the latest observations of the rollback's state.
-                  Known condition types are: "CIJobSubmitted", "RollbackInProgress", "RollbackComplete".
+                  Known condition types are: "InProgress", "Succeeded".
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -184,17 +181,8 @@ spec:
                 description: Message is a human-readable message indicating the state
                   of the rollback.
                 type: string
-              observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed Rollback spec.
-                format: int64
-                type: integer
               startTime:
                 description: StartTime is when the rollback operation started.
-                format: date-time
-                type: string
-              timestamp:
-                description: Timestamp is when this status was recorded.
                 format: date-time
                 type: string
             required:

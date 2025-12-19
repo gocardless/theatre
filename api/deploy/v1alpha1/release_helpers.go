@@ -42,7 +42,7 @@ func (rc *ReleaseConfig) Serialise() []byte {
 }
 
 func (r *Release) IsStatusInitialised() bool {
-	return r.Status.ObservedGeneration > 0
+	return len(r.Status.Conditions) > 0
 }
 
 func (r *Release) generateSignature() string {
@@ -51,12 +51,11 @@ func (r *Release) generateSignature() string {
 
 func (r *Release) InitialiseStatus(message string) {
 	r.Status.Message = message
-	r.Status.ObservedGeneration = r.ObjectMeta.Generation
 
 	// Generate signature and signature short
 	signature := r.generateSignature()
 	r.Status.Signature = signature
-	r.Status.SignatureShort = signature[:7]
+	r.Status.SignatureShort = signature[:10]
 
 	conditionActive := metav1.Condition{
 		Type:               ReleaseConditionActive,
@@ -79,9 +78,6 @@ func (r *Release) InitialiseStatus(message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, conditionHealthy)
 }
 
-func (r *Release) UpdateObservedGeneration() {
-	r.Status.ObservedGeneration = r.ObjectMeta.Generation
-}
 
 func (r *Release) AnnotatedWithActivate() bool {
 	_, ok := r.Annotations[AnnotationKeyReleaseActivate]

@@ -7,6 +7,19 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// Condition types for Rollback resources
+const (
+	// RollbackConditionInProgress indicates whether the rollback is currently in progress.
+	// Status=True means the rollback is in progress (e.g. the ArgoCD sync is in progress).
+	// Status=False means the rollback is yet to start or has completed.
+	RollbackConditionInProgress = "InProgress"
+
+	// RollbackConditionSucceded indicates whether the rollback has succeeded.
+	// Status=True means the rollback has succeeded.
+	// Status=False means the rollback has not failed.
+	RollbackConditionSucceded = "Succeeded"
+)
+
 // RollbackSpec defines the desired state of Rollback
 type RollbackSpec struct {
 	// ToReleaseName is the target release to rollback to. This is a reference to
@@ -37,28 +50,10 @@ type RollbackInitiator struct {
 	System string `json:"system,omitempty"`
 }
 
-// RollbackPhase represents the current phase of the rollback operation
-type RollbackPhase string
-
-const (
-	// RollbackPhaseInProgress indicates the rollback is currently in progress
-	RollbackPhaseInProgress RollbackPhase = "InProgress"
-	// RollbackPhaseSuccess indicates the rollback completed successfully
-	RollbackPhaseSuccess RollbackPhase = "Success"
-	// RollbackPhaseFailed indicates the rollback failed
-	RollbackPhaseFailed RollbackPhase = "Failed"
-)
-
 // RollbackStatus defines the observed state of Rollback
 type RollbackStatus struct {
 	// Message is a human-readable message indicating the state of the rollback.
 	Message string `json:"message,omitempty"`
-
-	// Timestamp is when this status was recorded.
-	Timestamp metav1.Time `json:"timestamp,omitempty"`
-
-	// ObservedGeneration reflects the generation of the most recently observed Rollback spec.
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// FromReleaseName is the release being rolled back from. This is a reference
 	// to the Release resource name.
@@ -85,7 +80,7 @@ type RollbackStatus struct {
 	LastHTTPCallTime *metav1.Time `json:"lastHTTPCallTime,omitempty"`
 
 	// Conditions represent the latest observations of the rollback's state.
-	// Known condition types are: "CIJobSubmitted", "RollbackInProgress", "RollbackComplete".
+	// Known condition types are: "InProgress", "Succeeded".
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -94,7 +89,6 @@ type RollbackStatus struct {
 // +kubebuilder:resource:shortName=rb
 // +kubebuilder:printcolumn:name="From",type=string,JSONPath=`.status.fromReleaseName`
 // +kubebuilder:printcolumn:name="To",type=string,JSONPath=`.spec.toReleaseName`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.spec.reason`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

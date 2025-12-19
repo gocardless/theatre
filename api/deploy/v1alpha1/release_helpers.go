@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,34 +51,39 @@ func (r *Release) generateSignature() string {
 }
 
 func (r *Release) InitialiseStatus(message string) {
+	if message == "" {
+		message = "Release initialised successfully"
+	}
 	r.Status.Message = message
+	r.Status.Signature = r.generateSignature()
 
-	// Generate signature and signature short
-	signature := r.generateSignature()
-	r.Status.Signature = signature
-	r.Status.SignatureShort = signature[:10]
-
-	conditionActive := metav1.Condition{
-		Type:               ReleaseConditionActive,
-		Status:             metav1.ConditionUnknown,
-		Reason:             ReasonCreated,
-		Message:            message,
-		ObservedGeneration: r.ObjectMeta.Generation,
-	}
-
-	meta.SetStatusCondition(&r.Status.Conditions, conditionActive)
-
-	conditionHealthy := metav1.Condition{
-		Type:               ReleaseConditionHealthy,
-		Status:             metav1.ConditionUnknown,
-		Reason:             ReasonCreated,
-		Message:            message,
-		ObservedGeneration: r.ObjectMeta.Generation,
-	}
-
-	meta.SetStatusCondition(&r.Status.Conditions, conditionHealthy)
+	r.SetConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
+	r.SetConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
+func (r *Release) ParseAnnotations(message string, previousRelease *Release) (changed bool, errors []error) {
+	if r.AnnotatedWithSetDeploymentStartTime() {
+		startTime, err := time.Parse(time.RFC3339, r.Annotations[AnnotationKeyReleaseSetDeploymentStartTime])
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			r.Status.DeploymentStartTime = metav1.NewTime(startTime)
+			changed = true
+		}
+	}
+
+	if r.AnnotatedWithSetDeploymentEndTime() {
+		endTime, err := time.Parse(time.RFC3339, r.Annotations[AnnotationKeyReleaseSetDeploymentEndTime])
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			r.Status.DeploymentEndTime = metav1.NewTime(endTime)
+			changed = true
+		}
+	}
+
+	return changed, errors
+}
 
 func (r *Release) AnnotatedWithActivate() bool {
 	_, ok := r.Annotations[AnnotationKeyReleaseActivate]
@@ -113,29 +119,38 @@ func (r *Release) Activate(message string, previousRelease *Release) {
 
 	// This is the current active release, so it has no next release
 	r.Status.NextRelease = ReleaseTransition{}
+	r.SetConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
+}
 
+func (r *Release) SetConditionActive(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
-		Type:               ReleaseConditionActive,
-		Status:             metav1.ConditionTrue,
-		Reason:             ReasonDeployed,
-		Message:            message,
-		ObservedGeneration: r.ObjectMeta.Generation,
+		Type:    ReleaseConditionActive,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
 	})
 }
 
-func (r *Release) Deactivate(message string, nextRelease Release) {
-	r.Status.Message = message
-	r.Status.NextRelease = ReleaseTransition{
-		ReleaseRef:     nextRelease.Name,
-		TransitionTime: metav1.Now(),
-	}
+func (r *Release) SetConditionHealthy(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
-		Type:               ReleaseConditionActive,
-		Status:             metav1.ConditionFalse,
-		Reason:             ReasonSuperseded,
-		Message:            message,
-		ObservedGeneration: r.ObjectMeta.Generation,
+		Type:    ReleaseConditionHealthy,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
 	})
+}
+
+func (r *Release) Deactivate(message string, nextRelease *Release) {
+	r.Status.Message = message
+
+	if nextRelease != nil {
+		r.Status.NextRelease = ReleaseTransition{
+			ReleaseRef:     nextRelease.Name,
+			TransitionTime: metav1.Now(),
+		}
+	}
+
+	r.SetConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
 
 // Sorts releases by effective time, where effective time is the deployment

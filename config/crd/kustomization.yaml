@@ -10,6 +10,7 @@ resources:
   - bases/workloads.crd.gocardless.com_consoleauthorisations.yaml
   - bases/workloads.crd.gocardless.com_consoletemplates.yaml
   - bases/deploy.gocardless.com_releases.yaml
+  - bases/deploy.gocardless.com_rollbacks.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # patches:

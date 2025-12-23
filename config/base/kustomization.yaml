@@ -13,6 +13,7 @@ resources:
   - managers/rbac.yaml
   - managers/vault.yaml
   - managers/workloads.yaml
+  - managers/rollback.yaml
   - webhooks/vault.yaml
   - webhooks/workloads.yaml
   - rbac/leader-election.yaml

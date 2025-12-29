@@ -36,6 +36,10 @@ type RollbackSpec struct {
 	// InitiatedBy tracks who or what triggered the rollback for audit purposes.
 	// +kubebuilder:validation:Optional
 	InitiatedBy RollbackInitiator `json:"initiatedBy,omitempty"`
+
+	// DeploymentOptions contains additional provider-specific options.
+	// +kubebuilder:validation:Optional
+	DeploymentOptions map[string]string `json:"deploymentOptions,omitempty"`
 }
 
 // RollbackInitiator tracks who or what initiated the rollback

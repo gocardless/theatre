@@ -57,6 +57,12 @@ spec:
           spec:
             description: Spec defines the desired state of Rollback
             properties:
+              deploymentOptions:
+                additionalProperties:
+                  type: string
+                description: DeploymentOptions contains additional provider-specific
+                  options.
+                type: object
               initiatedBy:
                 description: InitiatedBy tracks who or what triggered the rollback
                   for audit purposes.

@@ -77,8 +77,8 @@ type RollbackStatus struct {
 	// This is used to poll for deployment status.
 	DeploymentID string `json:"deploymentID,omitempty"`
 
-	// CIJobURL is the URL to the CI job performing the rollback.
-	CIJobURL string `json:"ciJobURL,omitempty"`
+	// DeploymentURL is the URL to the CI job performing the rollback.
+	DeploymentURL string `json:"deploymentURL,omitempty"`
 
 	// AttemptCount tracks how many times the controller has attempted to
 	// initiate the rollback via the CI system.

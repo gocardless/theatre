@@ -173,6 +173,11 @@ spec:
                   - type
                   type: object
                 type: array
+              deploymentID:
+                description: |-
+                  DeploymentID is the unique identifier for the deployment in the CICD system.
+                  This is used to poll for deployment status.
+                type: string
               fromReleaseName:
                 description: |-
                   FromReleaseName is the release being rolled back from. This is a reference

@@ -73,6 +73,10 @@ type RollbackStatus struct {
 	// CompletionTime is when the rollback operation completed (successfully or failed).
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 
+	// DeploymentID is the unique identifier for the deployment in the CICD system.
+	// This is used to poll for deployment status.
+	DeploymentID string `json:"deploymentID,omitempty"`
+
 	// CIJobURL is the URL to the CI job performing the rollback.
 	CIJobURL string `json:"ciJobURL,omitempty"`
 

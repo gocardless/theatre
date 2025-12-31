@@ -9,6 +9,7 @@ import (
 	"github.com/gocardless/theatre/v5/cmd"
 
 	rollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
+	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -26,11 +27,20 @@ var (
 				Envar("ROLLBACK_MANAGER_HISTORY_LIMIT").
 				Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
+
+	// deployer holds the configured CICD deployer implementation.
+	// This is set during initialization based on configuration.
+	deployer cicd.Deployer
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
+
+	// Default to noop deployer - users should configure their own implementation
+	// by setting the deployer variable before main() or via a plugin system.
+	// Example implementations could be injected via build tags or configuration.
+	deployer = &cicd.NoopDeployer{}
 }
 
 func main() {
@@ -62,6 +72,7 @@ func main() {
 		Scheme:               scheme,
 		Log:                  logger,
 		RollbackHistoryLimit: *rollbackHistoryLimit,
+		Deployer:             deployer,
 	}).SetupWithManager(ctx, manager)
 
 	if err != nil {

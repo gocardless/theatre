@@ -106,8 +106,8 @@ spec:
                   Automatic indicates whether this rollback was triggered automatically
                   (e.g., by a health check) or manually by a user.
                 type: boolean
-              ciJobURL:
-                description: CIJobURL is the URL to the CI job performing the rollback.
+              deploymentURL:
+                description: DeploymentURL is the URL to the CI job performing the rollback.
                 type: string
               completionTime:
                 description: CompletionTime is when the rollback operation completed

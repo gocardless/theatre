@@ -90,7 +90,6 @@ spec:
                 type: string
             required:
             - reason
-            - toReleaseName
             type: object
           status:
             description: Status defines the observed state of Rollback

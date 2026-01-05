@@ -24,7 +24,7 @@ const (
 type RollbackSpec struct {
 	// ToReleaseName is the target release to rollback to. This is a reference to
 	// the Release resource name.
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	ToReleaseName string `json:"toReleaseName,omitempty"`
 
 	// Reason is a human-readable message explaining why the rollback was initiated.

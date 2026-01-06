@@ -80,7 +80,6 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 
 	var err error
 
-	logger.Info("release is new, will initialise")
 	pendingActivation, err := r.findPendingActivationReleases(ctx, release)
 	if err != nil {
 		logger.Error(err, "failed to find pending activation releases")
@@ -101,6 +100,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	}
 
 	if !release.IsStatusInitialised() {
+		logger.Info("release is new, will initialise")
 		err = r.initialiseReleaseStatus(ctx, *release)
 		if err != nil {
 			logger.Error(err, "failed to initialise release")
@@ -283,19 +283,13 @@ func (r *ReleaseReconciler) findPendingActivationReleases(ctx context.Context, r
 }
 
 func effectiveReleaseTime(r *deployv1alpha1.Release) time.Time {
-	// if !r.Status.DeploymentEndTime.IsZero() {
 	return r.Status.DeploymentEndTime.Time
-	// }
-	// if !r.Status.DeploymentStartTime.IsZero() {
-	// 	return r.Status.DeploymentStartTime.Time
-	// }
-	// return r.CreationTimestamp.Time
 }
 
 // The function returns two slices, one of viable releases and one of unknown releases.
 // A viable release is a release that has a unique deployment end time. All other
-// releases are will be marked with a condition unknown as we cannot determine
-// which one should be activated.
+// releases will be marked with a condition unknown as we cannot determine which
+// one should be activated.
 func partitionReleasesByEndTimeTies(releases []deployv1alpha1.Release) (viable []deployv1alpha1.Release, unknown []deployv1alpha1.Release) {
 	viable = make([]deployv1alpha1.Release, 0)
 	unknown = make([]deployv1alpha1.Release, 0)
@@ -309,6 +303,8 @@ func partitionReleasesByEndTimeTies(releases []deployv1alpha1.Release) (viable [
 	}
 
 	for i := range releases {
+		// If the deployment end time is not set or there are multiple releases with the same deployment end time,
+		// we cannot determine which release should be active
 		if !releases[i].Status.DeploymentEndTime.IsZero() && len(releasesEndTimes[releases[i].Status.DeploymentEndTime.Time]) > 1 {
 			unknown = append(unknown, releases[i])
 		} else {
@@ -330,12 +326,17 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 	for i := range releases {
 		if !releases[i].IsStatusInitialised() {
 			releases[i].InitialiseStatus(MessageReleaseCreated)
-			releases[i].ParseAnnotations("Recreating timeline", nil)
 		}
+		releases[i].ParseAnnotations("Recreating timeline", nil)
 	}
 
 	namespace := releases[0].Namespace
 	target := releases[0].ReleaseConfig.TargetName
+
+	activeRelease, err := r.findActiveRelease(ctx, namespace, target)
+	if err != nil {
+		return err
+	}
 
 	viable, unknown := partitionReleasesByEndTimeTies(releases)
 
@@ -347,6 +348,10 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 
 	if len(viable) == 0 {
 		return nil
+	}
+
+	if activeRelease != nil {
+		viable = append(viable, *activeRelease)
 	}
 
 	sort.SliceStable(viable, func(i, j int) bool {
@@ -364,21 +369,17 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 	winner := viable[0]
 
 	// the winner is the one that should be active
-	winner.Activate(MessageReleaseActive, &viable[1])
-	// nextRelease := winner
+	// viable[0].Activate(MessageReleaseActive, &viable[1])
+	nextRelease := winner
 	for i := 1; i < len(viable); i++ {
-		viable[i].Deactivate(MessageReleaseSuperseded, nil)
-		// nextRelease = viable[i]
-	}
-
-	activeRelease, err := r.findActiveRelease(ctx, namespace, target)
-	if err != nil {
-		return err
-	}
-
-	if activeRelease != nil {
-		activeRelease.Deactivate(MessageReleaseSuperseded, nil)
-		viable = append(viable, *activeRelease)
+		if i+1 < len(viable) {
+			viable[i].Status.PreviousRelease = deployv1alpha1.ReleaseTransition{
+				ReleaseRef:     viable[i+1].Name,
+				TransitionTime: metav1.Now(),
+			}
+		}
+		viable[i].Deactivate(MessageReleaseSuperseded, &nextRelease)
+		nextRelease = viable[i]
 	}
 
 	// Converge: exactly one active, all others inactive.
@@ -388,11 +389,11 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 		// Deactivate everyone else
 		for i := range viable {
 			current := viable[i]
+			logger.Info("updating release", "release", current.Name, "previousRelease", current.Status.PreviousRelease.ReleaseRef)
 
 			if err := r.updateReleaseStatus(ctx, &current); err != nil {
 				return err
 			}
-
 		}
 
 		logger.Info(

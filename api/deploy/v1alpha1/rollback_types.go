@@ -23,7 +23,8 @@ const (
 // RollbackSpec defines the desired state of Rollback
 type RollbackSpec struct {
 	// ToReleaseName is the target release to rollback to. This is a reference to
-	// the Release resource name.
+	// the Release resource name. If left empty, the operator will pick the latest
+	// healthy release to roll back to.
 	// +kubebuilder:validation:Optional
 	ToReleaseName string `json:"toReleaseName,omitempty"`
 

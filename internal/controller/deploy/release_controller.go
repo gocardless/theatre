@@ -74,6 +74,57 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		)
 }
 
+func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
+	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
+	logger.Info("reconciling release")
+
+	var err error
+
+	logger.Info("release is new, will initialise")
+	pendingActivation, err := r.findPendingActivationReleases(ctx, release)
+	if err != nil {
+		logger.Error(err, "failed to find pending activation releases")
+		return ctrl.Result{}, err
+	}
+
+	// Multiple releases pending activation indicates something went wrong, e.g.
+	// the controller was offline. Attempt to reconstruct timeline.
+	if len(pendingActivation) > 1 {
+		logger.Info("multiple releases pending activation, something went wrong, attempting to reconstruct timeline")
+
+		err := r.safeReleaseActivation(ctx, logger, pendingActivation)
+		if err != nil {
+			logger.Error(err, "failed to reconcile multiple pending activation releases")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if !release.IsStatusInitialised() {
+		err = r.initialiseReleaseStatus(ctx, *release)
+		if err != nil {
+			logger.Error(err, "failed to initialise release")
+			return ctrl.Result{}, err
+		}
+		// requeue to update the release with the latest version
+		return ctrl.Result{RequeueAfter: time.Microsecond * 1}, nil
+	}
+
+	err = r.handleAnnotations(ctx, logger, release)
+
+	if err != nil {
+		logger.Error(err, "failed to update status field of release")
+	}
+
+	err = r.trimExtraReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
+	if err != nil {
+		logger.Error(err, "failed to trim extra releases")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
 func (r *ReleaseReconciler) trimExtraReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
 	releases := &deployv1alpha1.ReleaseList{}
 	err := r.List(ctx, releases,
@@ -136,8 +187,11 @@ func (r *ReleaseReconciler) findActiveRelease(ctx context.Context, namespace str
 	return &releases.Items[0], nil
 }
 
+// The current way to active releases is by setting the deployment end time. The
+// release controller will activate the release with the latest deployment end
+// time.
 func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.Logger, release *deployv1alpha1.Release) error {
-	logger.Info("handling annotations")
+	logger.Info("handling annotations for release", "release", release.Name)
 	modified := false
 
 	if release.AnnotatedWithSetDeploymentStartTime() {
@@ -166,20 +220,20 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 
 			// activate release if deployment end time is after the current active releases time
 			logger.Info("fetching current active release", "release", release.Name)
-			activeRelease, err := r.findActiveRelease(ctx, release.Namespace, release.ReleaseConfig.TargetName)
+			previousRelease, err := r.findActiveRelease(ctx, release.Namespace, release.ReleaseConfig.TargetName)
 			if err != nil {
 				return err
 			}
 
-			if activeRelease == nil || activeRelease.Status.DeploymentEndTime.Time.Before(endTime) {
-				logger.Info("no active release found, activating", "release", release.Name)
-				release.Activate(MessageReleaseActive, activeRelease)
+			if previousRelease == nil || previousRelease.Status.DeploymentEndTime.Time.Before(endTime) {
+				logger.Info("activating release", "release", release.Name)
+				release.Activate(MessageReleaseActive, previousRelease)
 				modified = true
 
-				if activeRelease != nil {
+				if previousRelease != nil {
 					messageSuperseded := fmt.Sprintf(MessageReleaseSuperseded, release.Name)
-					activeRelease.Deactivate(messageSuperseded, release)
-					err = r.updateReleaseStatus(ctx, activeRelease)
+					previousRelease.Deactivate(messageSuperseded, release)
+					err = r.updateReleaseStatus(ctx, previousRelease)
 					if err != nil {
 						return err
 					}
@@ -265,6 +319,8 @@ func partitionReleasesByEndTimeTies(releases []deployv1alpha1.Release) (viable [
 	return
 }
 
+// Attempts to reconstruct the timeline of releases by setting the active and
+// superseded conditions based on the deployment end time.
 func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger logr.Logger, releases []deployv1alpha1.Release) error {
 	if len(releases) == 0 {
 		return nil
@@ -349,53 +405,4 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 
 		return nil
 	})
-}
-
-func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
-	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
-	logger.Info("reconciling release")
-
-	var err error
-
-	logger.Info("release is new, will initialise")
-	pendingActivation, err := r.findPendingActivationReleases(ctx, release)
-	if err != nil {
-		logger.Error(err, "failed to find pending activation releases")
-		return ctrl.Result{}, err
-	}
-
-	// Multiple releases pending activation indicates something went wrong, e.g.
-	// the controller was offline. Attempt to reconstruct timeline
-	if len(pendingActivation) > 1 {
-		logger.Info("multiple releases pending activation, something went wrong, attempting to reconstruct timeline")
-
-		err := r.safeReleaseActivation(ctx, logger, pendingActivation)
-		if err != nil {
-			logger.Error(err, "failed to reconcile multiple pending activation releases")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if !release.IsStatusInitialised() {
-		err = r.initialiseReleaseStatus(ctx, *release)
-		if err != nil {
-			logger.Error(err, "failed to initialise release")
-			return ctrl.Result{}, err
-		}
-	}
-
-	err = r.handleAnnotations(ctx, logger, release)
-
-	if err != nil {
-		logger.Error(err, "failed to update status field of release")
-	}
-
-	err = r.trimExtraReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
-	if err != nil {
-		logger.Error(err, "failed to trim extra releases")
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
 }

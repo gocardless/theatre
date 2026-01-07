@@ -126,6 +126,15 @@ func (r *Release) Activate(message string, previousRelease *Release) {
 	r.SetConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
 }
 
+func (r *Release) IsConditionActive() bool {
+	activeCondition := meta.FindStatusCondition(r.Status.Conditions, ReleaseConditionActive)
+	if activeCondition == nil {
+		return false
+	}
+
+	return activeCondition.Status == metav1.ConditionTrue
+}
+
 func (r *Release) SetConditionActive(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionActive,

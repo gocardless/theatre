@@ -45,7 +45,7 @@ func main() {
 
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
-		LeaderElectionID: "deploy.crds.gocardless.com",
+		LeaderElectionID: "rollback.deploy.crds.gocardless.com",
 		Scheme:           scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),

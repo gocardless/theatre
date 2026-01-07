@@ -22,7 +22,7 @@ import (
 
 var (
 	scheme                          = runtime.NewScheme()
-	app                             = kingpin.New("release-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	app                             = kingpin.New("release-manager", "Manages release.deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
 	enableReleaseUniquenessWebhooks = app.Flag(
 		"enable-release-uniqueness-webhooks",
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
@@ -52,7 +52,7 @@ func main() {
 
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
-		LeaderElectionID: "deploy.crds.gocardless.com",
+		LeaderElectionID: "release.deploy.crds.gocardless.com",
 		Scheme:           scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),

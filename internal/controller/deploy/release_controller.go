@@ -160,10 +160,8 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	if len(releases.Items) < r.MaxReleasesPerTarget {
 		return nil
 	}
-
-	toCullCount := len(releases.Items) - r.MaxReleasesPerTarget
-
 	logger.Info("found inactive releases", "count", len(releases.Items))
+	excessReleaseCount := len(releases.Items) - r.MaxReleasesPerTarget
 
 	signatureOccurrences := make(map[string]int)
 	cullingCandidates := make([]deployv1alpha1.Release, 0)
@@ -190,7 +188,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	})
 
 	// trim releases to the configured maximum
-	releasesToDelete := cullingCandidates[:toCullCount]
+	releasesToDelete := cullingCandidates[:excessReleaseCount]
 
 	for _, releaseToDelete := range releasesToDelete {
 		logger.Info("deleting release", "release", releaseToDelete.Name)

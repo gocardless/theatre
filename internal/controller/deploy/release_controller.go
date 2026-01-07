@@ -383,15 +383,11 @@ func (r *ReleaseReconciler) setActiveReleaseAndSupersedeOthers(ctx context.Conte
 	})
 }
 
-func effectiveReleaseTime(r deployv1alpha1.Release) time.Time {
-	return r.Status.DeploymentEndTime.Time
-}
-
 func sortReleasesByEndTime(releases []deployv1alpha1.Release) {
 	sort.SliceStable(releases, func(i, j int) bool {
 		// Newest first
-		ti := effectiveReleaseTime(releases[i])
-		tj := effectiveReleaseTime(releases[j])
+		ti := releases[i].Status.DeploymentEndTime.Time
+		tj := releases[j].Status.DeploymentEndTime.Time
 		if !ti.Equal(tj) {
 			return ti.After(tj)
 		}
@@ -420,7 +416,6 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 	target := releases[0].ReleaseConfig.TargetName
 
 	viable, unknown := partitionReleasesByEndTimeTies(releases)
-
 	for i := range unknown {
 		if err := r.updateReleaseStatus(ctx, &unknown[i]); err != nil {
 			return err

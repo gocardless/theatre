@@ -12,6 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	SignatureLength = 10
+)
+
 func (rc *ReleaseConfig) Equals(other *ReleaseConfig) bool {
 	return bytes.Equal(rc.Serialise(), other.Serialise())
 }
@@ -55,7 +59,7 @@ func (r *Release) InitialiseStatus(message string) {
 		message = "Release initialised successfully"
 	}
 	r.Status.Message = message
-	r.Status.Signature = r.generateSignature()
+	r.Status.Signature = r.generateSignature()[:SignatureLength]
 
 	r.SetConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
 	r.SetConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)

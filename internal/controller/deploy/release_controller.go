@@ -18,12 +18,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type CullingStrategy string
+
+const (
+	CullingStrategyCreatedAt CullingStrategy = "created-at"
+	CullingStrategySignature CullingStrategy = "signature"
+)
+
 type ReleaseReconciler struct {
 	client.Client
 	Log                  logr.Logger
 	Scheme               *runtime.Scheme
 	MaxReleasesPerTarget int
 	MaxHistoryLimit      int
+	CullingStrategy      CullingStrategy
 }
 
 func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -100,7 +108,8 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
-		err = r.initialiseReleaseStatus(ctx, *release)
+		release.InitialiseStatus(MessageReleaseCreated)
+		err = r.updateReleaseStatus(ctx, release)
 		if err != nil {
 			logger.Error(err, "failed to initialise release")
 			return ctrl.Result{}, err
@@ -115,7 +124,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Error(err, "failed to update status field of release")
 	}
 
-	err = r.trimExtraReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
+	err = r.cullReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
 	if err != nil {
 		logger.Error(err, "failed to trim extra releases")
 		return ctrl.Result{}, err
@@ -124,7 +133,17 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	return ctrl.Result{}, nil
 }
 
-func (r *ReleaseReconciler) trimExtraReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
+// This function ensures that the number of inactive releases does not exceed
+// the configured maximum. It will delete based on release signature uniqueness,
+// where it will firstly cull releases that have repeating signatures, and only
+// then delete releases based on creation time.
+func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
+	logger.Info("culling strategy", "strategy", r.CullingStrategy)
+	if r.MaxReleasesPerTarget < 0 {
+		logger.Info("max releases per target is less than 0, skipping culling")
+		return nil
+	}
+
 	releases := &deployv1alpha1.ReleaseList{}
 	err := r.List(ctx, releases,
 		client.InNamespace(namespace),
@@ -138,15 +157,40 @@ func (r *ReleaseReconciler) trimExtraReleases(ctx context.Context, logger logr.L
 		return err
 	}
 
-	logger.Info("found inactive releases", "count", len(releases.Items))
-
 	if len(releases.Items) < r.MaxReleasesPerTarget {
 		return nil
 	}
 
-	releases.Sort()
+	toCullCount := len(releases.Items) - r.MaxReleasesPerTarget
+
+	logger.Info("found inactive releases", "count", len(releases.Items))
+
+	signatureOccurrences := make(map[string]int)
+	cullingCandidates := make([]deployv1alpha1.Release, 0)
+
+	if r.CullingStrategy == CullingStrategySignature {
+		for _, release := range releases.Items {
+			signatureOccurrences[release.Status.Signature]++
+		}
+
+		for _, release := range releases.Items {
+			if signatureOccurrences[release.Status.Signature] > 1 {
+				cullingCandidates = append(cullingCandidates, release)
+			}
+		}
+	}
+
+	if len(cullingCandidates) == 0 {
+		cullingCandidates = append(cullingCandidates, releases.Items...)
+	}
+
+	sort.Slice(cullingCandidates, func(i, j int) bool {
+		// Oldest first (oldest at index 0, newest at the end)
+		return cullingCandidates[i].ObjectMeta.CreationTimestamp.Time.Before(cullingCandidates[j].ObjectMeta.CreationTimestamp.Time)
+	})
+
 	// trim releases to the configured maximum
-	releasesToDelete := releases.Items[r.MaxReleasesPerTarget:]
+	releasesToDelete := cullingCandidates[:toCullCount]
 
 	for _, releaseToDelete := range releasesToDelete {
 		logger.Info("deleting release", "release", releaseToDelete.Name)
@@ -231,7 +275,6 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			candidateReleases = append(candidateReleases, *release)
 
 			err = r.setActiveReleaseAndSupersedeOthers(ctx, logger, candidateReleases)
-
 			if err != nil {
 				return err
 			}
@@ -245,11 +288,6 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	}
 
 	return nil
-}
-
-func (r *ReleaseReconciler) initialiseReleaseStatus(ctx context.Context, release deployv1alpha1.Release) error {
-	release.InitialiseStatus(MessageReleaseCreated)
-	return r.updateReleaseStatus(ctx, &release)
 }
 
 func (r *ReleaseReconciler) updateReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {

@@ -61,7 +61,7 @@ func (r *Release) InitialiseStatus(message string) {
 	r.SetConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
-func (r *Release) ParseAnnotations(message string, previousRelease *Release) (changed bool, errors []error) {
+func (r *Release) ParseAnnotations() (changed bool, errors []error) {
 	if r.AnnotatedWithSetDeploymentStartTime() {
 		startTime, err := time.Parse(time.RFC3339, r.Annotations[AnnotationKeyReleaseSetDeploymentStartTime])
 		if err != nil {

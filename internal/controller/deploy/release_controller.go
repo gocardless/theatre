@@ -327,16 +327,11 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 		if !releases[i].IsStatusInitialised() {
 			releases[i].InitialiseStatus(MessageReleaseCreated)
 		}
-		releases[i].ParseAnnotations("Recreating timeline", nil)
+		releases[i].ParseAnnotations()
 	}
 
 	namespace := releases[0].Namespace
 	target := releases[0].ReleaseConfig.TargetName
-
-	activeRelease, err := r.findActiveRelease(ctx, namespace, target)
-	if err != nil {
-		return err
-	}
 
 	viable, unknown := partitionReleasesByEndTimeTies(releases)
 
@@ -348,6 +343,11 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 
 	if len(viable) == 0 {
 		return nil
+	}
+
+	activeRelease, err := r.findActiveRelease(ctx, namespace, target)
+	if err != nil {
+		return err
 	}
 
 	if activeRelease != nil {
@@ -369,7 +369,7 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 	winner := viable[0]
 
 	// the winner is the one that should be active
-	// viable[0].Activate(MessageReleaseActive, &viable[1])
+	viable[0].Activate(MessageReleaseActive, &viable[1])
 	nextRelease := winner
 	for i := 1; i < len(viable); i++ {
 		if i+1 < len(viable) {
@@ -382,11 +382,7 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 		nextRelease = viable[i]
 	}
 
-	// Converge: exactly one active, all others inactive.
-	// We do this using Status().Update per object to avoid needing a single multi-object transaction.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-
-		// Deactivate everyone else
 		for i := range viable {
 			current := viable[i]
 			logger.Info("updating release", "release", current.Name, "previousRelease", current.Status.PreviousRelease.ReleaseRef)
@@ -399,11 +395,10 @@ func (r *ReleaseReconciler) safeReleaseActivation(ctx context.Context, logger lo
 		logger.Info(
 			"recovered active release after downtime",
 			"target", target,
-			"winner", winner.Name,
-			"activeCandidates", len(viable),
+			"active", winner.Name,
+			"candidates", len(viable),
 			"total", len(releases),
 		)
-
 		return nil
 	})
 }

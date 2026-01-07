@@ -165,16 +165,3 @@ func (r *Release) Deactivate(message string, nextRelease *Release) {
 
 	r.SetConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
-
-// Sorts releases by effective time, where effective time is the deployment
-// end time if set, else the creation time. This ensures that the most
-// recently ended or created releases are sorted first, and that releases are
-// sorted by creation time if they have the same end time.
-func (rl *ReleaseList) Sort() {
-	sort.Slice(rl.Items, func(i, j int) bool {
-		iCreated := rl.Items[i].ObjectMeta.CreationTimestamp
-		jCreated := rl.Items[j].ObjectMeta.CreationTimestamp
-
-		return iCreated.After(jCreated.Time)
-	})
-}

@@ -20,7 +20,7 @@ import (
 
 var (
 	scheme               = runtime.NewScheme()
-	app                  = kingpin.New("rollback-manager", "Manages deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	app                  = kingpin.New("rollback-manager", "Manages rollback.deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
 	rollbackHistoryLimit = app.Flag("rollback-history-limit", "Maximum number of rollbacks to keep per target name. All rollbacks older than this will be deleted by the reconciler.").
 				Default("10").
 				Envar("ROLLBACK_MANAGER_HISTORY_LIMIT").

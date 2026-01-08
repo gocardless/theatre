@@ -119,9 +119,21 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	}
 
 	err = r.handleAnnotations(ctx, logger, release)
-
 	if err != nil {
 		logger.Error(err, "failed to update status field of release")
+	}
+
+	// refetch the release
+	err = r.Client.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: release.Name}, release)
+	if err != nil {
+		logger.Error(err, "failed to refetch release")
+		return ctrl.Result{}, err
+	}
+
+	err = r.determineActiveRelease(ctx, logger, *release)
+	if err != nil {
+		logger.Error(err, "failed to determine active release")
+		return ctrl.Result{}, err
 	}
 
 	err = r.cullReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
@@ -138,9 +150,8 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 // where it will firstly cull releases that have repeating signatures, and only
 // then delete releases based on creation time.
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	logger.Info("culling strategy", "strategy", r.CullingStrategy)
 	if r.MaxReleasesPerTarget < 0 {
-		logger.Info("max releases per target is less than 0, skipping culling")
+		logger.Info("culling is disabled, skipping")
 		return nil
 	}
 
@@ -255,27 +266,9 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			return err
 		}
 
-		logger.Info("setting deployment end time", "release", release.Name, "endTime", endTime.UTC(), "currentEndTime", release.Status.DeploymentEndTime.Time.UTC())
-
 		if release.Status.DeploymentEndTime.IsZero() || !release.Status.DeploymentEndTime.Time.UTC().Equal(endTime.UTC()) {
 			release.Status.DeploymentEndTime = metav1.NewTime(endTime)
 			modified = true
-
-			// activate release if deployment end time is after the current active releases time
-			logger.Info("fetching current active release", "release", release.Name)
-			previousActiveReleases, err := r.findActiveReleases(ctx, release.Namespace, release.ReleaseConfig.TargetName, &endTime)
-			if err != nil {
-				return err
-			}
-
-			var candidateReleases []deployv1alpha1.Release
-			candidateReleases = append(candidateReleases, previousActiveReleases...)
-			candidateReleases = append(candidateReleases, *release)
-
-			err = r.setActiveReleaseAndSupersedeOthers(ctx, logger, candidateReleases)
-			if err != nil {
-				return err
-			}
 		}
 	}
 
@@ -286,6 +279,38 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	}
 
 	return nil
+}
+
+func (r *ReleaseReconciler) determineActiveRelease(ctx context.Context, logger logr.Logger, release deployv1alpha1.Release) error {
+	if release.Status.DeploymentEndTime.IsZero() {
+		return nil
+	}
+	// activate release if deployment end time is after the current active releases time
+	logger.Info("determining whether release should be active", "release", release.Name)
+	previousActiveReleases, err := r.findActiveReleases(ctx, release.Namespace, release.ReleaseConfig.TargetName, &release.Status.DeploymentEndTime.Time)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("found previous active releases", "count", len(previousActiveReleases))
+
+	if len(previousActiveReleases) > 0 {
+		sortReleasesByEndTime(previousActiveReleases)
+		// release is already active, nothing to do
+		currentReleaseEndTime := release.Status.DeploymentEndTime.Time
+		latestActiveReleaseTime := previousActiveReleases[0].Status.DeploymentEndTime.Time
+
+		if currentReleaseEndTime.Before(latestActiveReleaseTime) || currentReleaseEndTime.Equal(latestActiveReleaseTime) {
+			logger.Info("releaseEndTime is before or equal to latestActiveReleaseTime", "releaseEndTime", currentReleaseEndTime, "latestActiveReleaseTime", latestActiveReleaseTime)
+			return nil
+		}
+	}
+
+	var candidateReleases []deployv1alpha1.Release
+	candidateReleases = append(candidateReleases, previousActiveReleases...)
+	candidateReleases = append(candidateReleases, release)
+
+	return r.setActiveReleaseAndSupersedeOthers(ctx, logger, candidateReleases)
 }
 
 func (r *ReleaseReconciler) updateReleaseStatus(ctx context.Context, release *deployv1alpha1.Release) error {

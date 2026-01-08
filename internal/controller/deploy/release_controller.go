@@ -284,6 +284,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 // Reconciles the active release by the deployment end time, where the release
 // with the latest deployment end time is set to be the active release.
 func (r *ReleaseReconciler) reconcileActiveReleaseByDeploymentEndTime(ctx context.Context, logger logr.Logger, release deployv1alpha1.Release) error {
+	if release.Status.DeploymentEndTime.IsZero() {
 		return nil
 	}
 

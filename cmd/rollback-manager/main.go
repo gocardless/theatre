@@ -8,8 +8,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 
-	releasecontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
-	releasewebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/release"
+	rollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -17,20 +16,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
-	scheme                          = runtime.NewScheme()
-	app                             = kingpin.New("release-manager", "Manages release.deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
-	enableReleaseUniquenessWebhooks = app.Flag(
-		"enable-release-uniqueness-webhooks",
-		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
-			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
-	).Default("true").Bool()
-	maxReleasesPerTarget = app.Flag("max-releases-per-target-name", "Maximum number of releases to keep per target name. All releases older than this will be deleted by the reconciler.").
+	scheme               = runtime.NewScheme()
+	app                  = kingpin.New("rollback-manager", "Manages rollback.deploy.crd.gocardless.com resources").Version(cmd.VersionStanza())
+	rollbackHistoryLimit = app.Flag("rollback-history-limit", "Maximum number of rollbacks to keep per target name. All rollbacks older than this will be deleted by the reconciler.").
 				Default("10").
-				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET_NAME").
+				Envar("ROLLBACK_MANAGER_HISTORY_LIMIT").
 				Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
@@ -52,7 +45,7 @@ func main() {
 
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
-		LeaderElectionID: "release.deploy.crds.gocardless.com",
+		LeaderElectionID: "rollback.deploy.crds.gocardless.com",
 		Scheme:           scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),
@@ -64,26 +57,15 @@ func main() {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	err = (&releasecontroller.ReleaseReconciler{
+	err = (&rollbackcontroller.RollbackReconciler{
 		Client:               manager.GetClient(),
 		Scheme:               scheme,
 		Log:                  logger,
-		MaxReleasesPerTarget: *maxReleasesPerTarget,
+		RollbackHistoryLimit: *rollbackHistoryLimit,
 	}).SetupWithManager(ctx, manager)
 
 	if err != nil {
 		app.Fatalf("failed to create controller: %v", err)
-	}
-
-	manager.GetWebhookServer().Register("/validate-releases", &admission.Webhook{
-		Handler: releasewebhook.NewReleaseValidateWebhook(logger, manager.GetScheme()),
-	})
-
-	if *enableReleaseUniquenessWebhooks {
-		// Webhook configuration
-		manager.GetWebhookServer().Register("/mutate-releases", &admission.Webhook{
-			Handler: releasewebhook.NewReleaseNamerWebhook(logger, manager.GetScheme()),
-		})
 	}
 
 	if err := manager.Start(ctx); err != nil {

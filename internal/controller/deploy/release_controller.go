@@ -254,7 +254,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			return err
 		}
 
-		if release.Status.DeploymentStartTime.IsZero() || !release.Status.DeploymentStartTime.Time.UTC().Equal(startTime.UTC()) {
+		if !release.Status.DeploymentStartTime.Time.UTC().Equal(startTime.UTC()) {
 			release.Status.DeploymentStartTime = metav1.NewTime(startTime)
 			modified = true
 		}
@@ -266,7 +266,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 			return err
 		}
 
-		if release.Status.DeploymentEndTime.IsZero() || !release.Status.DeploymentEndTime.Time.UTC().Equal(endTime.UTC()) {
+		if !release.Status.DeploymentEndTime.Time.UTC().Equal(endTime.UTC()) {
 			release.Status.DeploymentEndTime = metav1.NewTime(endTime)
 			modified = true
 		}

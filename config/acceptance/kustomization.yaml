@@ -13,3 +13,4 @@ patchesStrategicMerge:
   - overlays/vault-manager.yaml
   - overlays/workloads-manager.yaml
   - overlays/release-manager.yaml
+  - overlays/rollback-manager.yaml

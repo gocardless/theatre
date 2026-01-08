@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollback-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      group: deploy.crd.gocardless.com
+  template:
+    metadata:
+      labels:
+        group: deploy.crd.gocardless.com
+    spec:
+      containers:
+        - command:
+            - /usr/local/bin/rollback-manager
+          args:
+            - --metrics-address=0.0.0.0
+          image: theatre:latest
+          imagePullPolicy: Never
+          name: manager
+          resources:
+            limits:
+              cpu: 100m
+              memory: 256Mi

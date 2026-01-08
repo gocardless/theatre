@@ -28,13 +28,16 @@ var (
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("true").Bool()
-	maxReleasesPerTarget = app.Flag("max-releases-per-target-name", "Maximum number of releases to keep per target name. All releases older than this will be deleted by the reconciler. If set to -1, no releases will be deleted.").
-				Default("10").
-				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET_NAME").
-				Int()
-	cullingStrategyFlag = app.Flag("culling-strategy", "Strategy to use when trimming releases. Options are 'created-at' or 'signature'. 'created-at' will delete the oldest releases sorted by creationTimestamp,"+
-		" while 'signature' will delete releases with the same signature first, before it deletes the oldest releases sorted by creationTimestamp.").
-		Default("created-at").
+	maxReleasesPerTarget = app.Flag("max-releases-per-target-name", "Maximum number of releases to keep per target name."+
+		" All releases older than this will be deleted by the reconciler. If set to -1, no releases will be deleted.").
+		Default("10").
+		Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET_NAME").
+		Int()
+	cullingStrategyFlag = app.Flag("culling-strategy", "Strategy to use when trimming releases. Options are"+
+		" 'deployment-end-time' or 'signature'. 'deployment-end-time' will delete the oldest releases sorted by"+
+		" status.deploymentEndTime and default to metadata.creationTimestamp if status.deploymentEndTime is not set,"+
+		" while 'signature' will delete releases with the same signature first, before it deletes the oldest releases sorted by deploymentEndTime.").
+		Default("deployment-end-time").
 		Envar("RELEASE_MANAGER_CULLING_STRATEGY").
 		String()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
@@ -71,7 +74,7 @@ func main() {
 
 	cullingStrategy := releasecontroller.CullingStrategy(*cullingStrategyFlag)
 	if cullingStrategy != releasecontroller.CullingStrategySignature {
-		cullingStrategy = releasecontroller.CullingStrategyCreatedAt
+		cullingStrategy = releasecontroller.CullingStrategyDeploymentEndTime
 	}
 
 	if err = (&releasecontroller.ReleaseReconciler{

@@ -21,8 +21,8 @@ import (
 type CullingStrategy string
 
 const (
-	CullingStrategyCreatedAt CullingStrategy = "created-at"
-	CullingStrategySignature CullingStrategy = "signature"
+	CullingStrategyDeploymentEndTime CullingStrategy = "deployment-end-time"
+	CullingStrategySignature         CullingStrategy = "signature"
 )
 
 type ReleaseReconciler struct {
@@ -146,9 +146,13 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 }
 
 // This function ensures that the number of inactive releases does not exceed
-// the configured maximum. It will delete based on release signature uniqueness,
-// where it will firstly cull releases that have repeating signatures, and only
-// then delete releases based on creation time.
+// the configured maximum. It has two operating modes:
+// 1. If the culling strategy is "deployment-end-time", it will delete based on
+// effective time (deployment end time if set, otherwise creation time).
+// 2. If the culling strategy is "signature", it will delete based on release
+// signature uniqueness, where it will firstly cull releases that have repeating
+// signatures, and only then delete releases based on effective time (deployment
+// end time if set, otherwise creation time).
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
 	if r.MaxReleasesPerTarget < 0 {
 		logger.Info("culling is disabled, skipping")
@@ -195,7 +199,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 
 	sort.Slice(cullingCandidates, func(i, j int) bool {
 		// Oldest first (oldest at index 0, newest at the end)
-		return cullingCandidates[i].ObjectMeta.CreationTimestamp.Time.Before(cullingCandidates[j].ObjectMeta.CreationTimestamp.Time)
+		return cullingCandidates[i].GetEffectiveTime().Before(cullingCandidates[j].GetEffectiveTime())
 	})
 
 	// trim releases to the configured maximum

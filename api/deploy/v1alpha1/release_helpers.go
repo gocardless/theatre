@@ -165,3 +165,12 @@ func (r *Release) Deactivate(message string, nextRelease *Release) {
 
 	r.SetConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
+
+// Returns the effective time of the release, which is the deployment end time,
+// if set, otherwise the creation time.
+func (r *Release) GetEffectiveTime() time.Time {
+	if r.Status.DeploymentEndTime.IsZero() {
+		return r.ObjectMeta.CreationTimestamp.Time
+	}
+	return r.Status.DeploymentEndTime.Time
+}

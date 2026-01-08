@@ -130,7 +130,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		return ctrl.Result{}, err
 	}
 
-	err = r.determineActiveRelease(ctx, logger, *release)
+	err = r.reconcileActiveReleaseByDeploymentEndTime(ctx, logger, *release)
 	if err != nil {
 		logger.Error(err, "failed to determine active release")
 		return ctrl.Result{}, err
@@ -281,27 +281,25 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	return nil
 }
 
-func (r *ReleaseReconciler) determineActiveRelease(ctx context.Context, logger logr.Logger, release deployv1alpha1.Release) error {
-	if release.Status.DeploymentEndTime.IsZero() {
+// Reconciles the active release by the deployment end time, where the release
+// with the latest deployment end time is set to be the active release.
+func (r *ReleaseReconciler) reconcileActiveReleaseByDeploymentEndTime(ctx context.Context, logger logr.Logger, release deployv1alpha1.Release) error {
 		return nil
 	}
-	// activate release if deployment end time is after the current active releases time
-	logger.Info("determining whether release should be active", "release", release.Name)
+
 	previousActiveReleases, err := r.findActiveReleases(ctx, release.Namespace, release.ReleaseConfig.TargetName, &release.Status.DeploymentEndTime.Time)
 	if err != nil {
 		return err
 	}
 
 	logger.Info("found previous active releases", "count", len(previousActiveReleases))
-
 	if len(previousActiveReleases) > 0 {
 		sortReleasesByEndTime(previousActiveReleases)
-		// release is already active, nothing to do
 		currentReleaseEndTime := release.Status.DeploymentEndTime.Time
 		latestActiveReleaseTime := previousActiveReleases[0].Status.DeploymentEndTime.Time
 
 		if currentReleaseEndTime.Before(latestActiveReleaseTime) || currentReleaseEndTime.Equal(latestActiveReleaseTime) {
-			logger.Info("releaseEndTime is before or equal to latestActiveReleaseTime", "releaseEndTime", currentReleaseEndTime, "latestActiveReleaseTime", latestActiveReleaseTime)
+			logger.Info("release end time is before or equal to latest active release end time, not activating")
 			return nil
 		}
 	}

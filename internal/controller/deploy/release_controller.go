@@ -277,9 +277,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	}
 
 	if modified {
-		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			return r.updateReleaseStatus(ctx, release)
-		})
+		return r.updateReleaseStatus(ctx, release)
 	}
 
 	return nil

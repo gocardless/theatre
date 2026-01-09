@@ -66,8 +66,8 @@ var _ = BeforeSuite(func() {
 		CullingStrategy:      CullingStrategyDeploymentEndTime,
 	}
 
-	// err = reconciler.SetupWithManager(ctx, manager)
-	// Expect(err).NotTo(HaveOccurred())
+	err = reconciler.SetupWithManager(ctx, manager)
+	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

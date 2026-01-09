@@ -30,7 +30,6 @@ type ReleaseReconciler struct {
 	Log                  logr.Logger
 	Scheme               *runtime.Scheme
 	MaxReleasesPerTarget int
-	MaxHistoryLimit      int
 	CullingStrategy      CullingStrategy
 }
 

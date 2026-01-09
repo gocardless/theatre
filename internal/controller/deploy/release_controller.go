@@ -120,6 +120,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	err = r.handleAnnotations(ctx, logger, release)
 	if err != nil {
 		logger.Error(err, "failed to update status field of release")
+		return ctrl.Result{}, err
 	}
 
 	// refetch the release

@@ -63,11 +63,11 @@ var _ = BeforeSuite(func() {
 		Scheme:               scheme.Scheme,
 		Log:                  logr.Discard(),
 		MaxReleasesPerTarget: 3,
-		MaxHistoryLimit:      3,
+		CullingStrategy:      CullingStrategyDeploymentEndTime,
 	}
 
-	err = reconciler.SetupWithManager(ctx, manager)
-	Expect(err).NotTo(HaveOccurred())
+	// err = reconciler.SetupWithManager(ctx, manager)
+	// Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

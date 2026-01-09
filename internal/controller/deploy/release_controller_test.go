@@ -68,49 +68,162 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should update status.deploymentStartTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
-			// Fetch the latest version
+			// Retry update in case of conflicts from background reconciliation
 			fetchedObj := &v1alpha1.Release{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Annotations = map[string]string{
+					v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: stringTimestamp,
+				}
+				return k8sClient.Update(ctx, fetchedObj)
+			}).Should(Succeed())
 
+			// Wait for annotation to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				_, exists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime]
+				return exists
+			}).Should(BeTrue())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
+
+			// Verify the status was persisted to the cluster
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentStartTime.Unix() == metav1Timestamp.Unix()
+			}).Should(BeTrue())
+		})
+
+		It("Should not update status when deploymentStartTime already matches annotation", func() {
+			// Set initial start time
+			fetchedObj := &v1alpha1.Release{}
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Status.DeploymentStartTime = metav1Timestamp
+				return k8sClient.Status().Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for status update to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				return fetchedObj.Status.DeploymentStartTime.Unix() == metav1Timestamp.Unix()
+			}).Should(BeTrue())
+
+			// Add annotation with same timestamp (in memory only, to simulate annotation being set)
 			fetchedObj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: stringTimestamp,
 			}
-			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
-
-			// Refetch after update to get the latest resource version
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+			originalResourceVersion := fetchedObj.ResourceVersion
 			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
-			Expect(fetchedObj.Status.DeploymentStartTime.Unix()).To(Equal(metav1Timestamp.Unix()))
+
+			// Verify no status update occurred by checking resource version hasn't changed
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.ResourceVersion == originalResourceVersion
+			}).Should(BeTrue())
 		})
 
-		It("Should error when passing invalid time when annotated with"+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
-			obj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
-			}
-			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).Error()
-		})
-
-		It("Should error when passing invalid time when annotated with"+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
-			obj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: "not-a-timestamp",
-			}
-			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), &obj)).Error()
-		})
-
-		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
-			// Fetch the latest version
+		It("Should error when passing invalid time when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
 			fetchedObj := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
 
 			fetchedObj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
+				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
 			}
-			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(HaveOccurred())
+		})
 
-			// Refetch after update to get the latest resource version
+		It("Should error when passing invalid time when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
+			fetchedObj := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+
+			fetchedObj.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: "not-a-timestamp",
+			}
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(HaveOccurred())
+		})
+
+		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
+			// Retry update in case of conflicts from background reconciliation
+			fetchedObj := &v1alpha1.Release{}
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Annotations = map[string]string{
+					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
+				}
+				return k8sClient.Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for annotation to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				_, exists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
+				return exists
+			}).Should(BeTrue())
 			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
-			Expect(fetchedObj.Status.DeploymentEndTime.Unix()).To(Equal(metav1Timestamp.Unix()))
+
+			// Verify the status was persisted to the cluster
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentEndTime.Unix() == metav1Timestamp.Unix()
+			}).Should(BeTrue())
+		})
+
+		It("Should not update status when deploymentEndTime already matches annotation", func() {
+			// Set initial end time
+			fetchedObj := &v1alpha1.Release{}
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Status.DeploymentEndTime = metav1Timestamp
+				return k8sClient.Status().Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for status update to propagate, then add annotation with same timestamp
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Annotations = map[string]string{
+					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
+				}
+				return k8sClient.Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for annotation to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				_, exists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
+				return exists
+			}).Should(BeTrue())
+			originalResourceVersion := fetchedObj.ResourceVersion
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
+
+			// Verify no status update occurred by checking resource version hasn't changed
+			updatedObj := &v1alpha1.Release{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+			Expect(updatedObj.ResourceVersion).To(Equal(originalResourceVersion))
 		})
 
 		It("Should update all status fields when annotated with "+strings.Join([]string{
@@ -122,21 +235,87 @@ var _ = Describe("ReleaseController", func() {
 			endTimestamp := "2025-12-08T14:42:00Z"
 			metav1EndTimestamp := getMetaV1Timestamp(endTimestamp)
 
-			// Fetch the latest version
+			// Retry update in case of conflicts from background reconciliation
 			fetchedObj := &v1alpha1.Release{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Annotations = map[string]string{
+					v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
+					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
+				}
+				return k8sClient.Update(ctx, fetchedObj)
+			}).Should(Succeed())
 
-			fetchedObj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
-			}
-			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
-
-			// Refetch after update to get the latest resource version
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+			// Wait for annotations to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				_, startExists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime]
+				_, endExists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
+				return startExists && endExists
+			}).Should(BeTrue())
 			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
-			Expect(fetchedObj.Status.DeploymentStartTime.Unix()).To(Equal(metav1StartTimestamp.Unix()))
-			Expect(fetchedObj.Status.DeploymentEndTime.Unix()).To(Equal(metav1EndTimestamp.Unix()))
+
+			// Verify both status fields were persisted to the cluster
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentStartTime.Unix() == metav1StartTimestamp.Unix() &&
+					updatedObj.Status.DeploymentEndTime.Unix() == metav1EndTimestamp.Unix()
+			}).Should(BeTrue())
+		})
+
+		It("Should only update deploymentStartTime when deploymentEndTime already matches", func() {
+			startTimestamp := "2025-12-08T14:32:00Z"
+			metav1StartTimestamp := getMetaV1Timestamp(startTimestamp)
+			endTimestamp := "2025-12-08T14:42:00Z"
+			metav1EndTimestamp := getMetaV1Timestamp(endTimestamp)
+
+			// Set initial end time
+			fetchedObj := &v1alpha1.Release{}
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Status.DeploymentEndTime = metav1EndTimestamp
+				return k8sClient.Status().Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for status update to propagate, then add both annotations
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj); err != nil {
+					return err
+				}
+				fetchedObj.Annotations = map[string]string{
+					v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
+					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
+				}
+				return k8sClient.Update(ctx, fetchedObj)
+			}).Should(Succeed())
+
+			// Wait for annotations to propagate
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
+				if err != nil {
+					return false
+				}
+				_, startExists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime]
+				_, endExists := fetchedObj.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
+				return startExists && endExists
+			}).Should(BeTrue())
+			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(Succeed())
+
+			// Verify only start time was updated
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentStartTime.Unix() == metav1StartTimestamp.Unix() &&
+					updatedObj.Status.DeploymentEndTime.Unix() == metav1EndTimestamp.Unix()
+			}).Should(BeTrue())
 		})
 	})
 

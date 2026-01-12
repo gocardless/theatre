@@ -19,11 +19,8 @@ import (
 )
 
 const (
-	// Duration to wait before rechecking a pending deployment
-	RequeueAfterPending = 10 * time.Second
-
-	// Duration to wait before rechecking an in-progress deployment
-	RequeueAfterInProgress = 15 * time.Second
+	// Duration to wait before rechecking a deployment
+	RequeueAfter = 15 * time.Second
 
 	// Maximum number of times to retry triggering a deployment
 	MaxRetryAttempts = 3
@@ -150,7 +147,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 				logger.Error(updateErr, "failed to update rollback status")
 				return ctrl.Result{}, updateErr
 			}
-			return ctrl.Result{RequeueAfter: RequeueAfterPending}, nil
+			return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 		}
 
 		// Non-retryable error
@@ -177,7 +174,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 	}
 
 	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL)
-	return ctrl.Result{RequeueAfter: RequeueAfterInProgress}, nil
+	return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 }
 
 func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, toRelease *deployv1alpha1.Release) (ctrl.Result, error) {
@@ -186,7 +183,7 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 		logger.Error(err, "failed to get deployment status")
 		// Continue polling on transient errors
 		if deployerErr, ok := err.(*cicd.DeployerError); ok && deployerErr.Retryable {
-			return ctrl.Result{RequeueAfter: RequeueAfterInProgress}, nil
+			return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -228,11 +225,11 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 			logger.Error(err, "failed to update rollback status")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: RequeueAfterInProgress}, nil
+		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 
 	default:
 		logger.Info("unknown deployment status, continuing to poll", "status", statusResp.Status)
-		return ctrl.Result{RequeueAfter: RequeueAfterInProgress}, nil
+		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 	}
 }
 

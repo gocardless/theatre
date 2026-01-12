@@ -31,7 +31,7 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.24.5
+          go-version: 1.25.5
       - name: Ensure generated CRDs and manifests are up to date
         run: make manifests && git diff --exit-code config/
 

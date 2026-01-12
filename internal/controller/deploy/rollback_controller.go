@@ -76,10 +76,8 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	if rollback.Status.FromReleaseName == "" {
 		fromRelease, err := r.findActiveRelease(ctx, toRelease.ReleaseConfig.TargetName, rollback.Namespace)
 		if err != nil {
-			logger.Error(err, "failed to find active release")
-			return ctrl.Result{}, err
-		}
-		if fromRelease != nil {
+			logger.Info("failed to find active release, continuing without fromRelease", "error", err)
+		} else if fromRelease != nil {
 			rollback.Status.FromReleaseName = fromRelease.Name
 		}
 	}
@@ -95,6 +93,7 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	return r.pollDeploymentStatus(ctx, logger, rollback, toRelease)
 }
 
+// TODO: move this into api/deploy/v1alpha1/release_helpers.go once release reconciler PR is merged
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace)); err != nil {

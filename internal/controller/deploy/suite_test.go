@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
@@ -40,10 +41,15 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	err = v1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	err = analysisv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "..", "config", "crd", "external"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 

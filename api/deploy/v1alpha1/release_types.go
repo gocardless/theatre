@@ -36,6 +36,12 @@ const (
 
 	// ReasonAnalysisFailed indicates the release failed health analysis checks.
 	ReasonAnalysisFailed = "AnalysisFailed"
+
+	// ReasonAnalysisInProgress indicates analysis is in progress for the release.
+	ReasonAnalysisInProgress = "AnalysisInProgress"
+
+	// ReasonAnalysisError indicates an error occurred during analysis.
+	ReasonAnalysisError = "AnalysisError"
 )
 
 // ReleaseConfig defines the desired state of Release

@@ -16,8 +16,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/config"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -212,8 +211,10 @@ func main() {
 
 		SetDefaultEventuallyTimeout(time.Minute)
 		SetDefaultEventuallyPollingInterval(100 * time.Millisecond)
+
+		_, reporterCfg := GinkgoConfiguration()
 		if *runVerbose {
-			config.DefaultReporterConfig.Verbose = true
+			reporterCfg.Verbose = true
 		}
 
 		logger := kitlog.NewLogfmtLogger(GinkgoWriter)
@@ -235,7 +236,7 @@ func main() {
 			}
 		})
 
-		if RunSpecs(new(testing.T), "theatre/cmd/acceptance") {
+		if RunSpecs(new(testing.T), "theatre/cmd/acceptance", reporterCfg) {
 			os.Exit(0)
 		} else {
 			os.Exit(1)

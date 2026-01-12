@@ -58,7 +58,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet setup-envtest setup-ginkgo ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" ginkgo -race -randomizeSuites -randomizeAllSpecs -r ./...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" ginkgo -race -randomize-suites -randomize-all -r ./...
 
 acceptance-e2e: install-tools acceptance-prepare acceptance-run acceptance-destroy ## Requires the following binaries: kubectl, kustomize, kind, docker
 
@@ -139,7 +139,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4.0
-GINKGO_VERSION ?= v1.16.5
+GINKGO_VERSION ?= v2.27.4
 
 install-tools: kustomize controller-gen setup-envtest golangci-lint setup-ginkgo
 
@@ -160,7 +160,7 @@ setup-envtest: envtest ## Download the binaries required for ENVTEST in the loca
 
 setup-ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
 $(GINKGO): $(LOCALBIN)
-	go install github.com/onsi/ginkgo/ginkgo@$(GINKGO_VERSION)
+	go install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
 
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 $(ENVTEST): $(LOCALBIN)

@@ -10,7 +10,7 @@ import (
 	gock "gopkg.in/h2non/gock.v1"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

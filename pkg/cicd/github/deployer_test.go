@@ -11,7 +11,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/google/go-github/v34/github"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gock "gopkg.in/h2non/gock.v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

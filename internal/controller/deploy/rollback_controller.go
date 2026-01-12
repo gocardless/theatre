@@ -9,6 +9,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -68,6 +69,9 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 		Name:      rollback.Spec.ToReleaseName,
 	}, toRelease); err != nil {
 		logger.Error(err, "failed to fetch target release", "toRelease", rollback.Spec.ToReleaseName)
+		if apierrors.IsNotFound(err) {
+			return r.markRollbackFailed(ctx, rollback, fmt.Sprintf("target release %q not found", rollback.Spec.ToReleaseName))
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -85,32 +89,21 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 
 	inProgressCondition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
 
-	if inProgressCondition == nil || inProgressCondition.Status == metav1.ConditionFalse {
-		// Deployment not yet triggered - trigger it
+	if inProgressCondition == nil || inProgressCondition.Status != metav1.ConditionTrue {
+		// Not yet started - trigger deployment
 		return r.triggerDeployment(ctx, logger, rollback, toRelease)
 	}
 
-	// Deployment is in progress - poll for status
-	return r.pollDeploymentStatus(ctx, logger, rollback)
+	// InProgress=True - poll for status
+	return r.pollDeploymentStatus(ctx, logger, rollback, toRelease)
 }
 
 func (r *RollbackReconciler) isRollbackComplete(rollback *deployv1alpha1.Rollback) bool {
+	// Rollback is complete when Succeeded condition is set (either True or False)
 	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
-	if succeededCondition == nil {
-		return false
-	}
-	// Terminal if explicitly succeeded or failed (with max retries exceeded)
-	if succeededCondition.Status == metav1.ConditionTrue {
-		return true
-	}
-	// Check if we've exceeded max retries
-	if rollback.Status.AttemptCount >= MaxRetryAttempts && succeededCondition.Status == metav1.ConditionFalse {
-		return true
-	}
-	return false
+	return succeededCondition != nil
 }
 
-// TODO: move this into api/deploy/v1alpha1/release_helpers.go once release reconciler PR is merged
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace)); err != nil {
@@ -193,7 +186,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 	return ctrl.Result{RequeueAfter: RequeueAfterInProgress}, nil
 }
 
-func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback) (ctrl.Result, error) {
+func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, toRelease *deployv1alpha1.Release) (ctrl.Result, error) {
 	statusResp, err := r.Deployer.GetDeploymentStatus(ctx, rollback.Status.DeploymentID)
 	if err != nil {
 		logger.Error(err, "failed to get deployment status")
@@ -213,6 +206,24 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 		return r.markRollbackSucceeded(ctx, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusFailed:
+		// Check if we should retry
+		if rollback.Status.AttemptCount < MaxRetryAttempts {
+			// Update InProgress condition to reflect retry and trigger new deployment
+			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts)
+			meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
+				Type:               deployv1alpha1.RollbackConditionInProgress,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Retrying",
+				Message:            fmt.Sprintf("Deployment attempt %d failed: %s. Retrying...", rollback.Status.AttemptCount, statusResp.Message),
+				LastTransitionTime: now,
+			})
+			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
+			if err := r.Status().Update(ctx, rollback); err != nil {
+				return ctrl.Result{}, err
+			}
+			return r.triggerDeployment(ctx, logger, rollback, toRelease)
+		}
+		// Max retries exceeded - terminal failure
 		return r.markRollbackFailed(ctx, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusPending, cicd.DeploymentStatusInProgress:
@@ -259,6 +270,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, rollback
 	return ctrl.Result{}, nil
 }
 
+// markRollbackFailed marks the rollback as terminally failed
 func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
 	now := metav1.Now()
 	rollback.Status.CompletionTime = &now

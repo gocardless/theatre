@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -77,7 +77,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}()
 
-}, 60)
+})
 
 var _ = AfterSuite(func() {
 	cancel()
@@ -85,7 +85,7 @@ var _ = AfterSuite(func() {
 	gexec.CleanupBuildArtifacts()
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
-}, 60)
+})
 
 // TriggerResult holds the result for a TriggerDeployment call
 type TriggerResult struct {

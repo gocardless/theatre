@@ -57,7 +57,7 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	logger.Info("reconciling rollback")
 
 	// Check if rollback has already completed (succeeded or failed terminally)
-	if r.isRollbackComplete(rollback) {
+	if meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded) != nil {
 		logger.Info("rollback already complete, skipping")
 		return ctrl.Result{}, nil
 	}
@@ -96,12 +96,6 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 
 	// InProgress=True - poll for status
 	return r.pollDeploymentStatus(ctx, logger, rollback, toRelease)
-}
-
-func (r *RollbackReconciler) isRollbackComplete(rollback *deployv1alpha1.Rollback) bool {
-	// Rollback is complete when Succeeded condition is set (either True or False)
-	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
-	return succeededCondition != nil
 }
 
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {

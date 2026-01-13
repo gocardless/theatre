@@ -54,7 +54,8 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	logger.Info("reconciling rollback")
 
 	// Check if rollback has already completed (succeeded or failed terminally)
-	if meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded) != nil {
+	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+	if succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown {
 		logger.Info("rollback already complete, skipping")
 		return ctrl.Result{}, nil
 	}
@@ -83,7 +84,6 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	}
 
 	inProgressCondition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
-
 	if inProgressCondition == nil || inProgressCondition.Status != metav1.ConditionTrue {
 		// Not yet started - trigger deployment
 		return r.triggerDeployment(ctx, logger, rollback, toRelease)

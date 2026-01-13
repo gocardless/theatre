@@ -160,11 +160,10 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 
 	// Set InProgress condition
 	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
-		Type:               deployv1alpha1.RollbackConditionInProgress,
-		Status:             metav1.ConditionTrue,
-		Reason:             "DeploymentTriggered",
-		Message:            fmt.Sprintf("Deployment %s triggered via %s", resp.ID, r.Deployer.Name()),
-		LastTransitionTime: now,
+		Type:    deployv1alpha1.RollbackConditionInProgress,
+		Status:  metav1.ConditionTrue,
+		Reason:  "DeploymentTriggered",
+		Message: fmt.Sprintf("Deployment %s triggered via %s", resp.ID, r.Deployer.Name()),
 	})
 
 	if err := r.Status().Update(ctx, rollback); err != nil {
@@ -201,11 +200,10 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 			// Update InProgress condition to reflect retry and trigger new deployment
 			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts)
 			meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
-				Type:               deployv1alpha1.RollbackConditionInProgress,
-				Status:             metav1.ConditionTrue,
-				Reason:             "Retrying",
-				Message:            fmt.Sprintf("Deployment attempt %d failed: %s. Retrying...", rollback.Status.AttemptCount, statusResp.Message),
-				LastTransitionTime: now,
+				Type:    deployv1alpha1.RollbackConditionInProgress,
+				Status:  metav1.ConditionTrue,
+				Reason:  "Retrying",
+				Message: fmt.Sprintf("Deployment attempt %d failed: %s. Retrying...", rollback.Status.AttemptCount, statusResp.Message),
 			})
 			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
 			if err := r.Status().Update(ctx, rollback); err != nil {

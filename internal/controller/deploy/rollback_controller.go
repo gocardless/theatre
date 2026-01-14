@@ -142,7 +142,6 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 	// Update attempt tracking
 	now := metav1.Now()
 	rollback.Status.AttemptCount++
-	rollback.Status.LastHTTPCallTime = &now
 
 	if rollback.Status.StartTime == nil {
 		rollback.Status.StartTime = &now
@@ -208,8 +207,6 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	logger.Info("deployment status", "status", statusResp.Status, "message", statusResp.Message)
 
-	now := metav1.Now()
-
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
 		return r.markRollbackSucceeded(ctx, rollback, statusResp.Message)
@@ -230,7 +227,6 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 	case cicd.DeploymentStatusPending, cicd.DeploymentStatusInProgress:
 		// Update message and continue polling
 		rollback.Status.Message = statusResp.Message
-		rollback.Status.LastHTTPCallTime = &now
 		if err := r.Status().Update(ctx, rollback); err != nil {
 			logger.Error(err, "failed to update rollback status")
 			return ctrl.Result{}, err

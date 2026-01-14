@@ -184,11 +184,6 @@ spec:
                   FromReleaseName is the release being rolled back from. This is a reference
                   to the Release resource name.
                 type: string
-              lastHTTPCallTime:
-                description: LastHTTPCallTime is when the controller last attempted
-                  to call the CI system.
-                format: date-time
-                type: string
               message:
                 description: Message is a human-readable message indicating the state
                   of the rollback.

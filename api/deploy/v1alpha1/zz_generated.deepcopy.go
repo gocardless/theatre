@@ -269,10 +269,6 @@ func (in *RollbackStatus) DeepCopyInto(out *RollbackStatus) {
 		in, out := &in.CompletionTime, &out.CompletionTime
 		*out = (*in).DeepCopy()
 	}
-	if in.LastHTTPCallTime != nil {
-		in, out := &in.LastHTTPCallTime, &out.LastHTTPCallTime
-		*out = (*in).DeepCopy()
-	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

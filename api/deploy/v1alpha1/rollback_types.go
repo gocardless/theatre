@@ -85,9 +85,6 @@ type RollbackStatus struct {
 	// initiate the rollback via the CI system.
 	AttemptCount int32 `json:"attemptCount,omitempty"`
 
-	// LastHTTPCallTime is when the controller last attempted to call the CI system.
-	LastHTTPCallTime *metav1.Time `json:"lastHTTPCallTime,omitempty"`
-
 	// Conditions represent the latest observations of the rollback's state.
 	// Known condition types are: "InProgress", "Succeeded".
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

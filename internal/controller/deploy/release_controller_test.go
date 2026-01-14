@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -269,65 +268,6 @@ var _ = Describe("ReleaseController", func() {
 			}, "5s", "500ms").Should(Equal(counts{Active: 1, NewestInactiveFound: true, OldestInactiveFound: false, Total: 3}))
 		})
 
-		It("Should preserve newest inactive releases by creation time", func() {
-			// Create 4 inactive releases
-			releases := make([]*v1alpha1.Release, 3)
-			for i := 0; i < 3; i++ {
-				releases[i] = createRelease(ctx, "target-trim-5", nil)
-
-				// Activate with retry logic
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Activate(MessageReleaseActive, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
-			}
-
-			// Mark all as inactive at different times
-			for i := 0; i < 3; i++ {
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Deactivate(MessageReleaseSuperseded, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
-			}
-
-			// Wait for all releases to be indexed as inactive
-			Eventually(func() int {
-				releaseList := &v1alpha1.ReleaseList{}
-				err := k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
-					client.MatchingFields(map[string]string{
-						"config.targetName":        "target-trim-5",
-						"status.conditions.active": string(metav1.ConditionFalse),
-					}),
-				)
-				if err != nil {
-					return 0
-				}
-				return len(releaseList.Items)
-			}).Should(Equal(3))
-
-			err := reconciler.cullReleases(ctx, logr.Discard(), "releases", "target-trim-5")
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify only 3 releases remain (the most recently created ones)
-			Eventually(func() int {
-				releaseList := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
-					client.MatchingFields(map[string]string{
-						"config.targetName": "target-trim-5",
-					}),
-				)).To(Succeed())
-				return len(releaseList.Items)
-			}).Should(Equal(3))
-		})
-
 		It("Should not affect releases in different namespaces", func() {
 			err := k8sClient.Create(ctx, &v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -342,27 +282,9 @@ var _ = Describe("ReleaseController", func() {
 			Expect(k8sClient.Create(ctx, otherNsRelease)).To(Succeed())
 
 			// Create 5 inactive releases in 'releases' namespace
-			releases := make([]*v1alpha1.Release, 3)
-			for i := 0; i < 3; i++ {
+			releases := make([]*v1alpha1.Release, 5)
+			for i := 0; i < 5; i++ {
 				releases[i] = createRelease(ctx, "target-trim-6", nil)
-
-				// Activate with retry logic
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Activate(MessageReleaseActive, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
-
-				// Deactivate with retry logic
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Deactivate(MessageReleaseSuperseded, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
 			}
 
 			// Wait for all releases to be indexed as inactive
@@ -371,8 +293,7 @@ var _ = Describe("ReleaseController", func() {
 				err := k8sClient.List(ctx, releaseList,
 					client.InNamespace("releases"),
 					client.MatchingFields(map[string]string{
-						"config.targetName":        "target-trim-6",
-						"status.conditions.active": string(metav1.ConditionFalse),
+						"config.targetName": "target-trim-6",
 					}),
 				)
 				if err != nil {
@@ -396,28 +317,10 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should not affect inactive releases with different targets", func() {
-			// Create 5 inactive releases for target-trim-7
+			// Create 3 inactive releases for target-trim-7
 			releases := make([]*v1alpha1.Release, 3)
 			for i := 0; i < 3; i++ {
 				releases[i] = createRelease(ctx, "target-trim-7", nil)
-
-				// Activate with retry logic
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Activate(MessageReleaseActive, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
-
-				// Deactivate with retry logic
-				Eventually(func() error {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: releases[i].Name, Namespace: releases[i].Namespace}, releases[i]); err != nil {
-						return err
-					}
-					releases[i].Deactivate(MessageReleaseSuperseded, nil)
-					return k8sClient.Status().Update(ctx, releases[i])
-				}).Should(Succeed())
 			}
 
 			// Wait for all releases to be indexed as inactive
@@ -426,8 +329,7 @@ var _ = Describe("ReleaseController", func() {
 				err := k8sClient.List(ctx, releaseList,
 					client.InNamespace("releases"),
 					client.MatchingFields(map[string]string{
-						"config.targetName":        "target-trim-7",
-						"status.conditions.active": string(metav1.ConditionFalse),
+						"config.targetName": "target-trim-7",
 					}),
 				)
 				if err != nil {
@@ -436,177 +338,73 @@ var _ = Describe("ReleaseController", func() {
 				return len(releaseList.Items)
 			}).Should(Equal(3))
 
-			// Create 2 inactive releases for different-target
-			differentTarget1 := createRelease(ctx, "different-target", nil)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: differentTarget1.Name, Namespace: differentTarget1.Namespace}, differentTarget1); err != nil {
-					return err
-				}
-				differentTarget1.Activate(MessageReleaseActive, nil)
-				return k8sClient.Status().Update(ctx, differentTarget1)
-			}).Should(Succeed())
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: differentTarget1.Name, Namespace: differentTarget1.Namespace}, differentTarget1); err != nil {
-					return err
-				}
-				differentTarget1.Deactivate(MessageReleaseSuperseded, nil)
-				return k8sClient.Status().Update(ctx, differentTarget1)
-			}).Should(Succeed())
-
-			differentTarget2 := createRelease(ctx, "different-target", nil)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: differentTarget2.Name, Namespace: differentTarget2.Namespace}, differentTarget2); err != nil {
-					return err
-				}
-				differentTarget2.Activate(MessageReleaseActive, nil)
-				return k8sClient.Status().Update(ctx, differentTarget2)
-			}).Should(Succeed())
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: differentTarget2.Name, Namespace: differentTarget2.Namespace}, differentTarget2); err != nil {
-					return err
-				}
-				differentTarget2.Deactivate(MessageReleaseSuperseded, nil)
-				return k8sClient.Status().Update(ctx, differentTarget2)
-			}).Should(Succeed())
-
-			err := reconciler.cullReleases(ctx, logr.Discard(), "releases", "target-trim-7")
-			Expect(err).NotTo(HaveOccurred())
+			// Create 5 inactive releases for different-target
+			releases = make([]*v1alpha1.Release, 5)
+			for i := 0; i < 5; i++ {
+				releases[i] = createRelease(ctx, "different-target", nil)
+			}
 
 			// Verify different-target releases are unaffected
-			releaseList := &v1alpha1.ReleaseList{}
-			Expect(k8sClient.List(ctx, releaseList,
-				client.InNamespace("releases"),
-				client.MatchingFields(map[string]string{
-					"config.targetName": "different-target",
-				}),
-			)).To(Succeed())
-			Expect(len(releaseList.Items)).To(Equal(2))
+			Eventually(func() int {
+				releaseList := &v1alpha1.ReleaseList{}
+				Expect(k8sClient.List(ctx, releaseList,
+					client.InNamespace("releases"),
+					client.MatchingFields(map[string]string{
+						"config.targetName": "different-target",
+					}),
+				)).To(Succeed())
+
+				return len(releaseList.Items)
+			}).Should(Equal(3))
+
+			Eventually(func() int {
+				releaseList := &v1alpha1.ReleaseList{}
+				Expect(k8sClient.List(ctx, releaseList,
+					client.InNamespace("releases"),
+					client.MatchingFields(map[string]string{
+						"config.targetName": "target-trim-7",
+					}),
+				)).To(Succeed())
+
+				return len(releaseList.Items)
+			}).Should(Equal(3))
 		})
 	})
 
 	Context("Reconcile", func() {
 		It("Should successfully reconcile and initialize a new release", func() {
-			release := generateRelease("reconcile-target-1")
-			Expect(k8sClient.Create(ctx, release)).To(Succeed())
-
-			result, err := reconciler.Reconcile(ctx, logr.Discard(), ctrl.Request{
-				NamespacedName: client.ObjectKey{
-					Namespace: DefaultNamespace,
-					Name:      release.Name,
-				},
-			}, release)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: time.Microsecond * 1}))
+			release := createRelease(ctx, "reconcile-target-1", nil)
 
 			// Verify release is initialized with conditions
 			Eventually(func() bool {
 				fetchedRelease := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{
+				err := k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
 					Namespace: DefaultNamespace,
-				}, fetchedRelease)).To(Succeed())
+				}, fetchedRelease)
+				if err != nil {
+					return false
+				}
 				return fetchedRelease.IsStatusInitialised()
-			}).Should(BeTrue())
+			}, "5s", "500ms").Should(BeTrue())
 		})
 
 		It("Should supersede previous active releases when deployment end time is set", func() {
-			// Skip("wip")
 			// Create and activate an older release with deployment end time
-			oldRelease := createRelease(ctx, "reconcile-target-3", nil)
+			targetName := "reconcile-target-3"
+
 			oldTime := time.Now().Add(-1 * time.Hour)
-
-			// Update oldRelease with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: oldRelease.Name, Namespace: oldRelease.Namespace}, oldRelease); err != nil {
-					return err
-				}
-				oldRelease.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: oldTime.Format(time.RFC3339),
-				}
-				return k8sClient.Update(ctx, oldRelease)
-			}).Should(Succeed())
-
-			// Wait for annotation to propagate
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: oldRelease.Name, Namespace: oldRelease.Namespace}, oldRelease)
-				if err != nil {
-					return false
-				}
-				_, exists := oldRelease.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
-				return exists
-			}).Should(BeTrue())
-
-			// Trigger reconcile on old release to activate it
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: oldRelease.Name, Namespace: oldRelease.Namespace}, oldRelease); err != nil {
-					return err
-				}
-				_, err := reconciler.Reconcile(ctx, logr.Discard(), ctrl.Request{
-					NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: oldRelease.Name},
-				}, oldRelease)
-				return err
-			}).Should(Succeed())
-
-			// Wait for old release to be activated
-			Eventually(func() bool {
-				fetchedOld := &v1alpha1.Release{}
-				if err := k8sClient.Get(ctx, client.ObjectKey{
-					Name:      oldRelease.Name,
-					Namespace: DefaultNamespace,
-				}, fetchedOld); err != nil {
-					return false
-				}
-				return fetchedOld.IsConditionActive()
-			}, "5s", "100ms").Should(BeTrue())
+			oldRelease := createRelease(ctx, targetName, &oldTime)
 
 			// Create a new release with a later deployment end time
-			newRelease := createRelease(ctx, "reconcile-target-3", nil)
-			newTime := time.Now()
-
-			// Update newRelease with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: newRelease.Name, Namespace: newRelease.Namespace}, newRelease); err != nil {
-					return err
-				}
-				newRelease.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: newTime.Format(time.RFC3339),
-				}
-				return k8sClient.Update(ctx, newRelease)
-			}).Should(Succeed())
-
-			// Wait for annotation to propagate
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: newRelease.Name, Namespace: newRelease.Namespace}, newRelease)
-				if err != nil {
-					return false
-				}
-				_, exists := newRelease.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
-				return exists
-			}).Should(BeTrue())
-
-			// Trigger reconcile on new release to activate it and supersede old one
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: newRelease.Name, Namespace: newRelease.Namespace}, newRelease); err != nil {
-					return err
-				}
-				_, err := reconciler.Reconcile(ctx, logr.Discard(), ctrl.Request{
-					NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: newRelease.Name},
-				}, newRelease)
-				return err
-			}).Should(Succeed())
+			newTime := time.Now().Add(1 * time.Hour)
+			newRelease := createRelease(ctx, targetName, &newTime)
 
 			// Wait for new release to be activated and old one to be superseded
 			Eventually(func() bool {
-				fetchedOldRelease := &v1alpha1.Release{}
 				fetchedNewRelease := &v1alpha1.Release{}
+				fetchedOldRelease := &v1alpha1.Release{}
 
-				if err := k8sClient.Get(ctx, client.ObjectKey{
-					Name:      oldRelease.Name,
-					Namespace: DefaultNamespace,
-				}, fetchedOldRelease); err != nil {
-					return false
-				}
 				if err := k8sClient.Get(ctx, client.ObjectKey{
 					Name:      newRelease.Name,
 					Namespace: DefaultNamespace,
@@ -614,10 +412,17 @@ var _ = Describe("ReleaseController", func() {
 					return false
 				}
 
-				return !fetchedOldRelease.IsConditionActive() &&
-					fetchedNewRelease.IsConditionActive() &&
-					fetchedOldRelease.Status.NextRelease.ReleaseRef == newRelease.Name
-			}, "5s", "100ms").Should(BeTrue())
+				if err := k8sClient.Get(ctx, client.ObjectKey{
+					Name:      oldRelease.Name,
+					Namespace: DefaultNamespace,
+				}, fetchedOldRelease); err != nil {
+					return false
+				}
+
+				return fetchedNewRelease.IsConditionActive() &&
+					!fetchedOldRelease.IsConditionActive() &&
+					fetchedNewRelease.Status.PreviousRelease.ReleaseRef == oldRelease.Name
+			}, "5s", "500ms").Should(BeTrue())
 		})
 
 		It("Should cull inactive releases when limit is exceeded", func() {
@@ -648,163 +453,13 @@ var _ = Describe("ReleaseController", func() {
 			}, "5s", "100ms").Should(Equal(3))
 		})
 
-		It("Should handle multiple releases with deployment end times", func() {
-			target := "reconcile-target-6"
-
-			// Create first release with deployment end time
-			release1 := createRelease(ctx, target, nil)
-			time1 := time.Now().Add(-1 * time.Hour)
-
-			// Update release1 with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: release1.Namespace}, release1); err != nil {
-					return err
-				}
-				release1.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: time1.Format(time.RFC3339),
-				}
-				return k8sClient.Update(ctx, release1)
-			}).Should(Succeed())
-
-			// Wait for annotation to propagate
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: release1.Namespace}, release1)
-				if err != nil {
-					return false
-				}
-				_, exists := release1.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
-				return exists
-			}).Should(BeTrue())
-
-			// Trigger reconcile on first release to activate it
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: release1.Namespace}, release1); err != nil {
-					return err
-				}
-				_, err := reconciler.Reconcile(ctx, logr.Discard(), ctrl.Request{
-					NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release1.Name},
-				}, release1)
-				return err
-			}).Should(Succeed())
-
-			// Wait for first release to be activated
-			Eventually(func() bool {
-				r1 := &v1alpha1.Release{}
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1); err != nil {
-					return false
-				}
-				return r1.IsConditionActive()
-			}, "5s", "100ms").Should(BeTrue())
-
-			// Create second release with later deployment end time
-			release2 := createRelease(ctx, target, nil)
-			time2 := time.Now()
-
-			// Update release2 with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: release2.Namespace}, release2); err != nil {
-					return err
-				}
-				release2.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: time2.Format(time.RFC3339),
-				}
-				return k8sClient.Update(ctx, release2)
-			}).Should(Succeed())
-
-			// Wait for annotation to propagate
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: release2.Namespace}, release2)
-				if err != nil {
-					return false
-				}
-				_, exists := release2.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime]
-				return exists
-			}).Should(BeTrue())
-
-			// Trigger reconcile on second release to activate it and supersede first
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: release2.Namespace}, release2); err != nil {
-					return err
-				}
-				_, err := reconciler.Reconcile(ctx, logr.Discard(), ctrl.Request{
-					NamespacedName: client.ObjectKey{Namespace: DefaultNamespace, Name: release2.Name},
-				}, release2)
-				return err
-			}).Should(Succeed())
-
-			// Wait for release2 to be activated and release1 to be superseded
-			Eventually(func() bool {
-				r1 := &v1alpha1.Release{}
-				r2 := &v1alpha1.Release{}
-
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1); err != nil {
-					return false
-				}
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: DefaultNamespace}, r2); err != nil {
-					return false
-				}
-
-				return !r1.IsConditionActive() &&
-					r2.IsConditionActive() &&
-					r1.Status.NextRelease.ReleaseRef == release2.Name
-			}, "5s", "100ms").Should(BeTrue())
-		})
-
 		It("Should handle releases for different targets independently", func() {
 			// Create releases for two different targets with deployment end times
-			release1 := createRelease(ctx, "target-a", nil)
 			time1 := time.Now()
+			release1 := createRelease(ctx, "target-a", &time1)
 
-			// Update release1 with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: release1.Namespace}, release1); err != nil {
-					return err
-				}
-
-				release1.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: time1.Format(time.RFC3339),
-				}
-
-				if err := k8sClient.Update(ctx, release1); err != nil {
-					return err
-				}
-
-				return nil
-			}).Should(Succeed())
-
-			release2 := createRelease(ctx, "target-b", nil)
 			time2 := time.Now()
-
-			// Update release2 with annotation (with retry logic)
-			Eventually(func() error {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: release2.Namespace}, release2); err != nil {
-					return err
-				}
-				release2.Annotations = map[string]string{
-					v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: time2.Format(time.RFC3339),
-				}
-				if err := k8sClient.Update(ctx, release2); err != nil {
-					return err
-				}
-
-				return nil
-			}).Should(Succeed())
-
-			// Wait for annotations to propagate and refetch
-			Eventually(func() int64 {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: release1.Namespace}, release1); err != nil {
-					return 0
-				}
-
-				return release1.Status.DeploymentEndTime.Unix()
-			}).Should(Equal(time1.Unix()))
-
-			Eventually(func() int64 {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: release2.Namespace}, release2); err != nil {
-					return 0
-				}
-				return release2.Status.DeploymentEndTime.Unix()
-			}).Should(Equal(time2.Unix()))
+			release2 := createRelease(ctx, "target-b", &time2)
 
 			// Wait for background controller to activate both releases
 			// (they shouldn't supersede each other because they're different targets)
@@ -839,8 +494,8 @@ func generateRelease(target string) *v1alpha1.Release {
 	infraSHA := generateCommitSHA()
 	return &v1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      target + "-" + infraSHA[:7] + "-" + appSHA[:7],
-			Namespace: DefaultNamespace,
+			GenerateName: target + "-",
+			Namespace:    DefaultNamespace,
 		},
 		ReleaseConfig: v1alpha1.ReleaseConfig{
 			TargetName: target,

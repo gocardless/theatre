@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -147,19 +148,13 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		rollback.Status.StartTime = &now
 	}
 
-	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
-		Type:    deployv1alpha1.RollbackConditionInProgress,
-		Status:  metav1.ConditionTrue,
-		Reason:  "DeploymentTriggering",
-		Message: "Attempting to trigger deployment",
-	})
-
 	resp, err := r.Deployer.TriggerDeployment(ctx, deployReq)
 	if err != nil {
 		logger.Error(err, "failed to trigger deployment")
 
 		// Check if error is retryable
-		if deployerErr, ok := err.(*cicd.DeployerError); ok && deployerErr.Retryable {
+		var deployerErr *cicd.DeployerError
+		if errors.As(err, &deployerErr) && deployerErr.Retryable {
 			rollback.Status.Message = fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRetryAttempts, err)
 			if updateErr := r.Status().Update(ctx, rollback); updateErr != nil {
 				logger.Error(updateErr, "failed to update rollback status")

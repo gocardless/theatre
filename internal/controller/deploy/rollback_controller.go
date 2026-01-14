@@ -37,6 +37,24 @@ type RollbackReconciler struct {
 func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Rollback")
 
+	// Index releases by their active condition status for efficient lookups
+	err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		"status.conditions.active",
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
+			if condition == nil {
+				return []string{}
+			}
+			return []string{string(condition.Status)}
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deployv1alpha1.Rollback{}).
 		Complete(
@@ -92,16 +110,15 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 // TODO: move this into api/deploy/v1alpha1/release_helpers.go once release reconciler PR is merged
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
-	if err := r.List(ctx, releaseList, client.InNamespace(namespace)); err != nil {
+	if err := r.List(ctx, releaseList,
+		client.InNamespace(namespace),
+		client.MatchingFields{"status.conditions.active": string(metav1.ConditionTrue)},
+	); err != nil {
 		return nil, err
 	}
 
 	for _, release := range releaseList.Items {
-		if release.ReleaseConfig.TargetName != targetName {
-			continue
-		}
-		activeCondition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
-		if activeCondition != nil && activeCondition.Status == metav1.ConditionTrue {
+		if release.ReleaseConfig.TargetName == targetName {
 			return &release, nil
 		}
 	}

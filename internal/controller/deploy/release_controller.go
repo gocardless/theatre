@@ -401,10 +401,9 @@ func (r *ReleaseReconciler) setActiveReleaseAndSupersedeOthers(ctx context.Conte
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		for i := range releases {
-			current := releases[i]
-			logger.Info("updating release", "release", current.Name, "previousRelease", current.Status.PreviousRelease.ReleaseRef)
+			logger.Info("updating release", "release", releases[i].Name, "previousRelease", releases[i].Status.PreviousRelease.ReleaseRef)
 
-			if err := r.Status().Update(ctx, &current); err != nil {
+			if err := r.Status().Update(ctx, &releases[i]); err != nil {
 				return err
 			}
 		}

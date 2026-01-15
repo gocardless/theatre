@@ -63,7 +63,7 @@ func main() {
 	defer cancel()
 
 	// Initialize the deployer based on the configured backend
-	deployer, err := createDeployer(ctx, *cicdBackend, *githubToken)
+	deployer, err := createDeployer(ctx, *cicdBackend)
 	if err != nil {
 		app.Fatalf("failed to create deployer: %v", err)
 	}
@@ -102,15 +102,15 @@ func main() {
 	}
 }
 
-func createDeployer(ctx context.Context, backend, githubToken string) (cicd.Deployer, error) {
+func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) {
 	switch backend {
 	case "noop":
 		return &cicd.NoopDeployer{}, nil
 	case "github":
-		if githubToken == "" {
+		if *githubToken == "" {
 			return nil, fmt.Errorf("github-token is required when using the github deployer backend")
 		}
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: githubToken})
+		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken})
 		httpClient := oauth2.NewClient(ctx, ts)
 		ghClient := github.NewClient(httpClient)
 		logger := zap.New(zap.UseDevMode(true))

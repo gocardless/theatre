@@ -101,7 +101,7 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 		}
 	}
 
-	if !rollback.IsInProgress() || rollback.Status.DeploymentID == "" {
+	if !meta.IsStatusConditionTrue(rollback.Status.Conditions, deployv1alpha1.RollbackConditionInProgress) {
 		return r.triggerDeployment(ctx, logger, rollback, toRelease)
 	}
 

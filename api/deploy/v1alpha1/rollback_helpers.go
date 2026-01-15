@@ -9,8 +9,3 @@ func (r *Rollback) IsCompleted() bool {
 	succeededCondition := meta.FindStatusCondition(r.Status.Conditions, RollbackConditionSucceded)
 	return succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown
 }
-
-func (r *Rollback) IsInProgress() bool {
-	inProgressCondition := meta.FindStatusCondition(r.Status.Conditions, RollbackConditionInProgress)
-	return inProgressCondition != nil && inProgressCondition.Status == metav1.ConditionTrue
-}

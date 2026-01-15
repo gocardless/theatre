@@ -201,8 +201,8 @@ var _ = Describe("RollbackReconciler", func() {
 					Namespace: namespaceName,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
-					ToReleaseName: "my-service-v1",
-					Reason:        "Testing options",
+					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-service-v1"},
+					Reason:       "Testing options",
 					DeploymentOptions: map[string]string{
 						"skip_canary": "true",
 						"timeout":     "300",
@@ -255,8 +255,8 @@ func newRollback(namespace, name, toRelease, reason string) *deployv1alpha1.Roll
 			Namespace: namespace,
 		},
 		Spec: deployv1alpha1.RollbackSpec{
-			ToReleaseName: toRelease,
-			Reason:        reason,
+			ToReleaseRef: deployv1alpha1.ReleaseReference{Name: toRelease},
+			Reason:       reason,
 		},
 	}
 }

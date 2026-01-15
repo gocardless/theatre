@@ -82,22 +82,22 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	toRelease := &deployv1alpha1.Release{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: rollback.Namespace,
-		Name:      rollback.Spec.ToReleaseName,
+		Name:      rollback.Spec.ToReleaseRef.Name,
 	}, toRelease); err != nil {
-		logger.Error(err, "failed to fetch target release", "toRelease", rollback.Spec.ToReleaseName)
+		logger.Error(err, "failed to fetch target release", "toRelease", rollback.Spec.ToReleaseRef.Name)
 		if apierrors.IsNotFound(err) {
-			return r.markRollbackFailed(ctx, rollback, fmt.Sprintf("target release %q not found", rollback.Spec.ToReleaseName))
+			return r.markRollbackFailed(ctx, rollback, fmt.Sprintf("target release %q not found", rollback.Spec.ToReleaseRef.Name))
 		}
 		return ctrl.Result{}, err
 	}
 
 	// Determine the current release (fromRelease) if not already set
-	if rollback.Status.FromReleaseName == "" {
+	if rollback.Status.FromReleaseRef == (deployv1alpha1.ReleaseReference{}) {
 		fromRelease, err := r.findActiveRelease(ctx, toRelease.ReleaseConfig.TargetName, rollback.Namespace)
 		if err != nil {
 			logger.Info("failed to find active release, continuing without fromRelease", "error", err)
 		} else if fromRelease != nil {
-			rollback.Status.FromReleaseName = fromRelease.Name
+			rollback.Status.FromReleaseRef = deployv1alpha1.ReleaseReference{Name: fromRelease.Name}
 		}
 	}
 

@@ -176,9 +176,6 @@ var _ = Describe("ReleaseController", func() {
 				createRelease(ctx, "trim", &time)
 			}
 
-			err := reconciler.cullReleases(ctx, logr.Discard(), "releases", "trim")
-			Expect(err).NotTo(HaveOccurred())
-
 			type counts struct {
 				Active int
 				Total  int
@@ -222,9 +219,6 @@ var _ = Describe("ReleaseController", func() {
 			}
 			// the last one is the oldest
 			oldestInactive := releases[3]
-
-			err := reconciler.cullReleases(ctx, logr.Discard(), "releases", "target-trim-3")
-			Expect(err).NotTo(HaveOccurred())
 
 			type counts struct {
 				Active              int
@@ -301,9 +295,6 @@ var _ = Describe("ReleaseController", func() {
 				}
 				return len(releaseList.Items)
 			}, "10s", "500ms").Should(Equal(3))
-
-			err = reconciler.cullReleases(ctx, logr.Discard(), "releases", "target-trim-6")
-			Expect(err).NotTo(HaveOccurred())
 
 			// Verify release in other namespace still exists
 			fetchedRelease := &v1alpha1.Release{}

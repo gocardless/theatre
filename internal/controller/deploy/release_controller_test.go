@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -93,25 +92,22 @@ var _ = Describe("ReleaseController", func() {
 			}).Should(BeTrue())
 		})
 
-		It("Should error when passing invalid time when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
+		It("Should not set deployment start/end times if annotation is invalid", func() {
 			fetchedObj := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
 
 			fetchedObj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   "not-a-timestamp",
 			}
 
-			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(HaveOccurred())
-		})
+			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
 
-		It("Should error when passing invalid time when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
-			fetchedObj := &v1alpha1.Release{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
-
-			fetchedObj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: "not-a-timestamp",
-			}
-			Expect(reconciler.handleAnnotations(ctx, logr.Discard(), fetchedObj)).To(HaveOccurred())
+			Eventually(func() bool {
+				updatedObj := &v1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentEndTime.IsZero() && updatedObj.Status.DeploymentStartTime.IsZero()
+			}).Should(BeTrue())
 		})
 
 		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
@@ -209,13 +205,15 @@ var _ = Describe("ReleaseController", func() {
 			releases := make([]*v1alpha1.Release, 4)
 			newestInactiveTime := time.Now()
 			for i := 0; i < 4; i++ {
-				time := time.Now().Add(-time.Duration(i) * time.Hour)
-				releases[i] = createRelease(ctx, "target-trim-3", &time)
+				endTime := time.Now().Add(-time.Duration(i) * time.Hour)
+				releases[i] = createRelease(ctx, "target-trim-3", &endTime)
 
 				if i == 1 {
 					// the second release is the newest inactive
-					newestInactiveTime = time
+					newestInactiveTime = endTime
 				}
+
+				// time.Sleep(1 * time.Second)
 			}
 			// the last one is the oldest
 			oldestInactive := releases[3]
@@ -421,8 +419,8 @@ var _ = Describe("ReleaseController", func() {
 			// Create multiple inactive releases
 			releases := make([]*v1alpha1.Release, 4)
 			for i := 0; i < 4; i++ {
-				time := time.Now().Add(-time.Duration(i) * time.Hour)
-				releases[i] = createRelease(ctx, targetName, &time)
+				endTime := time.Now().Add(-time.Duration(i) * time.Hour)
+				releases[i] = createRelease(ctx, targetName, &endTime)
 			}
 
 			// Verify that culling happened

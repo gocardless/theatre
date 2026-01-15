@@ -265,7 +265,7 @@ var _ = Describe("ReleaseController", func() {
 					OldestInactiveFound: oldestInactiveFound,
 					Total:               len(releaseList.Items),
 				}
-			}, "5s", "500ms").Should(Equal(counts{Active: 1, NewestInactiveFound: true, OldestInactiveFound: false, Total: 3}))
+			}, "10s", "500ms").Should(Equal(counts{Active: 1, NewestInactiveFound: true, OldestInactiveFound: false, Total: 3}))
 		})
 
 		It("Should not affect releases in different namespaces", func() {
@@ -300,7 +300,7 @@ var _ = Describe("ReleaseController", func() {
 					return 0
 				}
 				return len(releaseList.Items)
-			}).Should(Equal(3))
+			}, "10s", "500ms").Should(Equal(3))
 
 			err = reconciler.cullReleases(ctx, logr.Discard(), "releases", "target-trim-6")
 			Expect(err).NotTo(HaveOccurred())

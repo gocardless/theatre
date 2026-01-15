@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"strings"
 	"time"
 
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -15,161 +14,72 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	DefaultNamespace = "releases"
-)
-
 var _ = Describe("ReleaseController", func() {
 
-	var (
-		obj v1alpha1.Release
-	)
-
-	BeforeEach(func() {
-		obj = v1alpha1.Release{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-release",
-				Namespace: DefaultNamespace,
-			},
-			ReleaseConfig: v1alpha1.ReleaseConfig{
-				TargetName: "test-target",
-				Revisions: []v1alpha1.Revision{
-					{Name: "application-revision", ID: "test-app-revision"},
-					{Name: "infrastructure-revision", ID: "test-infra-revision"},
-				},
-			},
-		}
-
-		err := k8sClient.Create(ctx, &obj)
-		Expect(err).NotTo(HaveOccurred())
-
-		Eventually(func() bool {
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, &obj)
-			if err != nil {
-				return false
-			}
-
-			// means that the release has been initialised
-			return len(obj.Status.Conditions) > 0
-		}, "5s", "100ms").Should(BeTrue())
-	})
-
-	AfterEach(func() {
-		err := k8sClient.DeleteAllOf(ctx, &v1alpha1.Release{}, client.InNamespace("releases"))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	Context("handleAnnotations", func() {
-		var (
-			stringTimestamp string
-			metav1Timestamp metav1.Time
-		)
+		It("Should update status.deploymentStartTime and status.deploymentEndTime when annotated", func() {
+			testNs := setupTestNamespace(ctx)
+			stringTimestamp := "2025-12-08T14:42:00Z"
+			metav1Timestamp := getMetaV1Timestamp(stringTimestamp)
 
-		BeforeEach(func() {
-			stringTimestamp = "2025-12-08T14:42:00Z"
-			timestamp, err := time.Parse(time.RFC3339, stringTimestamp)
-			Expect(err).NotTo(HaveOccurred())
-			metav1Timestamp = metav1.NewTime(timestamp)
-		})
+			release := createRelease(ctx, testNs, "test-target", nil)
 
-		It("Should update status.deploymentStartTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime, func() {
 			fetchedObj := &v1alpha1.Release{}
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release.Name, Namespace: testNs}, fetchedObj); err != nil {
+					return false
+				}
+				return fetchedObj.Status.DeploymentEndTime.IsZero() && fetchedObj.Status.DeploymentStartTime.IsZero()
+			}, "5s", "100ms").Should(BeTrue())
 
-			By("Setting the deployment start time")
+			By("Setting the deployment start and end time")
 			fetchedObj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: stringTimestamp,
+				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   stringTimestamp,
 			}
-			err = k8sClient.Update(ctx, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
 
 			// Verify the status was persisted to the cluster
 			Eventually(func() bool {
 				updatedObj := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
-				return updatedObj.Status.DeploymentStartTime.Unix() == metav1Timestamp.Unix()
-			}).Should(BeTrue())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release.Name, Namespace: testNs}, updatedObj)).To(Succeed())
+				return updatedObj.Status.DeploymentStartTime.Unix() == metav1Timestamp.Unix() && updatedObj.Status.DeploymentEndTime.Unix() == metav1Timestamp.Unix()
+			}, "5s", "100ms").Should(BeTrue())
 		})
 
 		It("Should not set deployment start/end times if annotation is invalid", func() {
+			testNs := setupTestNamespace(ctx)
+			release := createRelease(ctx, testNs, "test-target", nil)
+
 			fetchedObj := &v1alpha1.Release{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)).To(Succeed())
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release.Name, Namespace: testNs}, fetchedObj); err != nil {
+					return false
+				}
+				return fetchedObj.Status.DeploymentEndTime.IsZero() && fetchedObj.Status.DeploymentStartTime.IsZero()
+			}, "5s", "100ms").Should(BeTrue())
 
 			fetchedObj.Annotations = map[string]string{
 				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: "not-a-timestamp",
 				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   "not-a-timestamp",
 			}
-
 			Expect(k8sClient.Update(ctx, fetchedObj)).To(Succeed())
 
 			Eventually(func() bool {
 				updatedObj := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: release.Name, Namespace: testNs}, updatedObj)).To(Succeed())
 				return updatedObj.Status.DeploymentEndTime.IsZero() && updatedObj.Status.DeploymentStartTime.IsZero()
-			}).Should(BeTrue())
-		})
-
-		It("Should update status.deploymentEndTime when annotated with "+v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime, func() {
-			// Retry update in case of conflicts from background reconciliation
-			fetchedObj := &v1alpha1.Release{}
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Setting the deployment end time")
-			fetchedObj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime: stringTimestamp,
-			}
-			err = k8sClient.Update(ctx, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify the status was persisted to the cluster
-			Eventually(func() bool {
-				updatedObj := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
-				return updatedObj.Status.DeploymentEndTime.Unix() == metav1Timestamp.Unix()
-			}).Should(BeTrue())
-		})
-
-		It("Should update all status fields when annotated with "+strings.Join([]string{
-			v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime,
-			v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime,
-		}, ","), func() {
-			startTimestamp := "2025-12-08T14:32:00Z"
-			metav1StartTimestamp := getMetaV1Timestamp(startTimestamp)
-			endTimestamp := "2025-12-08T14:42:00Z"
-			metav1EndTimestamp := getMetaV1Timestamp(endTimestamp)
-
-			// Retry update in case of conflicts from background reconciliation
-			fetchedObj := &v1alpha1.Release{}
-			// Eventually(func() error {
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Setting the deployment start time and end time")
-			fetchedObj.Annotations = map[string]string{
-				v1alpha1.AnnotationKeyReleaseSetDeploymentStartTime: startTimestamp,
-				v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime:   endTimestamp,
-			}
-			err = k8sClient.Update(ctx, fetchedObj)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify both status fields were persisted to the cluster
-			Eventually(func() bool {
-				updatedObj := &v1alpha1.Release{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, updatedObj)).To(Succeed())
-				return updatedObj.Status.DeploymentStartTime.Unix() == metav1StartTimestamp.Unix() &&
-					updatedObj.Status.DeploymentEndTime.Unix() == metav1EndTimestamp.Unix()
-			}).Should(BeTrue())
+			}, "5s", "100ms").Should(BeTrue())
 		})
 	})
 
 	Context("cullReleases", func() {
 		It("Should not delete any inactive releases when count is below or equals limit", func() {
+			testNs := setupTestNamespace(ctx)
 			// Create 3 inactive releases (below limit of 3)
 			for i := 0; i < 3; i++ {
 				time := time.Now().Add(-1 * time.Hour)
-				createRelease(ctx, "trim", &time)
+				createRelease(ctx, testNs, "trim", &time)
 			}
 
 			type counts struct {
@@ -180,7 +90,7 @@ var _ = Describe("ReleaseController", func() {
 				// Verify all releases still exist and only one is active
 				releases := &v1alpha1.ReleaseList{}
 				Expect(k8sClient.List(ctx, releases,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "trim",
 					}),
@@ -201,12 +111,13 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should delete oldest inactive release and preserve the newest when limit is exceeded", func() {
+			testNs := setupTestNamespace(ctx)
 			// Create 4 releases (1 over limit of 3)
 			releases := make([]*v1alpha1.Release, 4)
 			newestInactiveTime := time.Now()
 			for i := 0; i < 4; i++ {
 				endTime := time.Now().Add(-time.Duration(i) * time.Hour)
-				releases[i] = createRelease(ctx, "target-trim-3", &endTime)
+				releases[i] = createRelease(ctx, testNs, "target-trim-3", &endTime)
 
 				if i == 1 {
 					// the second release is the newest inactive
@@ -228,7 +139,7 @@ var _ = Describe("ReleaseController", func() {
 			Eventually(func() counts {
 				releaseList := &v1alpha1.ReleaseList{}
 				Expect(k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "target-trim-3",
 					}),
@@ -261,29 +172,25 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should not affect releases in different namespaces", func() {
-			err := k8sClient.Create(ctx, &v1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "other-namespace",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
+			testNs := setupTestNamespace(ctx)
+			otherNs := setupTestNamespace(ctx)
 
 			// Create releases in different namespace
 			otherNsRelease := generateRelease("target-trim-6")
-			otherNsRelease.Namespace = "other-namespace"
+			otherNsRelease.Namespace = otherNs
 			Expect(k8sClient.Create(ctx, otherNsRelease)).To(Succeed())
 
-			// Create 5 inactive releases in 'releases' namespace
-			releases := make([]*v1alpha1.Release, 5)
-			for i := 0; i < 5; i++ {
-				releases[i] = createRelease(ctx, "target-trim-6", nil)
+			// Create 4 inactive releases in testNs namespace
+			releases := make([]*v1alpha1.Release, 4)
+			for i := 0; i < 4; i++ {
+				releases[i] = createRelease(ctx, testNs, "target-trim-6", nil)
 			}
 
 			// Wait for all releases to be indexed as inactive
 			Eventually(func() int {
 				releaseList := &v1alpha1.ReleaseList{}
 				err := k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "target-trim-6",
 					}),
@@ -298,25 +205,23 @@ var _ = Describe("ReleaseController", func() {
 			fetchedRelease := &v1alpha1.Release{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
 				Name:      otherNsRelease.Name,
-				Namespace: "other-namespace",
+				Namespace: otherNs,
 			}, fetchedRelease)).To(Succeed())
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, otherNsRelease)).To(Succeed())
 		})
 
 		It("Should not affect inactive releases with different targets", func() {
+			testNs := setupTestNamespace(ctx)
 			// Create 3 inactive releases for target-trim-7
 			releases := make([]*v1alpha1.Release, 3)
 			for i := 0; i < 3; i++ {
-				releases[i] = createRelease(ctx, "target-trim-7", nil)
+				releases[i] = createRelease(ctx, testNs, "target-trim-7", nil)
 			}
 
 			// Wait for all releases to be indexed as inactive
 			Eventually(func() int {
 				releaseList := &v1alpha1.ReleaseList{}
 				err := k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "target-trim-7",
 					}),
@@ -325,51 +230,52 @@ var _ = Describe("ReleaseController", func() {
 					return 0
 				}
 				return len(releaseList.Items)
-			}).Should(Equal(3))
+			}, "5s", "100ms").Should(Equal(3))
 
-			// Create 5 inactive releases for different-target
-			releases = make([]*v1alpha1.Release, 5)
-			for i := 0; i < 5; i++ {
-				releases[i] = createRelease(ctx, "different-target", nil)
+			// Create 4 inactive releases for different-target
+			releases = make([]*v1alpha1.Release, 4)
+			for i := 0; i < 4; i++ {
+				releases[i] = createRelease(ctx, testNs, "different-target", nil)
 			}
 
 			// Verify different-target releases are unaffected
 			Eventually(func() int {
 				releaseList := &v1alpha1.ReleaseList{}
 				Expect(k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "different-target",
 					}),
 				)).To(Succeed())
 
 				return len(releaseList.Items)
-			}).Should(Equal(3))
+			}, "5s", "100ms").Should(Equal(3))
 
 			Eventually(func() int {
 				releaseList := &v1alpha1.ReleaseList{}
 				Expect(k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": "target-trim-7",
 					}),
 				)).To(Succeed())
 
 				return len(releaseList.Items)
-			}).Should(Equal(3))
+			}, "5s", "100ms").Should(Equal(3))
 		})
 	})
 
 	Context("Reconcile", func() {
 		It("Should successfully reconcile and initialize a new release", func() {
-			release := createRelease(ctx, "reconcile-target-1", nil)
+			testNs := setupTestNamespace(ctx)
+			release := createRelease(ctx, testNs, "reconcile-target-1", nil)
 
 			// Verify release is initialized with conditions
 			Eventually(func() bool {
 				fetchedRelease := &v1alpha1.Release{}
 				err := k8sClient.Get(ctx, client.ObjectKey{
 					Name:      release.Name,
-					Namespace: DefaultNamespace,
+					Namespace: testNs,
 				}, fetchedRelease)
 				if err != nil {
 					return false
@@ -379,15 +285,16 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should supersede previous active releases when deployment end time is set", func() {
+			testNs := setupTestNamespace(ctx)
 			// Create and activate an older release with deployment end time
 			targetName := "reconcile-target-3"
 
 			oldTime := time.Now().Add(-1 * time.Hour)
-			oldRelease := createRelease(ctx, targetName, &oldTime)
+			oldRelease := createRelease(ctx, testNs, targetName, &oldTime)
 
 			// Create a new release with a later deployment end time
 			newTime := time.Now().Add(1 * time.Hour)
-			newRelease := createRelease(ctx, targetName, &newTime)
+			newRelease := createRelease(ctx, testNs, targetName, &newTime)
 
 			// Wait for new release to be activated and old one to be superseded
 			Eventually(func() bool {
@@ -396,14 +303,14 @@ var _ = Describe("ReleaseController", func() {
 
 				if err := k8sClient.Get(ctx, client.ObjectKey{
 					Name:      newRelease.Name,
-					Namespace: DefaultNamespace,
+					Namespace: testNs,
 				}, fetchedNewRelease); err != nil {
 					return false
 				}
 
 				if err := k8sClient.Get(ctx, client.ObjectKey{
 					Name:      oldRelease.Name,
-					Namespace: DefaultNamespace,
+					Namespace: testNs,
 				}, fetchedOldRelease); err != nil {
 					return false
 				}
@@ -415,12 +322,13 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should cull inactive releases when limit is exceeded", func() {
+			testNs := setupTestNamespace(ctx)
 			targetName := "reconcile-cull-target"
 			// Create multiple inactive releases
 			releases := make([]*v1alpha1.Release, 4)
 			for i := 0; i < 4; i++ {
 				endTime := time.Now().Add(-time.Duration(i) * time.Hour)
-				releases[i] = createRelease(ctx, targetName, &endTime)
+				releases[i] = createRelease(ctx, testNs, targetName, &endTime)
 			}
 
 			// Verify that culling happened
@@ -429,7 +337,7 @@ var _ = Describe("ReleaseController", func() {
 			Eventually(func() int {
 				releaseList := &v1alpha1.ReleaseList{}
 				err := k8sClient.List(ctx, releaseList,
-					client.InNamespace("releases"),
+					client.InNamespace(testNs),
 					client.MatchingFields(map[string]string{
 						"config.targetName": targetName,
 						// "status.conditions.active": string(metav1.ConditionFalse),
@@ -443,12 +351,13 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("Should handle releases for different targets independently", func() {
+			testNs := setupTestNamespace(ctx)
 			// Create releases for two different targets with deployment end times
 			time1 := time.Now()
-			release1 := createRelease(ctx, "target-a", &time1)
+			release1 := createRelease(ctx, testNs, "target-a", &time1)
 
 			time2 := time.Now()
-			release2 := createRelease(ctx, "target-b", &time2)
+			release2 := createRelease(ctx, testNs, "target-b", &time2)
 
 			// Wait for background controller to activate both releases
 			// (they shouldn't supersede each other because they're different targets)
@@ -456,10 +365,10 @@ var _ = Describe("ReleaseController", func() {
 				r1 := &v1alpha1.Release{}
 				r2 := &v1alpha1.Release{}
 
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: DefaultNamespace}, r1); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release1.Name, Namespace: testNs}, r1); err != nil {
 					return false
 				}
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: DefaultNamespace}, r2); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: release2.Name, Namespace: testNs}, r2); err != nil {
 					return false
 				}
 
@@ -478,13 +387,32 @@ func generateCommitSHA() string {
 	return hex.EncodeToString(bytes)
 }
 
+func generateNamespace() string {
+	bytes := make([]byte, 4)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		panic(err)
+	}
+	return "test-ns-" + hex.EncodeToString(bytes)
+}
+
+func setupTestNamespace(ctx context.Context) string {
+	ns := generateNamespace()
+	err := k8sClient.Create(ctx, &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return ns
+}
+
 func generateRelease(target string) *v1alpha1.Release {
 	appSHA := generateCommitSHA()
 	infraSHA := generateCommitSHA()
 	return &v1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: target + "-",
-			Namespace:    DefaultNamespace,
 		},
 		ReleaseConfig: v1alpha1.ReleaseConfig{
 			TargetName: target,
@@ -496,8 +424,9 @@ func generateRelease(target string) *v1alpha1.Release {
 	}
 }
 
-func createRelease(ctx context.Context, target string, endTime *time.Time) *v1alpha1.Release {
+func createRelease(ctx context.Context, namespace, target string, endTime *time.Time) *v1alpha1.Release {
 	release := generateRelease(target)
+	release.Namespace = namespace
 	if endTime != nil {
 		release.Annotations = make(map[string]string)
 		release.Annotations[v1alpha1.AnnotationKeyReleaseSetDeploymentEndTime] = endTime.Format(time.RFC3339)

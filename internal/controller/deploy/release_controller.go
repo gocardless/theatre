@@ -213,11 +213,13 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	// trim releases to the configured maximum
 	releasesToDelete := cullingCandidates[:excessReleaseCount]
 
+	logger.Info("culling releases", "count", len(releasesToDelete))
+
 	for _, releaseToDelete := range releasesToDelete {
-		logger.Info("deleting release", "release", releaseToDelete.Name)
+		logger.Info("deleting release", "releaseToDelete", releaseToDelete.Name)
 		err := r.Delete(ctx, &releaseToDelete)
 		if err != nil {
-			logger.Error(err, "failed to delete release", "release", releaseToDelete.Name)
+			logger.Error(err, "failed to delete release", "releaseToDelete", releaseToDelete.Name)
 			return err
 		}
 	}

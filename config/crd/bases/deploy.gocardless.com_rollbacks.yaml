@@ -17,10 +17,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.fromReleaseName
+    - jsonPath: .status.fromReleaseRef.name
       name: From
       type: string
-    - jsonPath: .spec.toReleaseName
+    - jsonPath: .spec.toReleaseRef.name
       name: To
       type: string
     - jsonPath: .spec.reason
@@ -83,12 +83,18 @@ spec:
                 maxLength: 512
                 minLength: 1
                 type: string
-              toReleaseName:
+              toReleaseRef:
                 description: |-
-                  ToReleaseName is the target release to rollback to. This is a reference to
+                  ToReleaseRef is the target release to rollback to. This is a reference to
                   the Release resource name. If left empty, the operator will pick the latest
                   healthy release to roll back to.
-                type: string
+                properties:
+                  name:
+                    description: Name is the name of the release resource.
+                    type: string
+                required:
+                - name
+                type: object
             required:
             - reason
             type: object
@@ -179,16 +185,17 @@ spec:
                 description: DeploymentURL is the URL to the CI job performing the
                   rollback.
                 type: string
-              fromReleaseName:
+              fromReleaseRef:
                 description: |-
-                  FromReleaseName is the release being rolled back from. This is a reference
+                  FromReleaseRef is the release being rolled back from. This is a reference
                   to the Release resource name.
-                type: string
-              lastHTTPCallTime:
-                description: LastHTTPCallTime is when the controller last attempted
-                  to call the CI system.
-                format: date-time
-                type: string
+                properties:
+                  name:
+                    description: Name is the name of the release resource.
+                    type: string
+                required:
+                - name
+                type: object
               message:
                 description: Message is a human-readable message indicating the state
                   of the rollback.
@@ -197,8 +204,6 @@ spec:
                 description: StartTime is when the rollback operation started.
                 format: date-time
                 type: string
-            required:
-            - fromReleaseName
             type: object
         required:
         - spec

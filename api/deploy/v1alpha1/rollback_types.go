@@ -22,11 +22,11 @@ const (
 
 // RollbackSpec defines the desired state of Rollback
 type RollbackSpec struct {
-	// ToReleaseName is the target release to rollback to. This is a reference to
+	// ToReleaseRef is the target release to rollback to. This is a reference to
 	// the Release resource name. If left empty, the operator will pick the latest
 	// healthy release to roll back to.
 	// +kubebuilder:validation:Optional
-	ToReleaseName string `json:"toReleaseName,omitempty"`
+	ToReleaseRef ReleaseReference `json:"toReleaseRef,omitempty"`
 
 	// Reason is a human-readable message explaining why the rollback was initiated.
 	// +kubebuilder:validation:Required
@@ -41,6 +41,13 @@ type RollbackSpec struct {
 	// DeploymentOptions contains additional provider-specific options.
 	// +kubebuilder:validation:Optional
 	DeploymentOptions map[string]string `json:"deploymentOptions,omitempty"`
+}
+
+// ReleaseReference is a reference to a Release resource
+type ReleaseReference struct {
+	// Name is the name of the release resource.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 }
 
 // RollbackInitiator tracks who or what initiated the rollback
@@ -60,9 +67,9 @@ type RollbackStatus struct {
 	// Message is a human-readable message indicating the state of the rollback.
 	Message string `json:"message,omitempty"`
 
-	// FromReleaseName is the release being rolled back from. This is a reference
+	// FromReleaseRef is the release being rolled back from. This is a reference
 	// to the Release resource name.
-	FromReleaseName string `json:"fromReleaseName"`
+	FromReleaseRef ReleaseReference `json:"fromReleaseRef,omitempty"`
 
 	// Automatic indicates whether this rollback was triggered automatically
 	// (e.g., by a health check) or manually by a user.
@@ -85,9 +92,6 @@ type RollbackStatus struct {
 	// initiate the rollback via the CI system.
 	AttemptCount int32 `json:"attemptCount,omitempty"`
 
-	// LastHTTPCallTime is when the controller last attempted to call the CI system.
-	LastHTTPCallTime *metav1.Time `json:"lastHTTPCallTime,omitempty"`
-
 	// Conditions represent the latest observations of the rollback's state.
 	// Known condition types are: "InProgress", "Succeeded".
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -96,8 +100,8 @@ type RollbackStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=rb
-// +kubebuilder:printcolumn:name="From",type=string,JSONPath=`.status.fromReleaseName`
-// +kubebuilder:printcolumn:name="To",type=string,JSONPath=`.spec.toReleaseName`
+// +kubebuilder:printcolumn:name="From",type=string,JSONPath=`.status.fromReleaseRef.name`
+// +kubebuilder:printcolumn:name="To",type=string,JSONPath=`.spec.toReleaseRef.name`
 // +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.spec.reason`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

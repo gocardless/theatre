@@ -3,10 +3,6 @@ package v1alpha1
 const (
 	AnnotationKeyBase = "theatre.gocardless.com"
 
-	// AnnotationKeyReleaseActivate is an annotation that can be set on a Release
-	// to trigger a phase update.
-	AnnotationKeyReleaseActivate = AnnotationKeyBase + "/release-activate"
-
 	// AnnotationKeyReleaseSetDeploymentStartTime is an annotation that can be set on a Release
 	// to trigger a deployment start time update.
 	AnnotationKeyReleaseSetDeploymentStartTime = AnnotationKeyBase + "/release-set-deploy-start-time"

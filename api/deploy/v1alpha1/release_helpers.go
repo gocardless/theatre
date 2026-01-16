@@ -61,8 +61,8 @@ func (r *Release) InitialiseStatus(message string) {
 	r.Status.Message = message
 	r.Status.Signature = r.generateSignature()[:SignatureLength]
 
-	r.SetConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
-	r.SetConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
+	r.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
+	r.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
 func (r *Release) ParseAnnotations() (changed bool, errors []error) {
@@ -87,11 +87,6 @@ func (r *Release) ParseAnnotations() (changed bool, errors []error) {
 	}
 
 	return changed, errors
-}
-
-func (r *Release) AnnotatedWithActivate() bool {
-	_, ok := r.Annotations[AnnotationKeyReleaseActivate]
-	return ok
 }
 
 func (r *Release) AnnotatedWithSetDeploymentStartTime() bool {
@@ -123,7 +118,7 @@ func (r *Release) Activate(message string, previousRelease *Release) {
 
 	// This is the current active release, so it has no next release
 	r.Status.NextRelease = ReleaseTransition{}
-	r.SetConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
+	r.setConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
 }
 
 func (r *Release) IsConditionActive() bool {
@@ -135,7 +130,7 @@ func (r *Release) IsConditionActive() bool {
 	return activeCondition.Status == metav1.ConditionTrue
 }
 
-func (r *Release) SetConditionActive(status metav1.ConditionStatus, reason, message string) {
+func (r *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionActive,
 		Status:  status,
@@ -144,7 +139,7 @@ func (r *Release) SetConditionActive(status metav1.ConditionStatus, reason, mess
 	})
 }
 
-func (r *Release) SetConditionHealthy(status metav1.ConditionStatus, reason, message string) {
+func (r *Release) setConditionHealthy(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionHealthy,
 		Status:  status,
@@ -163,14 +158,5 @@ func (r *Release) Deactivate(message string, nextRelease *Release) {
 		}
 	}
 
-	r.SetConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
-}
-
-// Returns the effective time of the release, which is the deployment end time,
-// if set, otherwise the creation time.
-func (r *Release) GetEffectiveTime() time.Time {
-	if r.Status.DeploymentEndTime.IsZero() {
-		return r.ObjectMeta.CreationTimestamp.Time
-	}
-	return r.Status.DeploymentEndTime.Time
+	r.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }

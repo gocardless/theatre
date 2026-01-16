@@ -24,4 +24,5 @@ go.work
 *.swo
 *~
 
+# Ignore tmp folder files used by air
 tmp/*

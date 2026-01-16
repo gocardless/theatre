@@ -62,11 +62,9 @@ var _ = BeforeSuite(func() {
 	k8sClient = manager.GetClient()
 
 	reconciler = &ReleaseReconciler{
-		Client:               k8sClient,
-		Scheme:               scheme.Scheme,
-		Log:                  ctrl.Log.WithName("controllers").WithName("Release"),
-		MaxReleasesPerTarget: 3,
-		CullingStrategy:      CullingStrategyDeploymentEndTime,
+		Client: k8sClient,
+		Scheme: scheme.Scheme,
+		Log:    ctrl.Log.WithName("controllers").WithName("Release"),
 	}
 
 	err = reconciler.SetupWithManager(ctx, manager)

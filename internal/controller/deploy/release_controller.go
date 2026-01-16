@@ -18,19 +18,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type CullingStrategy string
-
-const (
-	CullingStrategyDeploymentEndTime CullingStrategy = "deployment-end-time"
-	CullingStrategySignature         CullingStrategy = "signature"
-)
-
 type ReleaseReconciler struct {
 	client.Client
-	Log                  logr.Logger
-	Scheme               *runtime.Scheme
-	MaxReleasesPerTarget int
-	CullingStrategy      CullingStrategy
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 }
 
 func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -136,95 +127,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		return ctrl.Result{}, err
 	}
 
-	err = r.cullReleases(ctx, logger, req.Namespace, release.ReleaseConfig.TargetName)
-	if err != nil {
-		logger.Error(err, "failed to trim extra releases")
-		return ctrl.Result{}, err
-	}
-
 	return ctrl.Result{}, nil
-}
-
-// This function ensures that the number of inactive releases does not exceed
-// the configured maximum. It has two operating modes:
-// 1. If the culling strategy is "deployment-end-time", it will delete based on
-// effective time (deployment end time if set, otherwise creation time).
-// 2. If the culling strategy is "signature", it will delete based on release
-// signature uniqueness, where it will firstly cull releases that have repeating
-// signatures, and only then delete releases based on effective time (deployment
-// end time if set, otherwise creation time).
-func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	if r.MaxReleasesPerTarget < 0 {
-		logger.Info("culling is disabled, skipping")
-		return nil
-	}
-
-	allReleasesList := &deployv1alpha1.ReleaseList{}
-	err := r.List(ctx, allReleasesList,
-		client.InNamespace(namespace),
-		client.MatchingFields(map[string]string{
-			"config.targetName": target,
-		}),
-	)
-
-	if err != nil {
-		return err
-	}
-
-	if len(allReleasesList.Items) < r.MaxReleasesPerTarget {
-		return nil
-	}
-
-	inactiveReleases := []deployv1alpha1.Release{}
-	for _, release := range allReleasesList.Items {
-		if !release.IsConditionActive() {
-			inactiveReleases = append(inactiveReleases, release)
-		}
-	}
-
-	logger.Info("found inactive releases", "count", len(allReleasesList.Items))
-	// excessReleaseCount is (active releases + inactive releases) - max releases
-	excessReleaseCount := len(allReleasesList.Items) - r.MaxReleasesPerTarget
-
-	signatureOccurrences := make(map[string]int)
-	cullingCandidates := make([]deployv1alpha1.Release, 0)
-
-	if r.CullingStrategy == CullingStrategySignature {
-		for _, release := range inactiveReleases {
-			signatureOccurrences[release.Status.Signature]++
-		}
-
-		for _, release := range inactiveReleases {
-			if signatureOccurrences[release.Status.Signature] > 1 {
-				cullingCandidates = append(cullingCandidates, release)
-			}
-		}
-	}
-
-	if len(cullingCandidates) == 0 {
-		cullingCandidates = append(cullingCandidates, inactiveReleases...)
-	}
-
-	sort.Slice(cullingCandidates, func(i, j int) bool {
-		// Oldest first (oldest at index 0, newest at the end)
-		return cullingCandidates[i].GetEffectiveTime().Before(cullingCandidates[j].GetEffectiveTime())
-	})
-
-	// trim releases to the configured maximum
-	releasesToDelete := cullingCandidates[:excessReleaseCount]
-
-	logger.Info("culling releases", "count", len(releasesToDelete))
-
-	for _, releaseToDelete := range releasesToDelete {
-		logger.Info("deleting release", "releaseToDelete", releaseToDelete.Name)
-		err := r.Delete(ctx, &releaseToDelete)
-		if err != nil {
-			logger.Error(err, "failed to delete release", "releaseToDelete", releaseToDelete.Name)
-			return err
-		}
-	}
-
-	return nil
 }
 
 // The active release is the one with the latest deployment end time, therefore

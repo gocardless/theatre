@@ -172,7 +172,7 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 		}
 
 		if !release.Status.DeploymentStartTime.Time.UTC().Equal(startTime.UTC()) {
-			release.Status.DeploymentStartTime = metav1.NewTime(startTime)
+			release.SetDeploymentStartTime(metav1.NewTime(startTime))
 			modified = true
 		}
 	}

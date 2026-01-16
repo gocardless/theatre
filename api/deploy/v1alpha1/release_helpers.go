@@ -71,7 +71,7 @@ func (r *Release) ParseAnnotations() (changed bool, errors []error) {
 		if err != nil {
 			errors = append(errors, err)
 		} else {
-			r.Status.DeploymentStartTime = metav1.NewTime(startTime)
+			r.SetDeploymentStartTime(metav1.NewTime(startTime))
 			changed = true
 		}
 	}
@@ -81,7 +81,7 @@ func (r *Release) ParseAnnotations() (changed bool, errors []error) {
 		if err != nil {
 			errors = append(errors, err)
 		} else {
-			r.Status.DeploymentEndTime = metav1.NewTime(endTime)
+			r.SetDeploymentEndTime(metav1.NewTime(endTime))
 			changed = true
 		}
 	}

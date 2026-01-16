@@ -258,9 +258,10 @@ func partitionReleasesByEndTimeTies(releases []deployv1alpha1.Release) (viable [
 
 	releasesEndTimes := make(map[time.Time][]deployv1alpha1.Release)
 
-	for i := range releases {
-		if !releases[i].Status.DeploymentEndTime.IsZero() {
-			releasesEndTimes[releases[i].Status.DeploymentEndTime.Time] = append(releasesEndTimes[releases[i].Status.DeploymentEndTime.Time], releases[i])
+	for _, release := range releases {
+		if !release.Status.DeploymentEndTime.IsZero() {
+			endTime := release.Status.DeploymentEndTime.Time
+			releasesEndTimes[endTime] = append(releasesEndTimes[endTime], release)
 		}
 	}
 

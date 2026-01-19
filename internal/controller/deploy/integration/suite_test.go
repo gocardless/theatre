@@ -71,6 +71,13 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(ctx, mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = (&deploy.ReleaseReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Release"),
+	}).SetupWithManager(ctx, mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err := mgr.Start(ctx)

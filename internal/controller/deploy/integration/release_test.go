@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -33,7 +34,15 @@ var _ = Describe("ReleaseController", func() {
 		JustBeforeEach(func() {
 			fetchedRelease = &v1alpha1.Release{}
 			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)
+				if err != nil {
+					return err
+				}
+
+				if !fetchedRelease.IsStatusInitialised() {
+					return fmt.Errorf("release hasn't been initialised by the reconciler")
+				}
+				return nil
 			}, "5s", "100ms").Should(Succeed())
 		})
 

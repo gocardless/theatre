@@ -262,7 +262,7 @@ var _ = Describe("ReleaseController", func() {
 					return false
 				}
 
-				return fetchedRelease.IsStatusInitialised()
+				return fetchedRelease.IsStatusInitialised() && fetchedRelease.Status.Signature != ""
 			}).Should(BeTrue())
 		})
 	})

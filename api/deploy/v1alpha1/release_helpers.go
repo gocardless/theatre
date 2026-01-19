@@ -83,12 +83,7 @@ func (r *Release) Deactivate(message string) {
 }
 
 func (r *Release) IsConditionActive() bool {
-	activeCondition := meta.FindStatusCondition(r.Status.Conditions, ReleaseConditionActive)
-	if activeCondition == nil {
-		return false
-	}
-
-	return activeCondition.Status == metav1.ConditionTrue
+	return meta.IsStatusConditionTrue(r.Status.Conditions, ReleaseConditionActive)
 }
 
 func (r *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {

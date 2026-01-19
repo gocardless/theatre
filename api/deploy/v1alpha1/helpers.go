@@ -15,6 +15,11 @@ const (
 	SignatureLength = 10
 )
 
+func (r *Rollback) IsCompleted() bool {
+	succeededCondition := meta.FindStatusCondition(r.Status.Conditions, RollbackConditionSucceded)
+	return succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown
+}
+
 func (rc *ReleaseConfig) Equals(other *ReleaseConfig) bool {
 	return bytes.Equal(rc.Serialise(), other.Serialise())
 }

@@ -116,9 +116,9 @@ func (r *ReleaseReconciler) handleAnnotations(ctx context.Context, logger logr.L
 	desiredActive := found && activate == deployv1alpha1.AnnotationValueReleaseActivateTrue
 	if desiredActive != release.IsConditionActive() {
 		if desiredActive {
-			release.Activate("Release activated")
+			release.Activate(MessageReleaseActive)
 		} else {
-			release.Deactivate("Release deactivated")
+			release.Deactivate(MessageReleaseInactive)
 		}
 		modified = true
 	}

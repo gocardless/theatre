@@ -3,11 +3,23 @@ package v1alpha1
 const (
 	AnnotationKeyBase = "theatre.gocardless.com"
 
-	// AnnotationKeyReleaseSetDeploymentStartTime is an annotation that can be set on a Release
-	// to trigger a deployment start time update.
-	AnnotationKeyReleaseSetDeploymentStartTime = AnnotationKeyBase + "/release-set-deploy-start-time"
+	// AnnotationKeyReleaseActivate is an annotation that can be set on a Release
+	// to set status.conditions.active` to `true`.
+	AnnotationKeyReleaseActivate = AnnotationKeyBase + "/release-active"
 
-	// AnnotationKeyReleaseSetDeploymentEndTime is an annotation that can be set on a Release
-	// to trigger a deployment end time update.
-	AnnotationKeyReleaseSetDeploymentEndTime = AnnotationKeyBase + "/release-set-deploy-end-time"
+	// AnnotationValueReleaseActivateTrue is the only valid value for
+	// AnnotationKeyReleaseActivate.
+	AnnotationValueReleaseActivateTrue = "true"
+
+	// AnnotationKeyReleaseDeploymentStartTime is an annotation that can be set on a Release
+	// to set `status.deploymentStartTime`.
+	AnnotationKeyReleaseDeploymentStartTime = AnnotationKeyBase + "/release-deployment-start-time"
+
+	// AnnotationKeyReleaseDeploymentEndTime is an annotation that can be set on a Release
+	// to set `status.deploymentEndTime`.
+	AnnotationKeyReleaseDeploymentEndTime = AnnotationKeyBase + "/release-deployment-end-time"
+
+	// AnnotationKeyReleasePreviousRelease is an annotation that can be set on a Release
+	// to set `status.previousRelease.releaseRef`.
+	AnnotationKeyReleasePreviousRelease = AnnotationKeyBase + "/release-previous-release"
 )

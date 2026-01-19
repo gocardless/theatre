@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,40 +64,6 @@ func (r *Release) InitialiseStatus(message string) {
 	r.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
-func (r *Release) ParseAnnotations() (changed bool, errors []error) {
-	if r.AnnotatedWithSetDeploymentStartTime() {
-		startTime, err := time.Parse(time.RFC3339, r.Annotations[AnnotationKeyReleaseSetDeploymentStartTime])
-		if err != nil {
-			errors = append(errors, err)
-		} else {
-			r.SetDeploymentStartTime(metav1.NewTime(startTime))
-			changed = true
-		}
-	}
-
-	if r.AnnotatedWithSetDeploymentEndTime() {
-		endTime, err := time.Parse(time.RFC3339, r.Annotations[AnnotationKeyReleaseSetDeploymentEndTime])
-		if err != nil {
-			errors = append(errors, err)
-		} else {
-			r.SetDeploymentEndTime(metav1.NewTime(endTime))
-			changed = true
-		}
-	}
-
-	return changed, errors
-}
-
-func (r *Release) AnnotatedWithSetDeploymentStartTime() bool {
-	_, ok := r.Annotations[AnnotationKeyReleaseSetDeploymentStartTime]
-	return ok
-}
-
-func (r *Release) AnnotatedWithSetDeploymentEndTime() bool {
-	_, ok := r.Annotations[AnnotationKeyReleaseSetDeploymentEndTime]
-	return ok
-}
-
 func (r *Release) SetDeploymentStartTime(timestamp metav1.Time) {
 	r.Status.DeploymentStartTime = timestamp
 }
@@ -107,18 +72,14 @@ func (r *Release) SetDeploymentEndTime(timestamp metav1.Time) {
 	r.Status.DeploymentEndTime = timestamp
 }
 
-func (r *Release) Activate(message string, previousRelease *Release) {
+func (r *Release) Activate(message string) {
 	r.Status.Message = message
-	if previousRelease != nil {
-		r.Status.PreviousRelease = ReleaseTransition{
-			ReleaseRef:     previousRelease.Name,
-			TransitionTime: metav1.Now(),
-		}
-	}
-
-	// This is the current active release, so it has no next release
-	r.Status.NextRelease = ReleaseTransition{}
 	r.setConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
+}
+
+func (r *Release) Deactivate(message string) {
+	r.Status.Message = message
+	r.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
 
 func (r *Release) IsConditionActive() bool {
@@ -148,15 +109,15 @@ func (r *Release) setConditionHealthy(status metav1.ConditionStatus, reason, mes
 	})
 }
 
-func (r *Release) Deactivate(message string, nextRelease *Release) {
-	r.Status.Message = message
+func (r *Release) GetPreviousRelease() string {
+	return r.Status.PreviousRelease.ReleaseRef
+}
 
-	if nextRelease != nil {
-		r.Status.NextRelease = ReleaseTransition{
-			ReleaseRef:     nextRelease.Name,
-			TransitionTime: metav1.Now(),
-		}
+func (r *Release) SetPreviousRelease(previousRelease string) {
+	r.Status.PreviousRelease.ReleaseRef = previousRelease
+	if previousRelease != "" {
+		r.Status.PreviousRelease.TransitionTime = metav1.Now()
+	} else {
+		r.Status.PreviousRelease.TransitionTime = metav1.Time{}
 	}
-
-	r.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }

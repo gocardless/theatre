@@ -177,7 +177,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return updatedObj.IsConditionActive()
+					return updatedObj.IsConditionActiveTrue()
 				}, "5s", "100ms").Should(BeTrue())
 			})
 
@@ -191,7 +191,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return updatedObj.IsConditionActive()
+					return updatedObj.IsConditionActiveTrue()
 				}, "5s", "100ms").Should(BeTrue())
 
 				By("Removing the annotation")
@@ -202,7 +202,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return !updatedObj.IsConditionActive()
+					return !updatedObj.IsConditionActiveTrue()
 				}, "5s", "100ms").Should(BeTrue())
 			})
 
@@ -216,7 +216,7 @@ var _ = Describe("ReleaseController", func() {
 				Consistently(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return !updatedObj.IsConditionActive()
+					return !updatedObj.IsConditionActiveTrue()
 				}, "2s", "100ms").Should(BeTrue())
 			})
 		})
@@ -234,7 +234,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return updatedObj.GetPreviousRelease() == previousReleaseName
+					return updatedObj.Status.PreviousRelease.ReleaseRef == previousReleaseName
 				}, "5s", "100ms").Should(BeTrue())
 			})
 
@@ -250,7 +250,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return updatedObj.GetPreviousRelease() == previousReleaseName
+					return updatedObj.Status.PreviousRelease.ReleaseRef == previousReleaseName
 				}, "5s", "100ms").Should(BeTrue())
 
 				By("Removing the previous release annotation")
@@ -261,7 +261,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return updatedObj.GetPreviousRelease() == ""
+					return updatedObj.Status.PreviousRelease.ReleaseRef == ""
 				}, "5s", "100ms").Should(BeTrue())
 			})
 		})

@@ -89,7 +89,7 @@ func (release *Release) Deactivate(message string) {
 	release.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
 
-func (release *Release) IsConditionActive() bool {
+func (release *Release) IsConditionActiveTrue() bool {
 	return meta.IsStatusConditionTrue(release.Status.Conditions, ReleaseConditionActive)
 }
 
@@ -109,10 +109,6 @@ func (release *Release) setConditionHealthy(status metav1.ConditionStatus, reaso
 		Reason:  reason,
 		Message: message,
 	})
-}
-
-func (release *Release) GetPreviousRelease() string {
-	return release.Status.PreviousRelease.ReleaseRef
 }
 
 func (release *Release) SetPreviousRelease(previousRelease string) {

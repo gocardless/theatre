@@ -109,7 +109,7 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 	// Handle theatre.gocardless.com/release-active annotation
 	activate, found := release.Annotations[deployv1alpha1.AnnotationKeyReleaseActivate]
 	desiredActive := found && activate == deployv1alpha1.AnnotationValueReleaseActivateTrue
-	if desiredActive != release.IsConditionActive() {
+	if desiredActive != release.IsConditionActiveTrue() {
 		if desiredActive {
 			release.Activate(MessageReleaseActive)
 		} else {
@@ -120,10 +120,10 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 	// Handle theatre.gocardless.com/release-set-previous-release
 	previousRelease, found := release.Annotations[deployv1alpha1.AnnotationKeyReleasePreviousRelease]
 	if found {
-		if previousRelease != release.GetPreviousRelease() {
+		if previousRelease != release.Status.PreviousRelease.ReleaseRef {
 			release.SetPreviousRelease(previousRelease)
 		}
-	} else if release.GetPreviousRelease() != "" {
+	} else if release.Status.PreviousRelease.ReleaseRef != "" {
 		release.SetPreviousRelease("")
 	}
 }

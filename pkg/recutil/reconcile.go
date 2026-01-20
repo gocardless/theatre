@@ -244,16 +244,20 @@ func StatusDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome 
 // normaliseStatus returns an interface{} copy of the status with LastTransitionTime
 // zeroed in any Conditions slice, for comparison purposes.
 func normaliseStatus(statusVal reflect.Value) interface{} {
-	copy := reflect.New(statusVal.Type()).Elem()
-	copy.Set(statusVal)
+	statusCopy := reflect.New(statusVal.Type()).Elem()
+	statusCopy.Set(statusVal)
 
-	if conditions := copy.FieldByName("Conditions"); conditions.IsValid() && conditions.Kind() == reflect.Slice {
+	if conditions := statusCopy.FieldByName("Conditions"); conditions.IsValid() && conditions.Kind() == reflect.Slice && conditions.Len() > 0 {
+		// Deep copy the conditions slice to avoid modifying the original
+		conditionsCopy := reflect.MakeSlice(conditions.Type(), conditions.Len(), conditions.Len())
 		for i := 0; i < conditions.Len(); i++ {
-			if lastTransitionTime := conditions.Index(i).FieldByName("LastTransitionTime"); lastTransitionTime.IsValid() && lastTransitionTime.CanSet() {
+			conditionsCopy.Index(i).Set(conditions.Index(i))
+			if lastTransitionTime := conditionsCopy.Index(i).FieldByName("LastTransitionTime"); lastTransitionTime.IsValid() && lastTransitionTime.CanSet() {
 				lastTransitionTime.Set(reflect.Zero(lastTransitionTime.Type()))
 			}
 		}
+		statusCopy.FieldByName("Conditions").Set(conditionsCopy)
 	}
 
-	return copy.Interface()
+	return statusCopy.Interface()
 }

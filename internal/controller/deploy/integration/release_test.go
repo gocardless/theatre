@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -292,51 +290,6 @@ func generateCommitSHA() string {
 		panic(err)
 	}
 	return hex.EncodeToString(bytes)
-}
-
-func generateNamespace() string {
-	bytes := make([]byte, 4)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		panic(err)
-	}
-	return "test-ns-" + hex.EncodeToString(bytes)
-}
-
-func setupTestNamespace(ctx context.Context) string {
-	ns := generateNamespace()
-	err := mgr.GetClient().Create(ctx, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
-	})
-	Expect(err).NotTo(HaveOccurred())
-	return ns
-}
-
-func generateRelease(target string, namespace string) *v1alpha1.Release {
-	appSHA := generateCommitSHA()
-	infraSHA := generateCommitSHA()
-	return &v1alpha1.Release{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: target + "-",
-			Namespace:    namespace,
-		},
-		ReleaseConfig: v1alpha1.ReleaseConfig{
-			TargetName: target,
-			Revisions: []v1alpha1.Revision{
-				{Name: "application-revision", ID: appSHA},
-				{Name: "infrastructure-revision", ID: infraSHA},
-			},
-		},
-	}
-}
-
-func createRelease(ctx context.Context, namespace string, target string) *v1alpha1.Release {
-	release := generateRelease(target, namespace)
-	err := mgr.GetClient().Create(ctx, release)
-	Expect(err).NotTo(HaveOccurred())
-	return release
 }
 
 func getMetaV1Timestamp(ts string) metav1.Time {

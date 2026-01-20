@@ -2,14 +2,18 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -17,17 +21,19 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/internal/controller/deploy"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 )
 
 var (
-	testEnv  *envtest.Environment
-	deployer *FakeDeployer
-	mgr      ctrl.Manager
-	ctx      context.Context
-	cancel   context.CancelFunc
+	testEnv          *envtest.Environment
+	deployer         *FakeDeployer
+	mgr              ctrl.Manager
+	ctx              context.Context
+	cancel           context.CancelFunc
+	namespaceCounter atomic.Int32
 )
 
 func TestSuite(t *testing.T) {
@@ -164,4 +170,44 @@ func (f *FakeDeployer) SetTriggerResult(namespace, name string, result TriggerRe
 
 func (f *FakeDeployer) SetStatusResult(deploymentID string, result StatusResult) {
 	f.StatusResults.Store(deploymentID, result)
+}
+
+func generateNamespaceName() string {
+	return fmt.Sprintf("test-ns-%d-%d", GinkgoParallelProcess(), namespaceCounter.Add(1))
+}
+
+func setupTestNamespace(ctx context.Context) string {
+	ns := generateNamespaceName()
+	err := mgr.GetClient().Create(ctx, &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return ns
+}
+
+func generateRelease(target string, namespace string) *v1alpha1.Release {
+	appSHA := generateCommitSHA()
+	infraSHA := generateCommitSHA()
+	return &v1alpha1.Release{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: target + "-",
+			Namespace:    namespace,
+		},
+		ReleaseConfig: v1alpha1.ReleaseConfig{
+			TargetName: target,
+			Revisions: []v1alpha1.Revision{
+				{Name: "application-revision", ID: appSHA},
+				{Name: "infrastructure-revision", ID: infraSHA},
+			},
+		},
+	}
+}
+
+func createRelease(ctx context.Context, namespace string, target string) *v1alpha1.Release {
+	release := generateRelease(target, namespace)
+	err := mgr.GetClient().Create(ctx, release)
+	Expect(err).NotTo(HaveOccurred())
+	return release
 }

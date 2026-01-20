@@ -2,10 +2,11 @@ package v1alpha1
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,8 +44,8 @@ func (releaseConfig *ReleaseConfig) Serialise() []byte {
 		canonical.Revisions = append(canonical.Revisions, canonicalRevision)
 	}
 
-	sort.Slice(canonical.Revisions, func(i, j int) bool {
-		return canonical.Revisions[i].Name < canonical.Revisions[j].Name
+	slices.SortFunc(canonical.Revisions, func(a, b Revision) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	bytes, _ := json.Marshal(canonical)

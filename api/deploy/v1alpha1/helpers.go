@@ -15,22 +15,24 @@ const (
 	SignatureLength = 10
 )
 
-func (r *Rollback) IsCompleted() bool {
-	succeededCondition := meta.FindStatusCondition(r.Status.Conditions, RollbackConditionSucceded)
+// Rollback helpers
+func (rollback *Rollback) IsCompleted() bool {
+	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, RollbackConditionSucceded)
 	return succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown
 }
 
-func (rc *ReleaseConfig) Equals(other *ReleaseConfig) bool {
-	return bytes.Equal(rc.Serialise(), other.Serialise())
+// Release helpers
+func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {
+	return bytes.Equal(releaseConfig.Serialise(), other.Serialise())
 }
 
 // The serialisation is used to determine if a release has changed.
 // For release uniqueness we only take into consideration the target name,
 // revision.name and revision.id.
-func (rc *ReleaseConfig) Serialise() []byte {
+func (releaseConfig *ReleaseConfig) Serialise() []byte {
 	canonical := ReleaseConfig{
-		TargetName: rc.TargetName,
-		Revisions:  rc.Revisions,
+		TargetName: releaseConfig.TargetName,
+		Revisions:  releaseConfig.Revisions,
 	}
 
 	for _, revision := range canonical.Revisions {
@@ -50,49 +52,49 @@ func (rc *ReleaseConfig) Serialise() []byte {
 	return bytes
 }
 
-func (r *Release) IsStatusInitialised() bool {
-	return len(r.Status.Conditions) > 0
+func (release *Release) IsStatusInitialised() bool {
+	return len(release.Status.Conditions) > 0
 }
 
-func (r *Release) generateSignature() string {
-	return fmt.Sprintf("%x", sha256.Sum256(r.ReleaseConfig.Serialise()))
+func (release *Release) generateSignature() string {
+	return fmt.Sprintf("%x", sha256.Sum256(release.ReleaseConfig.Serialise()))
 }
 
-func (r *Release) InitialiseStatus(message string) {
+func (release *Release) InitialiseStatus(message string) {
 	if message == "" {
 		message = "Release initialised successfully"
 	}
-	r.Status.Message = message
-	r.Status.Signature = r.generateSignature()[:SignatureLength]
+	release.Status.Message = message
+	release.Status.Signature = release.generateSignature()[:SignatureLength]
 
-	r.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
-	r.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
+	release.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
+	release.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
-func (r *Release) SetDeploymentStartTime(timestamp metav1.Time) {
-	r.Status.DeploymentStartTime = timestamp
+func (release *Release) SetDeploymentStartTime(timestamp metav1.Time) {
+	release.Status.DeploymentStartTime = timestamp
 }
 
-func (r *Release) SetDeploymentEndTime(timestamp metav1.Time) {
-	r.Status.DeploymentEndTime = timestamp
+func (release *Release) SetDeploymentEndTime(timestamp metav1.Time) {
+	release.Status.DeploymentEndTime = timestamp
 }
 
-func (r *Release) Activate(message string) {
-	r.Status.Message = message
-	r.setConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
+func (release *Release) Activate(message string) {
+	release.Status.Message = message
+	release.setConditionActive(metav1.ConditionTrue, ReasonDeployed, message)
 }
 
-func (r *Release) Deactivate(message string) {
-	r.Status.Message = message
-	r.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
+func (release *Release) Deactivate(message string) {
+	release.Status.Message = message
+	release.setConditionActive(metav1.ConditionFalse, ReasonSuperseded, message)
 }
 
-func (r *Release) IsConditionActive() bool {
-	return meta.IsStatusConditionTrue(r.Status.Conditions, ReleaseConditionActive)
+func (release *Release) IsConditionActive() bool {
+	return meta.IsStatusConditionTrue(release.Status.Conditions, ReleaseConditionActive)
 }
 
-func (r *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
+func (release *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionActive,
 		Status:  status,
 		Reason:  reason,
@@ -100,8 +102,8 @@ func (r *Release) setConditionActive(status metav1.ConditionStatus, reason, mess
 	})
 }
 
-func (r *Release) setConditionHealthy(status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{
+func (release *Release) setConditionHealthy(status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionHealthy,
 		Status:  status,
 		Reason:  reason,
@@ -109,15 +111,15 @@ func (r *Release) setConditionHealthy(status metav1.ConditionStatus, reason, mes
 	})
 }
 
-func (r *Release) GetPreviousRelease() string {
-	return r.Status.PreviousRelease.ReleaseRef
+func (release *Release) GetPreviousRelease() string {
+	return release.Status.PreviousRelease.ReleaseRef
 }
 
-func (r *Release) SetPreviousRelease(previousRelease string) {
-	r.Status.PreviousRelease.ReleaseRef = previousRelease
+func (release *Release) SetPreviousRelease(previousRelease string) {
+	release.Status.PreviousRelease.ReleaseRef = previousRelease
 	if previousRelease != "" {
-		r.Status.PreviousRelease.TransitionTime = metav1.Now()
+		release.Status.PreviousRelease.TransitionTime = metav1.Now()
 	} else {
-		r.Status.PreviousRelease.TransitionTime = metav1.Time{}
+		release.Status.PreviousRelease.TransitionTime = metav1.Time{}
 	}
 }

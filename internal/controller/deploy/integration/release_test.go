@@ -51,6 +51,7 @@ var _ = Describe("ReleaseController", func() {
 				stringTimestamp := "2025-12-08T14:42:00Z"
 				metav1Timestamp := getMetaV1Timestamp(stringTimestamp)
 
+				By("Setting the deployment start time annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentStartTime: stringTimestamp,
 				}
@@ -66,7 +67,7 @@ var _ = Describe("ReleaseController", func() {
 			It("should clear status.deploymentStartTime when annotation is removed", func() {
 				stringTimestamp := "2025-12-08T14:42:00Z"
 
-				By("Setting the annotation")
+				By("Setting the deployment start time annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentStartTime: stringTimestamp,
 				}
@@ -91,6 +92,7 @@ var _ = Describe("ReleaseController", func() {
 			})
 
 			It("should not update status.deploymentStartTime when annotation has invalid timestamp", func() {
+				By("Setting the deployment start time annotation with an invalid timestamp")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentStartTime: "not-a-valid-timestamp",
 				}
@@ -109,6 +111,7 @@ var _ = Describe("ReleaseController", func() {
 				stringTimestamp := "2025-12-08T15:30:00Z"
 				metav1Timestamp := getMetaV1Timestamp(stringTimestamp)
 
+				By("Setting the deployment end time annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentEndTime: stringTimestamp,
 				}
@@ -124,7 +127,7 @@ var _ = Describe("ReleaseController", func() {
 			It("should clear status.deploymentEndTime when annotation is removed", func() {
 				stringTimestamp := "2025-12-08T15:30:00Z"
 
-				By("Setting the annotation")
+				By("Setting the deployment end time annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentEndTime: stringTimestamp,
 				}
@@ -149,6 +152,7 @@ var _ = Describe("ReleaseController", func() {
 			})
 
 			It("should not update status.deploymentEndTime when annotation has invalid timestamp", func() {
+				By("Setting the deployment end time annotation with an invalid timestamp")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseDeploymentEndTime: "invalid-timestamp-format",
 				}
@@ -164,6 +168,7 @@ var _ = Describe("ReleaseController", func() {
 
 		Context("AnnotationKeyReleaseActivate", func() {
 			It("should set status.conditions.active to true when annotation is added with value 'true'", func() {
+				By("Setting the activate annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseActivate: v1alpha1.AnnotationValueReleaseActivateTrue,
 				}
@@ -202,6 +207,7 @@ var _ = Describe("ReleaseController", func() {
 			})
 
 			It("should not activate when annotation value is not 'true'", func() {
+				By("Setting the activate annotation to false")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleaseActivate: "false",
 				}
@@ -219,6 +225,7 @@ var _ = Describe("ReleaseController", func() {
 			It("should set status.previousRelease.releaseRef when annotation is added", func() {
 				previousReleaseName := "previous-release-abc123"
 
+				By("Setting the previous release annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleasePreviousRelease: previousReleaseName,
 				}
@@ -234,7 +241,7 @@ var _ = Describe("ReleaseController", func() {
 			It("should clear status.previousRelease.releaseRef when annotation is removed", func() {
 				previousReleaseName := "previous-release-xyz789"
 
-				By("Setting the annotation")
+				By("Setting the previous release annotation")
 				fetchedRelease.Annotations = map[string]string{
 					v1alpha1.AnnotationKeyReleasePreviousRelease: previousReleaseName,
 				}
@@ -246,7 +253,7 @@ var _ = Describe("ReleaseController", func() {
 					return updatedObj.GetPreviousRelease() == previousReleaseName
 				}, "5s", "100ms").Should(BeTrue())
 
-				By("Removing the annotation")
+				By("Removing the previous release annotation")
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)).To(Succeed())
 				delete(fetchedRelease.Annotations, v1alpha1.AnnotationKeyReleasePreviousRelease)
 				Expect(k8sClient.Update(ctx, fetchedRelease)).To(Succeed())

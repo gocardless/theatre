@@ -5,7 +5,7 @@ const (
 
 	// AnnotationKeyReleaseActivate is an annotation that can be set on a Release
 	// to set status.conditions.active` to `true`.
-	AnnotationKeyReleaseActivate = AnnotationKeyBase + "/release-active"
+	AnnotationKeyReleaseActivate = AnnotationKeyBase + "/active"
 
 	// AnnotationValueReleaseActivateTrue is the only valid value for
 	// AnnotationKeyReleaseActivate.
@@ -13,13 +13,13 @@ const (
 
 	// AnnotationKeyReleaseDeploymentStartTime is an annotation that can be set on a Release
 	// to set `status.deploymentStartTime`.
-	AnnotationKeyReleaseDeploymentStartTime = AnnotationKeyBase + "/release-deployment-start-time"
+	AnnotationKeyReleaseDeploymentStartTime = AnnotationKeyBase + "/deployment-start-time"
 
 	// AnnotationKeyReleaseDeploymentEndTime is an annotation that can be set on a Release
 	// to set `status.deploymentEndTime`.
-	AnnotationKeyReleaseDeploymentEndTime = AnnotationKeyBase + "/release-deployment-end-time"
+	AnnotationKeyReleaseDeploymentEndTime = AnnotationKeyBase + "/deployment-end-time"
 
 	// AnnotationKeyReleasePreviousRelease is an annotation that can be set on a Release
 	// to set `status.previousRelease.releaseRef`.
-	AnnotationKeyReleasePreviousRelease = AnnotationKeyBase + "/release-previous-release"
+	AnnotationKeyReleasePreviousRelease = AnnotationKeyBase + "/previous-release"
 )

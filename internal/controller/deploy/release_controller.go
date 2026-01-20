@@ -76,7 +76,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deployv1alpha1.Release) {
 	logger.Info("handling annotations for release", "release", release.Name)
 
-	// Handle theatre.gocardless.com/release-set-deploy-start-time annotation
+	// Handle theatre.gocardless.com/deployment-start-time annotation
 	startTimeString, found := release.Annotations[deployv1alpha1.AnnotationKeyReleaseDeploymentStartTime]
 	if !found || startTimeString == "" {
 		if !release.Status.DeploymentStartTime.IsZero() {
@@ -91,7 +91,7 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 		}
 	}
 
-	// Handle theatre.gocardless.com/release-set-deploy-end-time
+	// Handle theatre.gocardless.com/deployment-end-time
 	endTimeString, found := release.Annotations[deployv1alpha1.AnnotationKeyReleaseDeploymentEndTime]
 	if !found || endTimeString == "" {
 		if !release.Status.DeploymentEndTime.IsZero() {
@@ -106,7 +106,7 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 		}
 	}
 
-	// Handle theatre.gocardless.com/release-active annotation
+	// Handle theatre.gocardless.com/active annotation
 	activate, found := release.Annotations[deployv1alpha1.AnnotationKeyReleaseActivate]
 	desiredActive := found && activate == deployv1alpha1.AnnotationValueReleaseActivateTrue
 	if desiredActive != release.IsConditionActiveTrue() {
@@ -117,7 +117,7 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 		}
 	}
 
-	// Handle theatre.gocardless.com/release-set-previous-release
+	// Handle theatre.gocardless.com/previous-release
 	previousRelease, found := release.Annotations[deployv1alpha1.AnnotationKeyReleasePreviousRelease]
 	if found {
 		if previousRelease != release.Status.PreviousRelease.ReleaseRef {

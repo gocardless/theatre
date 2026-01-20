@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -202,7 +203,7 @@ var _ = Describe("ReleaseController", func() {
 				Eventually(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return !updatedObj.IsConditionActiveTrue()
+					return meta.IsStatusConditionFalse(updatedObj.Status.Conditions, v1alpha1.ReleaseConditionActive)
 				}, "5s", "100ms").Should(BeTrue())
 			})
 
@@ -216,7 +217,7 @@ var _ = Describe("ReleaseController", func() {
 				Consistently(func() bool {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
-					return !updatedObj.IsConditionActiveTrue()
+					return meta.IsStatusConditionPresentAndEqual(updatedObj.Status.Conditions, v1alpha1.ReleaseConditionActive, metav1.ConditionUnknown)
 				}, "2s", "100ms").Should(BeTrue())
 			})
 		})

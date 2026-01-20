@@ -222,21 +222,38 @@ func DirectoryRoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Ob
 // StatusDiff is a generic DiffFunc that compares the Status field of two objects
 // using reflection. It returns StatusUpdate if they differ, None otherwise.
 // The objects must have a Status field accessible via reflection.
+// When comparing, LastTransitionTime in Status.Conditions is ignored to avoid
+// unnecessary updates when only the transition time has changed.
 func StatusDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
-	expectedVal := reflect.ValueOf(expectedObj).Elem()
-	existingVal := reflect.ValueOf(existingObj).Elem()
-
-	expectedStatus := expectedVal.FieldByName("Status")
-	existingStatus := existingVal.FieldByName("Status")
+	expectedStatus := reflect.ValueOf(expectedObj).Elem().FieldByName("Status")
+	existingStatus := reflect.ValueOf(existingObj).Elem().FieldByName("Status")
 
 	if !expectedStatus.IsValid() || !existingStatus.IsValid() {
 		return None
 	}
 
-	if !reflect.DeepEqual(expectedStatus.Interface(), existingStatus.Interface()) {
+	// Compare with normalized copies (LastTransitionTime zeroed in Conditions)
+	if !reflect.DeepEqual(normaliseStatus(expectedStatus), normaliseStatus(existingStatus)) {
 		existingStatus.Set(expectedStatus)
 		return StatusUpdate
 	}
 
 	return None
+}
+
+// normaliseStatus returns an interface{} copy of the status with LastTransitionTime
+// zeroed in any Conditions slice, for comparison purposes.
+func normaliseStatus(statusVal reflect.Value) interface{} {
+	copy := reflect.New(statusVal.Type()).Elem()
+	copy.Set(statusVal)
+
+	if conditions := copy.FieldByName("Conditions"); conditions.IsValid() && conditions.Kind() == reflect.Slice {
+		for i := 0; i < conditions.Len(); i++ {
+			if lastTransitionTime := conditions.Index(i).FieldByName("LastTransitionTime"); lastTransitionTime.IsValid() && lastTransitionTime.CanSet() {
+				lastTransitionTime.Set(reflect.Zero(lastTransitionTime.Type()))
+			}
+		}
+	}
+
+	return copy.Interface()
 }

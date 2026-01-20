@@ -53,7 +53,9 @@ func (releaseConfig *ReleaseConfig) Serialise() []byte {
 }
 
 func (release *Release) IsStatusInitialised() bool {
-	return len(release.Status.Conditions) > 0
+	return len(release.Status.Conditions) > 0 &&
+		meta.FindStatusCondition(release.Status.Conditions, ReleaseConditionActive) != nil &&
+		release.Status.Signature != ""
 }
 
 func (release *Release) generateSignature() string {

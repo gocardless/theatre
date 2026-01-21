@@ -10,6 +10,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	pkgerrors "github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,11 @@ const (
 
 	// Maximum number of times to retry triggering a deployment
 	MaxRetryAttempts = 3
+
+	// Deployment events
+	EventDeploymentTriggered = "DeploymentTriggered"
+	EventDeploymentFailed    = "DeploymentFailed"
+	EventDeploymentSucceeded = "DeploymentSucceeded"
 )
 
 type RollbackReconciler struct {
@@ -86,7 +92,7 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	}, toRelease); err != nil {
 		logger.Error(err, "failed to fetch target release", "toRelease", rollback.Spec.ToReleaseRef.Name)
 		if apierrors.IsNotFound(err) {
-			return r.markRollbackFailed(ctx, rollback, fmt.Sprintf("target release %q not found", rollback.Spec.ToReleaseRef.Name))
+			return r.markRollbackFailed(ctx, logger, rollback, fmt.Sprintf("target release %q not found", rollback.Spec.ToReleaseRef.Name))
 		}
 		return ctrl.Result{}, err
 	}
@@ -108,7 +114,6 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	return r.pollDeploymentStatus(ctx, logger, rollback, toRelease)
 }
 
-// TODO: move this into api/deploy/v1alpha1/release_helpers.go once release reconciler PR is merged
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,
@@ -126,12 +131,23 @@ func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, 
 	return nil, nil
 }
 
+func (r *RollbackReconciler) statusUpdate(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback) error {
+	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, rollback, recutil.StatusDiff)
+	if err != nil {
+		return pkgerrors.Wrap(err, "failed to update rollback status")
+	}
+	if outcome == recutil.StatusUpdate {
+		logger.Info("rollback status updated", "event", EventSuccessfulStatusUpdate)
+	}
+	return nil
+}
+
 func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, toRelease *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger.Info("triggering deployment", "deployer", r.Deployer.Name(), "toRelease", toRelease.Name)
 
 	if rollback.Status.AttemptCount >= MaxRetryAttempts {
 		logger.Info("max retry attempts exceeded", "attempts", rollback.Status.AttemptCount)
-		return r.markRollbackFailed(ctx, rollback, "max retry attempts exceeded")
+		return r.markRollbackFailed(ctx, logger, rollback, "max retry attempts exceeded")
 	}
 
 	deployReq := cicd.DeploymentRequest{
@@ -156,15 +172,14 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		var deployerErr *cicd.DeployerError
 		if errors.As(err, &deployerErr) && deployerErr.Retryable {
 			rollback.Status.Message = fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRetryAttempts, err)
-			if updateErr := r.Status().Update(ctx, rollback); updateErr != nil {
-				logger.Error(updateErr, "failed to update rollback status")
+			if updateErr := r.statusUpdate(ctx, logger, rollback); updateErr != nil {
 				return ctrl.Result{}, updateErr
 			}
 			return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 		}
 
 		// Non-retryable error
-		return r.markRollbackFailed(ctx, rollback, fmt.Sprintf("deployment trigger failed: %v", err))
+		return r.markRollbackFailed(ctx, logger, rollback, fmt.Sprintf("deployment trigger failed: %v", err))
 	}
 
 	// Update status with deployment info
@@ -180,12 +195,10 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		Message: fmt.Sprintf("Deployment %s triggered via %s", resp.ID, r.Deployer.Name()),
 	})
 
-	if err := r.Status().Update(ctx, rollback); err != nil {
-		logger.Error(err, "failed to update rollback status")
+	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL)
+	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL, "event", EventDeploymentTriggered)
 	return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 }
 
@@ -204,26 +217,26 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
-		return r.markRollbackSucceeded(ctx, rollback, statusResp.Message)
+		logger.Info("deployment succeeded", "event", EventDeploymentSucceeded)
+		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusFailed:
 		// Check if we should retry
 		if rollback.Status.AttemptCount < MaxRetryAttempts {
-			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts)
+			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts, "event", EventDeploymentFailed)
 			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
-			if err := r.Status().Update(ctx, rollback); err != nil {
+			if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 				return ctrl.Result{}, err
 			}
 			return r.triggerDeployment(ctx, logger, rollback, toRelease)
 		}
 		// Max retries exceeded - terminal failure
-		return r.markRollbackFailed(ctx, rollback, statusResp.Message)
+		return r.markRollbackFailed(ctx, logger, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusPending, cicd.DeploymentStatusInProgress:
 		// Update message and continue polling
 		rollback.Status.Message = statusResp.Message
-		if err := r.Status().Update(ctx, rollback); err != nil {
-			logger.Error(err, "failed to update rollback status")
+		if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
@@ -234,7 +247,7 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 	}
 }
 
-func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
+func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
 	now := metav1.Now()
 	rollback.Status.CompletionTime = &now
 	rollback.Status.Message = message
@@ -255,15 +268,15 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, rollback
 		LastTransitionTime: now,
 	})
 
-	if err := r.Status().Update(ctx, rollback); err != nil {
+	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
-
+	logger.Info("rollback succeeded")
 	return ctrl.Result{}, nil
 }
 
 // markRollbackFailed marks the rollback as terminally failed
-func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
+func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
 	now := metav1.Now()
 	rollback.Status.CompletionTime = &now
 	rollback.Status.Message = message
@@ -284,9 +297,9 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, rollback *d
 		LastTransitionTime: now,
 	})
 
-	if err := r.Status().Update(ctx, rollback); err != nil {
+	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
-
+	logger.Info("rollback failed", "message", message)
 	return ctrl.Result{}, nil
 }

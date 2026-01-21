@@ -109,7 +109,6 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	return r.pollDeploymentStatus(ctx, logger, rollback, toRelease)
 }
 
-// TODO: move this into api/deploy/v1alpha1/release_helpers.go once release reconciler PR is merged
 func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, namespace string) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,

@@ -120,9 +120,6 @@ type ReleaseStatus struct {
 	// PreviousRelease is the name of the release that was superseded by this release.
 	PreviousRelease ReleaseTransition `json:"previousRelease,omitempty"`
 
-	// NextRelease is the name of the release that superseded this release.
-	NextRelease ReleaseTransition `json:"nextRelease,omitempty"`
-
 	// Signature is deterministic hash constructed out of the release revisions.
 	// The signature is constructed out of the sum of names and ids of each revision.
 	Signature string `json:"signature,omitempty"`
@@ -133,8 +130,8 @@ type ReleaseStatus struct {
 // +kubebuilder:printcolumn:name="Active",type="string",JSONPath=".status.conditions[?(@.type==\"Active\")].status"
 // +kubebuilder:printcolumn:name="Healthy",type="string",JSONPath=".status.conditions[?(@.type==\"Healthy\")].status"
 // +kubebuilder:printcolumn:name="Signature",format="",type="string",JSONPath=".status.signature"
-// +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.previousRelease.transitionTime"
-// +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.nextRelease.transitionTime"
+// +kubebuilder:printcolumn:name="Started_At",type="string",JSONPath=".status.deploymentStartTime"
+// +kubebuilder:printcolumn:name="Ended_At",type="string",JSONPath=".status.deploymentEndTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 type Release struct {

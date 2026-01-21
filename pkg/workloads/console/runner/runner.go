@@ -920,8 +920,21 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return nil, errors.New("watch channel closed")
 			}
 
-			obj := event.Object.(*unstructured.Unstructured)
-			runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+			// We can receive *metav1.Status events in the situation where there's an error, in
+			// which case we should exit early.
+			if status, ok := event.Object.(*metav1.Status); ok {
+				return nil, fmt.Errorf("received failure from Kubernetes: %s", status.Reason)
+			}
+
+			obj, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				return nil, fmt.Errorf("received object not of type *unstructured.Unstructured: %v", reflect.TypeOf(event.Object))
+			}
+
+			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
+			if err != nil {
+				return nil, fmt.Errorf("error converting unstructured object to console: %w", err)
+			}
 
 			if isRunning(csl) {
 				return csl, nil
@@ -935,9 +948,6 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return csl, nil
 			}
 		case <-ctx.Done():
-			if csl == nil {
-				return nil, fmt.Errorf("%s: %w", errConsoleNotFound, ctx.Err())
-			}
 			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
 		}
 	}

@@ -127,10 +127,11 @@ type DiffFunc func(runtime.Object, runtime.Object) Outcome
 type Outcome string
 
 const (
-	Create Outcome = "create"
-	Update Outcome = "update"
-	None   Outcome = "none"
-	Error  Outcome = "error"
+	Create       Outcome = "create"
+	Update       Outcome = "update"
+	StatusUpdate Outcome = "status_update"
+	None         Outcome = "none"
+	Error        Outcome = "error"
 )
 
 // ObjWithMeta describes a Kubernetes resource with a metadata field. It's a combination
@@ -173,6 +174,11 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 			return Error, err
 		}
 		return Update, nil
+	case StatusUpdate:
+		if err := c.Status().Update(ctx, existing); err != nil {
+			return Error, err
+		}
+		return StatusUpdate, nil
 	case None:
 		return None, nil
 	default:
@@ -211,4 +217,47 @@ func DirectoryRoleBindingDiff(expectedObj runtime.Object, existingObj runtime.Ob
 	}
 
 	return operation
+}
+
+// StatusDiff is a generic DiffFunc that compares the Status field of two objects
+// using reflection. It returns StatusUpdate if they differ, None otherwise.
+// The objects must have a Status field accessible via reflection.
+// When comparing, LastTransitionTime in Status.Conditions is ignored to avoid
+// unnecessary updates when only the transition time has changed.
+func StatusDiff(expectedObj runtime.Object, existingObj runtime.Object) Outcome {
+	expectedStatus := reflect.ValueOf(expectedObj).Elem().FieldByName("Status")
+	existingStatus := reflect.ValueOf(existingObj).Elem().FieldByName("Status")
+
+	if !expectedStatus.IsValid() || !existingStatus.IsValid() {
+		return None
+	}
+
+	// Compare with normalized copies (LastTransitionTime zeroed in Conditions)
+	if !reflect.DeepEqual(normaliseStatus(expectedStatus), normaliseStatus(existingStatus)) {
+		existingStatus.Set(expectedStatus)
+		return StatusUpdate
+	}
+
+	return None
+}
+
+// normaliseStatus returns an interface{} copy of the status with LastTransitionTime
+// zeroed in any Conditions slice, for comparison purposes.
+func normaliseStatus(statusVal reflect.Value) interface{} {
+	statusCopy := reflect.New(statusVal.Type()).Elem()
+	statusCopy.Set(statusVal)
+
+	if conditions := statusCopy.FieldByName("Conditions"); conditions.IsValid() && conditions.Kind() == reflect.Slice && conditions.Len() > 0 {
+		// Deep copy the conditions slice to avoid modifying the original
+		conditionsCopy := reflect.MakeSlice(conditions.Type(), conditions.Len(), conditions.Len())
+		for i := 0; i < conditions.Len(); i++ {
+			conditionsCopy.Index(i).Set(conditions.Index(i))
+			if lastTransitionTime := conditionsCopy.Index(i).FieldByName("LastTransitionTime"); lastTransitionTime.IsValid() && lastTransitionTime.CanSet() {
+				lastTransitionTime.Set(reflect.Zero(lastTransitionTime.Type()))
+			}
+		}
+		statusCopy.FieldByName("Conditions").Set(conditionsCopy)
+	}
+
+	return statusCopy.Interface()
 }

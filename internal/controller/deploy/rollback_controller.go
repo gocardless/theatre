@@ -26,6 +26,11 @@ const (
 
 	// Maximum number of times to retry triggering a deployment
 	MaxRetryAttempts = 3
+
+	// Deployment events
+	EventDeploymentTriggered = "DeploymentTriggered"
+	EventDeploymentFailed    = "DeploymentFailed"
+	EventDeploymentSucceeded = "DeploymentSucceeded"
 )
 
 type RollbackReconciler struct {
@@ -132,7 +137,7 @@ func (r *RollbackReconciler) statusUpdate(ctx context.Context, logger logr.Logge
 		return pkgerrors.Wrap(err, "failed to update rollback status")
 	}
 	if outcome == recutil.StatusUpdate {
-		logger.Info("rollback status updated", "event", "SuccessfulUpdate")
+		logger.Info("rollback status updated", "event", EventSuccessfulStatusUpdate)
 	}
 	return nil
 }
@@ -193,7 +198,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
-	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL)
+	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL, "event", EventDeploymentTriggered)
 	return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 }
 
@@ -212,12 +217,13 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
+		logger.Info("deployment succeeded", "event", EventDeploymentSucceeded)
 		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusFailed:
 		// Check if we should retry
 		if rollback.Status.AttemptCount < MaxRetryAttempts {
-			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts)
+			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts, "event", EventDeploymentFailed)
 			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
 			if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 				return ctrl.Result{}, err

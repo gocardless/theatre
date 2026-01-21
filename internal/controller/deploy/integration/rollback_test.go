@@ -6,64 +6,39 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
-
-	"github.com/google/uuid"
 )
 
 var _ = Describe("RollbackReconciler", func() {
 	var (
-		namespaceName string
-		namespace     *corev1.Namespace
+		testNamespace string
 		release       *deployv1alpha1.Release
 		rollback      *deployv1alpha1.Rollback
+		k8sClient     client.Client
 	)
 
 	BeforeEach(func() {
-		namespaceName = uuid.New().String()
-		namespace = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: namespaceName,
-			},
-		}
-		Expect(mgr.GetClient().Create(ctx, namespace)).NotTo(HaveOccurred())
-
-		// Create a release that the rollback will target
-		release = &deployv1alpha1.Release{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-service-v1",
-				Namespace: namespaceName,
-			},
-			ReleaseConfig: deployv1alpha1.ReleaseConfig{
-				TargetName: "my-service",
-				Revisions: []deployv1alpha1.Revision{
-					{
-						Name: "app",
-						ID:   "abc123",
-					},
-				},
-			},
-		}
-		Expect(mgr.GetClient().Create(ctx, release)).NotTo(HaveOccurred())
+		testNamespace = setupTestNamespace(ctx)
+		release = createRelease(ctx, testNamespace, "default-target")
+		k8sClient = mgr.GetClient()
 	})
 
 	Describe("Basic rollback flow", func() {
 		It("triggers deployment and sets InProgress condition", func() {
-			rollback = newRollback(namespaceName, "test-rollback", "my-service-v1", "Testing rollback")
+			rollback = newRollback(testNamespace, "test-rollback", release.Name, "Testing rollback")
 
 			By("Creating rollback")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying InProgress condition is set")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
@@ -75,7 +50,7 @@ var _ = Describe("RollbackReconciler", func() {
 
 		It("completes successfully when deployment succeeds", func() {
 			// Configure deployer for this rollback
-			deployer.SetTriggerResult(namespaceName, "success-rollback", TriggerResult{
+			deployer.SetTriggerResult(testNamespace, "success-rollback", TriggerResult{
 				Result: &cicd.DeploymentResult{
 					ID:      "deployment-123",
 					URL:     "https://example.com/deployments/123",
@@ -91,15 +66,15 @@ var _ = Describe("RollbackReconciler", func() {
 				},
 			})
 
-			rollback = newRollback(namespaceName, "success-rollback", "my-service-v1", "Testing success")
+			rollback = newRollback(testNamespace, "success-rollback", release.Name, "Testing success")
 
 			By("Creating rollback")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying rollback succeeds")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
@@ -107,7 +82,7 @@ var _ = Describe("RollbackReconciler", func() {
 			}).Should(BeTrue())
 
 			rb := &deployv1alpha1.Rollback{}
-			Expect(mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb)).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb)).NotTo(HaveOccurred())
 
 			// Verify deployment ID is set
 			Expect(rb.Status.DeploymentID).To(Equal("deployment-123"))
@@ -124,10 +99,10 @@ var _ = Describe("RollbackReconciler", func() {
 
 		It("fails after max retries when deployment keeps failing", func() {
 			// Use a unique deployment ID for this test to avoid collisions
-			deploymentID := "deployment-" + namespaceName[:8]
+			deploymentID := "deployment-" + testNamespace[:8]
 
 			// Configure deployer for this rollback
-			deployer.SetTriggerResult(namespaceName, "failing-rollback", TriggerResult{
+			deployer.SetTriggerResult(testNamespace, "failing-rollback", TriggerResult{
 				Result: &cicd.DeploymentResult{
 					ID:      deploymentID,
 					URL:     "https://example.com/deployments/" + deploymentID,
@@ -143,15 +118,15 @@ var _ = Describe("RollbackReconciler", func() {
 				},
 			})
 
-			rollback = newRollback(namespaceName, "failing-rollback", "my-service-v1", "Testing failure")
+			rollback = newRollback(testNamespace, "failing-rollback", release.Name, "Testing failure")
 
 			By("Creating rollback")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying rollback is terminally failed after max retries")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
@@ -165,7 +140,7 @@ var _ = Describe("RollbackReconciler", func() {
 
 		It("fails immediately on non-retryable error", func() {
 			// Configure deployer to return non-retryable error
-			deployer.SetTriggerResult(namespaceName, "nonretryable-rollback", TriggerResult{
+			deployer.SetTriggerResult(testNamespace, "nonretryable-rollback", TriggerResult{
 				Err: &cicd.DeployerError{
 					Deployer:  "fake",
 					Operation: "TriggerDeployment",
@@ -174,15 +149,15 @@ var _ = Describe("RollbackReconciler", func() {
 				},
 			})
 
-			rollback = newRollback(namespaceName, "nonretryable-rollback", "my-service-v1", "Testing non-retryable")
+			rollback = newRollback(testNamespace, "nonretryable-rollback", release.Name, "Testing non-retryable")
 
 			By("Creating rollback")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying rollback fails immediately")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
@@ -198,10 +173,10 @@ var _ = Describe("RollbackReconciler", func() {
 			rollback = &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "options-rollback",
-					Namespace: namespaceName,
+					Namespace: testNamespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
-					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-service-v1"},
+					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: release.Name},
 					Reason:       "Testing options",
 					DeploymentOptions: map[string]string{
 						"skip_canary": "true",
@@ -211,12 +186,12 @@ var _ = Describe("RollbackReconciler", func() {
 			}
 
 			By("Creating rollback with options")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying deployment URL contains options as parameters")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				// Options should be encoded in the deployment URL
@@ -226,15 +201,15 @@ var _ = Describe("RollbackReconciler", func() {
 		})
 
 		It("fails when target release does not exist", func() {
-			rollback = newRollback(namespaceName, "missing-target", "nonexistent-release", "Testing missing release")
+			rollback = newRollback(testNamespace, "missing-target", "nonexistent-release", "Testing missing release")
 
 			By("Creating rollback")
-			Expect(mgr.GetClient().Create(ctx, rollback)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
 
 			By("Verifying rollback does not succeed (release not found)")
 			Eventually(func() bool {
 				rb := &deployv1alpha1.Rollback{}
-				if err := mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
 				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)

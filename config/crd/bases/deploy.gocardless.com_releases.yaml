@@ -27,10 +27,10 @@ spec:
     - jsonPath: .status.signature
       name: Signature
       type: string
-    - jsonPath: .status.previousRelease.transitionTime
+    - jsonPath: .status.deploymentStartTime
       name: Started_At
       type: string
-    - jsonPath: .status.nextRelease.transitionTime
+    - jsonPath: .status.deploymentEndTime
       name: Ended_At
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -191,18 +191,6 @@ spec:
                 description: Message is a human-readable message indicating the state
                   of the release.
                 type: string
-              nextRelease:
-                description: NextRelease is the name of the release that superseded
-                  this release.
-                properties:
-                  releaseRef:
-                    description: Other Release associated with this transition
-                    type: string
-                  transitionTime:
-                    description: When the release transitioned to this state
-                    format: date-time
-                    type: string
-                type: object
               previousRelease:
                 description: PreviousRelease is the name of the release that was superseded
                   by this release.

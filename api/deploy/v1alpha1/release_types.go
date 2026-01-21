@@ -22,6 +22,9 @@ const (
 
 	// Reasons for condition status changes
 
+	// ReasonInitialised indicates the release was successfully initialised.
+	ReasonInitialised = "Initialised"
+
 	// ReasonDeployed indicates the release was successfully deployed and is now active.
 	ReasonDeployed = "Deployed"
 

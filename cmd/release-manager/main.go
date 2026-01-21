@@ -28,10 +28,6 @@ var (
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("true").Bool()
-	maxReleasesPerTarget = app.Flag("max-releases-per-target-name", "Maximum number of releases to keep per target name. All releases older than this will be deleted by the reconciler.").
-				Default("10").
-				Envar("RELEASE_MANAGER_MAX_RELEASES_PER_TARGET_NAME").
-				Int()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
@@ -64,14 +60,11 @@ func main() {
 		app.Fatalf("failed to create manager: %v", err)
 	}
 
-	err = (&releasecontroller.ReleaseReconciler{
-		Client:               manager.GetClient(),
-		Scheme:               scheme,
-		Log:                  logger,
-		MaxReleasesPerTarget: *maxReleasesPerTarget,
-	}).SetupWithManager(ctx, manager)
-
-	if err != nil {
+	if err = (&releasecontroller.ReleaseReconciler{
+		Client: manager.GetClient(),
+		Scheme: scheme,
+		Log:    logger,
+	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}
 

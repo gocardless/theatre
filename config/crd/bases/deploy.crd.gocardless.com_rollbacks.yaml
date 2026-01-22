@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: rollbacks.deploy.gocardless.com
+  name: rollbacks.deploy.crd.gocardless.com
 spec:
-  group: deploy.gocardless.com
+  group: deploy.crd.gocardless.com
   names:
     kind: Rollback
     listKind: RollbackList

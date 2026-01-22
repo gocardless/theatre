@@ -27,7 +27,7 @@ var (
 		"enable-release-uniqueness-webhooks",
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
-	).Default("true").Bool()
+	).Default("false").Bool()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 

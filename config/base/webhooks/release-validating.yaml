@@ -19,7 +19,7 @@ webhooks:
     name: release.deploy.crd.gocardless.com
     rules:
       - apiGroups:
-          - deploy.gocardless.com
+          - deploy.crd.gocardless.com
         apiVersions:
           - v1alpha1
         operations:

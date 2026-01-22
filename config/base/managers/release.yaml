@@ -5,7 +5,7 @@ metadata:
   name: release-manager
 rules:
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - releases
     verbs:
@@ -17,7 +17,7 @@ rules:
       - patch
       - delete
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - releases/status
     verbs:
@@ -25,7 +25,7 @@ rules:
       - update
       - patch
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - releases/finalizers
     verbs:

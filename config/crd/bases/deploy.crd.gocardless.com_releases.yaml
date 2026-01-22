@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: releases.deploy.gocardless.com
+  name: releases.deploy.crd.gocardless.com
 spec:
-  group: deploy.gocardless.com
+  group: deploy.crd.gocardless.com
   names:
     kind: Release
     listKind: ReleaseList

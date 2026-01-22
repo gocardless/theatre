@@ -5,7 +5,7 @@ metadata:
   name: rollback-manager
 rules:
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - rollbacks
     verbs:
@@ -17,7 +17,7 @@ rules:
       - patch
       - delete
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - rollbacks/status
     verbs:
@@ -25,14 +25,14 @@ rules:
       - update
       - patch
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - rollbacks/finalizers
     verbs:
       - update
   # Need to read releases to get revision info for rollbacks
   - apiGroups:
-      - deploy.gocardless.com
+      - deploy.crd.gocardless.com
     resources:
       - releases
     verbs:

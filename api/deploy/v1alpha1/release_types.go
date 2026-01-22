@@ -20,6 +20,13 @@ const (
 	// Status=Unknown means health status has not been determined yet.
 	ReleaseConditionHealthy = "Healthy"
 
+	// ReleaseConditionRollbackRequired indicates whether the release should be
+	// rolled back, as long as automated rollbacks are enabled.
+	// Status=True means the release should be rolled back.
+	// Status=False means the release should not be rolled back.
+	// Status=Unknown means rollback analysis has not been determined yet.
+	ReleaseConditionRollbackRequired = "RollbackRequired"
+
 	// Reasons for condition status changes
 
 	// ReasonInitialised indicates the release was successfully initialised.
@@ -39,6 +46,12 @@ const (
 
 	// ReasonAnalysisFailed indicates the release failed health analysis checks.
 	ReasonAnalysisFailed = "AnalysisFailed"
+
+	// ReasonAnalysisInProgress indicates analysis is in progress for the release.
+	ReasonAnalysisInProgress = "AnalysisInProgress"
+
+	// ReasonAnalysisError indicates an error occurred during analysis.
+	ReasonAnalysisError = "AnalysisError"
 )
 
 // ReleaseConfig defines the desired state of Release

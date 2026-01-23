@@ -132,4 +132,44 @@ var _ = Describe("Helpers", func() {
 		})
 
 	})
+
+	Context("GenerateAnalysisRunName", func() {
+		DescribeTable("GenerateAnalysisRunName", func(releaseName, templateName, expected string) {
+			result := GenerateAnalysisRunName(releaseName, templateName)
+			Expect(len(result)).To(BeNumerically("<=", 64))
+
+			var releaseNameTrim string
+			var templateNameTrim string
+
+			if len(releaseName) > 27 {
+				releaseNameTrim = releaseName[:27]
+			} else {
+				releaseNameTrim = releaseName
+			}
+
+			if len(templateName) > 27 {
+				templateNameTrim = templateName[:27]
+			} else {
+				templateNameTrim = templateName
+			}
+
+			// we should always have AT LEAST the first 27 characters of each part.
+			Expect(result).To(HavePrefix(releaseNameTrim))
+			Expect(result).To(ContainSubstring(templateNameTrim))
+
+			// only check expected value if it is not empty.
+			// if names are truncated, we don't know what the hash will be
+			if expected != "" {
+				Expect(result).To(Equal(expected))
+			}
+		},
+			Entry("short names", "release", "template", "release-template"),
+			Entry("short names 2", "foo", "bar", "foo-bar"),
+			Entry("long but acceptable release name", "release-name-is-very-long-but-still-fits-in-the-maxx", "template12", "release-name-is-very-long-but-still-fits-in-the-maxx-template12"),
+			Entry("long but acceptable template name", "releasefoo", "template-name-is-very-long-but-still-fits-in-the-max", "releasefoo-template-name-is-very-long-but-still-fits-in-the-max"),
+			Entry("release name too long", "release-name-is-very-long-and-does-not-fit-in-the-max", "template12", ""),
+			Entry("template name too long", "releasefoo", "template-name-is-very-long-and-does-not-fit-in-the-max", ""),
+			Entry("both names too long", "release-name-is-very-long-too-longx", "template-name-is-very-long-too-long", ""),
+		)
+	})
 })

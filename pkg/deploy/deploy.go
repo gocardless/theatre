@@ -3,6 +3,7 @@ package deploy
 import (
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -76,4 +77,30 @@ func GenerateReleaseName(release deployv1alpha1.Release) (string, error) {
 	releaseHash := hashString(release.Serialise())
 
 	return fmt.Sprintf("%s-%s", targetName, releaseHash), nil
+}
+
+// GenerateAnalysisRunName generates a name for an AnalysisRun by concatenating the
+// release name and template. If the result would be too long, parts are trimmed
+// to 27 characters and a hash is appended.
+// 27 char maximum is to ensure final name doesn't exceed 64 characters:
+// <release>-<template>-<hash>
+func GenerateAnalysisRunName(releaseName, templateName string) string {
+	parts := []string{releaseName, templateName}
+	candidate := strings.Join(parts, "-")
+
+	if len(candidate) <= 64 {
+		return candidate
+	}
+
+	hash := hashString([]byte(releaseName + templateName))
+
+	for i, v := range parts {
+		if len(v) > 27 {
+			parts[i] = v[:27]
+		}
+	}
+
+	parts = append(parts, hash)
+
+	return strings.Join(parts, "-")
 }

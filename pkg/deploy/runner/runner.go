@@ -58,11 +58,6 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 		return nil, fmt.Errorf("only one of name or generateNamePrefix may be set")
 	}
 
-	labels := map[string]string{}
-	for k, v := range opts.Labels {
-		labels[k] = v
-	}
-
 	spec := deployv1alpha1.RollbackSpec{
 		Reason: opts.Reason,
 		InitiatedBy: deployv1alpha1.RollbackInitiator{
@@ -79,7 +74,7 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	rb := &deployv1alpha1.Rollback{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: opts.Namespace,
-			Labels:    labels,
+			Labels:    opts.Labels,
 		},
 		Spec: spec,
 	}

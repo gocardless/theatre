@@ -33,19 +33,18 @@ func New(cfg *rest.Config) (*Runner, error) {
 }
 
 type CreateRollbackOptions struct {
-	Namespace string
-	Reason    string
+	Name               string
+	GenerateNamePrefix string
+	Namespace          string
+	Labels             map[string]string
 
+	Reason        string
 	ToReleaseName string
 
 	InitiatedByUser   string
 	InitiatedBySystem string
 
 	DeploymentOptions map[string]string
-	Labels            map[string]string
-
-	Name               string
-	GenerateNamePrefix string
 }
 
 func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions) (*deployv1alpha1.Rollback, error) {
@@ -59,9 +58,9 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 		return nil, fmt.Errorf("only one of name or generateNamePrefix may be set")
 	}
 
-	lbls := map[string]string{}
+	labels := map[string]string{}
 	for k, v := range opts.Labels {
-		lbls[k] = v
+		labels[k] = v
 	}
 
 	spec := deployv1alpha1.RollbackSpec{
@@ -80,7 +79,7 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	rb := &deployv1alpha1.Rollback{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: opts.Namespace,
-			Labels:    lbls,
+			Labels:    labels,
 		},
 		Spec: spec,
 	}
@@ -88,11 +87,7 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	if opts.Name != "" {
 		rb.Name = opts.Name
 	} else {
-		prefix := opts.GenerateNamePrefix
-		if prefix == "" {
-			prefix = "rollback-"
-		}
-		rb.GenerateName = prefix
+		rb.GenerateName = opts.GenerateNamePrefix
 	}
 
 	if err := r.client.Create(ctx, rb); err != nil {

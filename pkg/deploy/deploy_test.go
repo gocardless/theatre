@@ -143,12 +143,12 @@ var _ = Describe("Helpers", func() {
 
 		It("Should generate consistent release names for the same input if sorted differently", func() {
 			// Create two releases with the same revisions but in different orders
-			release.ReleaseConfig.Revisions = append(release.ReleaseConfig.Revisions, deployv1alpha1.Revision{Name: "database", ID: "def456"})
+			release.Revisions = append(release.Revisions, deployv1alpha1.Revision{Name: "database", ID: "def456"})
 
 			release1 := release.DeepCopy()
 			release2 := release.DeepCopy()
 
-			release2.ReleaseConfig.Revisions[0], release2.ReleaseConfig.Revisions[1] = release2.ReleaseConfig.Revisions[1], release2.ReleaseConfig.Revisions[0]
+			release2.Revisions[0], release2.Revisions[1] = release2.Revisions[1], release2.Revisions[0]
 
 			name1, err1 := GenerateReleaseName(*release1)
 			name2, err2 := GenerateReleaseName(*release2)
@@ -159,13 +159,13 @@ var _ = Describe("Helpers", func() {
 		})
 
 		It("Should error when invalid a revision is provided", func() {
-			release.ReleaseConfig.Revisions = append(release.ReleaseConfig.Revisions, deployv1alpha1.Revision{Name: "", ID: ""})
+			release.Revisions = append(release.Revisions, deployv1alpha1.Revision{Name: "", ID: ""})
 			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should error when invalid targetName is provided", func() {
-			release.ReleaseConfig.TargetName = ""
+			release.TargetName = ""
 			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})

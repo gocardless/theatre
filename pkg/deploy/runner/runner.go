@@ -138,3 +138,16 @@ func sortReleasesByEndTime(releases []deployv1alpha1.Release) {
 		return releases[i].Status.DeploymentEndTime.After(releases[j].Status.DeploymentEndTime.Time)
 	})
 }
+
+type GetReleaseOptions struct {
+	Namespace string
+	Name      string
+}
+
+func (r *Runner) GetRelease(ctx context.Context, opts GetReleaseOptions) (*deployv1alpha1.Release, error) {
+	var release deployv1alpha1.Release
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: opts.Namespace, Name: opts.Name}, &release); err != nil {
+		return nil, err
+	}
+	return &release, nil
+}

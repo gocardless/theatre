@@ -2,9 +2,11 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +30,66 @@ func New(cfg *rest.Config) (*Runner, error) {
 	}
 
 	return &Runner{client: cl}, nil
+}
+
+type CreateRollbackOptions struct {
+	Name               string
+	GenerateNamePrefix string
+	Namespace          string
+	Labels             map[string]string
+
+	Reason        string
+	ToReleaseName string
+
+	InitiatedByUser   string
+	InitiatedBySystem string
+
+	DeploymentOptions map[string]string
+}
+
+func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions) (*deployv1alpha1.Rollback, error) {
+	if opts.Namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if opts.Reason == "" {
+		return nil, fmt.Errorf("reason is required")
+	}
+	if opts.Name != "" && opts.GenerateNamePrefix != "" {
+		return nil, fmt.Errorf("only one of name or generateNamePrefix may be set")
+	}
+
+	spec := deployv1alpha1.RollbackSpec{
+		Reason: opts.Reason,
+		InitiatedBy: deployv1alpha1.RollbackInitiator{
+			User:   opts.InitiatedByUser,
+			System: opts.InitiatedBySystem,
+		},
+		DeploymentOptions: opts.DeploymentOptions,
+	}
+
+	if opts.ToReleaseName != "" {
+		spec.ToReleaseRef = deployv1alpha1.ReleaseReference{Name: opts.ToReleaseName}
+	}
+
+	rb := &deployv1alpha1.Rollback{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: opts.Namespace,
+			Labels:    opts.Labels,
+		},
+		Spec: spec,
+	}
+
+	if opts.Name != "" {
+		rb.Name = opts.Name
+	} else {
+		rb.GenerateName = opts.GenerateNamePrefix
+	}
+
+	if err := r.client.Create(ctx, rb); err != nil {
+		return nil, err
+	}
+
+	return rb, nil
 }
 
 // ListReleasesOptions defines parameters for listing releases
@@ -70,4 +132,17 @@ func sortReleasesByEndTime(releases []deployv1alpha1.Release) {
 	sort.Slice(releases, func(i, j int) bool {
 		return releases[i].Status.DeploymentEndTime.After(releases[j].Status.DeploymentEndTime.Time)
 	})
+}
+
+type GetReleaseOptions struct {
+	Namespace string
+	Name      string
+}
+
+func (r *Runner) GetRelease(ctx context.Context, opts GetReleaseOptions) (*deployv1alpha1.Release, error) {
+	var release deployv1alpha1.Release
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: opts.Namespace, Name: opts.Name}, &release); err != nil {
+		return nil, err
+	}
+	return &release, nil
 }

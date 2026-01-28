@@ -52,6 +52,14 @@ const (
 
 	// ReasonAnalysisError indicates an error occurred during analysis.
 	ReasonAnalysisError = "AnalysisError"
+
+	// ReleaseLabelNoGlobalAnalysis is a label that, when set to "true", indicates
+	// global analysis templates should not be used for the release
+	ReleaseLabelNoGlobalAnalysis             = "no-global-analysis"
+
+	// ReleaseAnnotationAnalysisTemplateSelector is the name of the annotation
+	// containing optional analysis template selectors
+	ReleaseAnnotationAnalysisTemplateSelector     = "analysis-selectos"
 )
 
 // ReleaseConfig defines the desired state of Release

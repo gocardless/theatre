@@ -186,6 +186,7 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest, infrastructureRevisi
 		payload[key] = value
 	}
 
+	payload["skip_queue"] = true
 	return payload
 }
 

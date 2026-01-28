@@ -98,7 +98,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
 	}
 
-	return ctrl.Result{}, nil
+	return r.ReconcileAnalysis(ctx, logger, req, release)
 }
 
 // The current way to active releases is by setting the deployment end time. The

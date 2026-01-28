@@ -470,7 +470,7 @@ var _ = Describe("GitHub Deployer", func() {
 				{Type: "github", Source: "gocardless/app", ID: "abc123"},
 				{Type: "helm", ID: "1.0.0"},
 			}
-			rev, err := deployer.findGitHubRevision(revisions, nil)
+			rev, err := deployer.findGitHubRevision(revisions, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rev).NotTo(BeNil())
 			Expect(rev.ID).To(Equal("abc123"))
@@ -480,13 +480,13 @@ var _ = Describe("GitHub Deployer", func() {
 			revisions := []deployv1alpha1.Revision{
 				{Type: "docker", ID: "sha256:abc"},
 			}
-			_, err := deployer.findGitHubRevision(revisions, nil)
+			_, err := deployer.findGitHubRevision(revisions, "")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no revision with type 'github'"))
 		})
 
 		It("returns error for empty revisions", func() {
-			_, err := deployer.findGitHubRevision(nil, nil)
+			_, err := deployer.findGitHubRevision(nil, "")
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -495,7 +495,7 @@ var _ = Describe("GitHub Deployer", func() {
 				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
 				{Type: "github", Source: "gocardless/app2", ID: "def456"},
 			}
-			_, err := deployer.findGitHubRevision(revisions, nil)
+			_, err := deployer.findGitHubRevision(revisions, "")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("multiple github revisions found"))
 			Expect(err.Error()).To(ContainSubstring("repository"))
@@ -506,8 +506,8 @@ var _ = Describe("GitHub Deployer", func() {
 				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
 				{Type: "github", Source: "gocardless/app2", ID: "def456"},
 			}
-			options := map[string]string{"repository": "gocardless/app2"}
-			rev, err := deployer.findGitHubRevision(revisions, options)
+
+			rev, err := deployer.findGitHubRevision(revisions, "gocardless/app2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rev.ID).To(Equal("def456"))
 		})
@@ -516,8 +516,8 @@ var _ = Describe("GitHub Deployer", func() {
 			revisions := []deployv1alpha1.Revision{
 				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
 			}
-			options := map[string]string{"repository": "gocardless/other"}
-			_, err := deployer.findGitHubRevision(revisions, options)
+
+			_, err := deployer.findGitHubRevision(revisions, "gocardless/other")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no github revision found with source"))
 		})

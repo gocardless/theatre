@@ -321,8 +321,8 @@ func generateSelectors(release *deployv1alpha1.Release, logger logr.Logger) ([]l
 	useGlobal := true
 
 	var customTemplateSelector labels.Selector
-	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.ReleaseLabelAnalysisTemplateSelector) {
-		templateSelectorStr := release.GetAnnotations()[deployv1alpha1.ReleaseLabelAnalysisTemplateSelector]
+	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.ReleaseAnnotationAnalysisTemplateSelector) {
+		templateSelectorStr := release.GetAnnotations()[deployv1alpha1.ReleaseAnnotationAnalysisTemplateSelector]
 		parsedTemplateSelector, err := labels.Parse(templateSelectorStr)
 		if err != nil {
 			logger.Error(err, "failed to parse custom template selector, proceeding without", "selector", templateSelectorStr)

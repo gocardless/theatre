@@ -120,7 +120,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 			)
 
 			BeforeEach(func() {
-				obj.Annotations[v1alpha1.ReleaseLabelAnalysisTemplateSelector] = selectorStr
+				obj.Annotations[v1alpha1.ReleaseAnnotationAnalysisTemplateSelector] = selectorStr
 				selectorParsed, err = labels.Parse(selectorStr)
 				Expect(err).NotTo(HaveOccurred())
 				expectedSelectors[selectorKeyCustom] = selectorParsed
@@ -145,7 +145,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 			selectorStr := "in in in in in in"
 
 			BeforeEach(func() {
-				obj.Annotations[v1alpha1.ReleaseLabelAnalysisTemplateSelector] = selectorStr
+				obj.Annotations[v1alpha1.ReleaseAnnotationAnalysisTemplateSelector] = selectorStr
 			})
 
 			AssertGlobalSelectorPresent()

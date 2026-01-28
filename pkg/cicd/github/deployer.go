@@ -174,6 +174,7 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest, infrastructureRevisi
 		"rollback_from": req.Rollback.Status.FromReleaseRef,
 		"rollback_to":   req.Rollback.Spec.ToReleaseRef,
 		"reason":        req.Rollback.Spec.Reason,
+		"version":       3,
 	}
 
 	if infrastructureRevisionId != "" {

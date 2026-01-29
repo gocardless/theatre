@@ -3,91 +3,52 @@ package deploy
 import (
 	"strings"
 
-	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
+
+	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 )
 
 var _ = Describe("Helpers", func() {
-	Context("validateTargetName", func() {
-		It("Should return error for empty target name", func() {
-			err := validateTargetName("")
-			Expect(err).To(HaveOccurred())
-		})
+	DescribeTable("validateTargetName",
+		func(name string, expectedErrorMatchers ...types.GomegaMatcher) {
+			Expect(validateTargetName(name)).To(And(expectedErrorMatchers...))
+		},
+		Entry("Should return error for empty target name", "", HaveOccurred()),
+		Entry("Should return an error if not a valid K8s name", ".1-test-target", HaveOccurred()),
+		Entry("Should return an error if too long", "a"+strings.Repeat("b", 245), HaveOccurred(), MatchError(ContainSubstring("target name too long"))),
+		Entry("Should not return an error for a valid K8s name", "test-target-123", Succeed()),
+	)
 
-		It("Should return an error if not a valid K8s name", func() {
-			err := validateTargetName(".1-test-target")
-			Expect(err).To(HaveOccurred())
-		})
+	DescribeTable("validateRevision",
+		func(rev string, expectedErrorMatchers ...types.GomegaMatcher) {
+			Expect(validateRevisionID(rev)).To(And(expectedErrorMatchers...))
+		},
+		Entry("Should return error for empty revision", "", HaveOccurred()),
+		Entry("Should not return an error for a valid revision", "v1.0.0", Succeed()),
+		Entry("Should not return an error for a semantic version", "1.2.3-alpha.1+build.1", Succeed()),
+		Entry("Should not return an error for a commit hash", "e79564fbef044b63d560296cdc8e84c130175016", Succeed()),
+	)
 
-		It("Should return an error if too long", func() {
-			longName := "a" + strings.Repeat("b", 245) // 246 characters, exceeding the limit
-			err := validateTargetName(longName)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("target name too long"))
-		})
-
-		It("Should not return an error for a valid K8s name", func() {
-			err := validateTargetName("test-target-123")
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Context("validateRevision", func() {
-		It("Should return error for empty revision", func() {
-			err := validateRevisionID("")
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("Should not return an error for a valid revision", func() {
-			err := validateRevisionID("v1.0.0")
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("Should not return an error for a semantic version", func() {
-			err := validateRevisionID("1.2.3-alpha.1+build.1")
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("Should not return an error for a commit hash", func() {
-			err := validateRevisionID("e79564fbef044b63d560296cdc8e84c130175016")
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Context("validateRevisions", func() {
-		It("Should return error for empty revisions", func() {
-			err := validateRevisions([]deployv1alpha1.Revision{})
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("Should return error for duplicate revision names", func() {
-			revisions := []deployv1alpha1.Revision{
-				{Name: "application", ID: "123"},
-				{Name: "application", ID: "456"},
-			}
-			err := validateRevisions(revisions)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("Should not return error for valid revisions", func() {
-			revisions := []deployv1alpha1.Revision{
-				{Name: "application", ID: "123"},
-				{Name: "data-contracts", ID: "456"},
-			}
-			err := validateRevisions(revisions)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("Should return error for empty or invalid revision ID", func() {
-			revisions := []deployv1alpha1.Revision{
-				{Name: "application", ID: "123"},
-				{Name: "data-contracts", ID: ""},
-			}
-			err := validateRevisions(revisions)
-			Expect(err).To(HaveOccurred())
-		})
-	})
+	DescribeTable("validateRevisions",
+		func(revs []deployv1alpha1.Revision, expectedErrorMatchers ...types.GomegaMatcher) {
+			Expect(validateRevisions(revs)).To(And(expectedErrorMatchers...))
+		},
+		Entry("Should return error for empty revisions", []deployv1alpha1.Revision{}, HaveOccurred()),
+		Entry("Should return error for duplicate revision names", []deployv1alpha1.Revision{
+			{Name: "application", ID: "123"},
+			{Name: "application", ID: "456"},
+		}, HaveOccurred()),
+		Entry("Should not return error for valid revisions", []deployv1alpha1.Revision{
+			{Name: "application", ID: "123"},
+			{Name: "data-contracts", ID: "456"},
+		}, Succeed()),
+		Entry("Should return error for empty or invalid revision ID", []deployv1alpha1.Revision{
+			{Name: "application", ID: "123"},
+			{Name: "data-contracts", ID: ""},
+		}, HaveOccurred()),
+	)
 
 	Context("hashString", func() {
 		It("Should hash a string and return hex representation", func() {

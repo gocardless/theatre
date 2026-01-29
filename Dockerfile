@@ -1,5 +1,5 @@
 # Build Go binary without cgo dependencies
-FROM golang:1.24.5 as builder
+FROM golang:1.25.5 as builder
 WORKDIR /go/src/github.com/gocardless/theatre
 
 COPY . /go/src/github.com/gocardless/theatre

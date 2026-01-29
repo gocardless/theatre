@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/logging"
@@ -19,27 +20,57 @@ import (
 const (
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
 	EventNoStatusUpdate         = "NoStatusUpdate"
+
+	IndexFieldOwner = ".metadata.controller"
 )
+
+var apiGVStr = deployv1alpha1.GroupVersion.String()
 
 type ReleaseReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log             logr.Logger
+	Scheme          *runtime.Scheme
+	AnalysisEnabled bool
 }
 
 func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Release")
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&deployv1alpha1.Release{}).
-		Complete(
-			recutil.ResolveAndReconcile(
-				ctx, logger, mgr, &deployv1alpha1.Release{},
-				func(logger logr.Logger, request ctrl.Request, obj runtime.Object) (ctrl.Result, error) {
-					return r.Reconcile(ctx, logger, request, obj.(*deployv1alpha1.Release))
-				},
-			),
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).For(&deployv1alpha1.Release{})
+
+	// Only set AnalysisRun ownership, and owner indexed field, if analysis is enabled
+	if r.AnalysisEnabled {
+		ctrlBuilder = ctrlBuilder.Owns(&analysisv1alpha1.AnalysisRun{})
+
+		err := mgr.GetFieldIndexer().IndexField(
+			ctx,
+			&analysisv1alpha1.AnalysisRun{},
+			IndexFieldOwner,
+			func(rawObj client.Object) []string {
+				run := rawObj.(*analysisv1alpha1.AnalysisRun)
+				owner := metav1.GetControllerOf(run)
+				if owner == nil {
+					return nil
+				}
+				if owner.APIVersion != apiGVStr || owner.Kind != "Release" {
+					return nil
+				}
+				return []string{owner.Name}
+			},
 		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return ctrlBuilder.Complete(
+		recutil.ResolveAndReconcile(
+			ctx, logger, mgr, &deployv1alpha1.Release{},
+			func(logger logr.Logger, request ctrl.Request, obj runtime.Object) (ctrl.Result, error) {
+				return r.Reconcile(ctx, logger, request, obj.(*deployv1alpha1.Release))
+			},
+		),
+	)
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
@@ -67,7 +98,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
 	}
 
-	return ctrl.Result{}, nil
+	return r.ReconcileAnalysis(ctx, logger, req, release)
 }
 
 // The current way to active releases is by setting the deployment end time. The

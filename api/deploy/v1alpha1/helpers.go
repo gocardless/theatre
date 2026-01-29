@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gocardless/theatre/v5/pkg/recutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -17,12 +18,13 @@ const (
 )
 
 // Rollback helpers
+
 func (rollback *Rollback) IsCompleted() bool {
-	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, RollbackConditionSucceded)
-	return succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown
+	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceded})
 }
 
 // Release helpers
+
 func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {
 	return bytes.Equal(releaseConfig.Serialise(), other.Serialise())
 }
@@ -54,9 +56,15 @@ func (releaseConfig *ReleaseConfig) Serialise() []byte {
 }
 
 func (release *Release) IsStatusInitialised() bool {
-	return len(release.Status.Conditions) > 0 &&
-		meta.FindStatusCondition(release.Status.Conditions, ReleaseConditionActive) != nil &&
+	return meta.FindStatusCondition(release.Status.Conditions, ReleaseConditionActive) != nil &&
 		release.Status.Signature != ""
+}
+
+func (release *Release) IsAnalysisStatusKnown() bool {
+	return recutil.IsConditionStatusKnown(release.Status.Conditions, []string{
+		ReleaseConditionHealthy,
+		ReleaseConditionRollbackRequired,
+	})
 }
 
 func (release *Release) generateSignature() string {

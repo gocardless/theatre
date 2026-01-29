@@ -55,11 +55,7 @@ const (
 
 	// ReleaseLabelNoGlobalAnalysis is a label that, when set to "true", indicates
 	// global analysis templates should not be used for the release
-	ReleaseLabelNoGlobalAnalysis             = "no-global-analysis"
-
-	// ReleaseAnnotationAnalysisTemplateSelector is the name of the annotation
-	// containing optional analysis template selectors
-	ReleaseAnnotationAnalysisTemplateSelector     = "analysis-selectos"
+	ReleaseLabelNoGlobalAnalysis = "no-global-analysis"
 )
 
 // ReleaseConfig defines the desired state of Release

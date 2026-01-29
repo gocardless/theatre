@@ -256,8 +256,8 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 	templateCluster, okCluster := template.(*analysisv1alpha1.ClusterAnalysisTemplate)
 
 	var (
-		templateName   string
-		templateSpec   analysisv1alpha1.AnalysisTemplateSpec
+		templateName string
+		templateSpec analysisv1alpha1.AnalysisTemplateSpec
 		// templateLabels map[string]string
 	)
 
@@ -305,7 +305,7 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 			Name:      deploy.GenerateAnalysisRunName(release.Name, templateName),
 			Namespace: release.Namespace,
 			// TODO: should we merge release labels with template labels?
-			Labels:    release.GetLabels(),
+			Labels: release.GetLabels(),
 		},
 		Spec: analysisv1alpha1.AnalysisRunSpec{
 			Args:    args,
@@ -321,8 +321,8 @@ func generateSelectors(release *deployv1alpha1.Release, logger logr.Logger) ([]l
 	useGlobal := true
 
 	var customTemplateSelector labels.Selector
-	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.ReleaseAnnotationAnalysisTemplateSelector) {
-		templateSelectorStr := release.GetAnnotations()[deployv1alpha1.ReleaseAnnotationAnalysisTemplateSelector]
+	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.AnnotationKeyReleaseAnalysisTemplateSelector) {
+		templateSelectorStr := release.GetAnnotations()[deployv1alpha1.AnnotationKeyReleaseAnalysisTemplateSelector]
 		parsedTemplateSelector, err := labels.Parse(templateSelectorStr)
 		if err != nil {
 			logger.Error(err, "failed to parse custom template selector, proceeding without", "selector", templateSelectorStr)

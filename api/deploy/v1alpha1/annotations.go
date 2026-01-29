@@ -25,5 +25,5 @@ const (
 
 	// AnnotationKeyReleaseAnalysisTemplateSelector is the name of the annotation
 	// containing optional analysis template selectors
-	AnnotationKeyReleaseAnalysisTemplateSelector = AnnotationKeyBase + "analysis-selectos"
+	AnnotationKeyReleaseAnalysisTemplateSelector = AnnotationKeyBase + "/analysis-selectos"
 )

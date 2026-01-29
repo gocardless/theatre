@@ -57,12 +57,8 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 			fmt.Errorf("github revision has no ID"))
 	}
 
-	// The error here is intentionally not handled, as we might decide that
-	// we don't need to fail the deployment if the infrastructure revision is not found.
-	infrastructureRevision, _ := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options["infrastructure_repository"])
-
 	// Build the deployment payload with rollback metadata and user options
-	payload := d.buildPayload(req, infrastructureRevision.ID)
+	payload := d.buildPayload(req)
 
 	description := fmt.Sprintf("Rollback to %s: %s", req.Rollback.Spec.ToReleaseRef, req.Rollback.Spec.Reason)
 	if len(description) > 140 {
@@ -160,7 +156,7 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 
 // buildPayload constructs the deployment payload from rollback metadata
 // and user-provided options.
-func (d *Deployer) buildPayload(req cicd.DeploymentRequest, infrastructureRevisionId string) map[string]interface{} {
+func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface{} {
 	creator := req.Rollback.Spec.InitiatedBy.System
 	if req.Rollback.Spec.InitiatedBy.User != "" {
 		creator = req.Rollback.Spec.InitiatedBy.User
@@ -177,8 +173,11 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest, infrastructureRevisi
 		"version":       3,
 	}
 
-	if infrastructureRevisionId != "" {
-		payload["target_revision"] = infrastructureRevisionId
+	// The error here is intentionally not handled, as we might decide that
+	// we don't need to fail the deployment if the infrastructure revision is not found.
+	infrastructureRevision, _ := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options["infrastructure_repository"])
+	if infrastructureRevision != nil && infrastructureRevision.ID != "" {
+		payload["target_revision"] = infrastructureRevision.ID
 	}
 
 	// Merge user-provided options
@@ -186,7 +185,10 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest, infrastructureRevisi
 		payload[key] = value
 	}
 
-	payload["skip_queue"] = true
+	if skipQueue, ok := req.Options["skip_queue"]; skipQueue != "" && ok {
+		payload["skip_queue"] = skipQueue == "true"
+	}
+
 	return payload
 }
 

@@ -82,7 +82,6 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 		"owner", owner,
 		"repo", repo,
 		"ref", applicationRevisionId,
-		"infrastructure_revision", infrastructureRevision.ID,
 		"rollback", req.Rollback.Name,
 	)
 

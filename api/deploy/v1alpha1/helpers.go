@@ -79,7 +79,6 @@ func (release *Release) InitialiseStatus(message string) {
 	release.Status.Signature = release.generateSignature()[:SignatureLength]
 
 	release.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
-	release.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
 func (release *Release) SetDeploymentStartTime(timestamp metav1.Time) {
@@ -107,15 +106,6 @@ func (release *Release) IsConditionActiveTrue() bool {
 func (release *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionActive,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
-	})
-}
-
-func (release *Release) setConditionHealthy(status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
-		Type:    ReleaseConditionHealthy,
 		Status:  status,
 		Reason:  reason,
 		Message: message,

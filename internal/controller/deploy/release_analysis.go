@@ -80,6 +80,9 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 
 	analysisResultKnown := release.IsAnalysisStatusKnown()
 
+	// collect non-fatal errors to schedule next reconciliation
+	var collectedErr []error
+
 	if !releaseActive && analysisResultKnown {
 		// if release is inactive and health/rollback status is already known, there
 		// is nothing left to do and we can return immediately
@@ -116,6 +119,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 				return analysisErr
 			}
 			logger.Error(err, "error while attempting to determine AnalysisRuns to create, continuing")
+			collectedErr = append(collectedErr, err)
 		}
 	}
 
@@ -127,6 +131,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 			err := r.Create(ctx, v)
 			if err != nil {
 				logger.Error(err, "failed to create AnalysisRun", "name", v.Name)
+				collectedErr = append(collectedErr, err)
 				continue
 			}
 
@@ -150,6 +155,10 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 		logger.Error(statusErr, "failed to update Release status")
 	}
 
+	// return non-fatal errors to schedule another reconciliation
+	if collectedErr != nil {
+		return newAnalysisReconcileJoinedError("errors encountered during analysis reconciliation", false, collectedErr...)
+	}
 	return nil
 }
 
@@ -166,7 +175,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	allAnalysisTemplateLists := []runtime.Object{}
 
 	// collect non-fatal errors
-	var collectedErr error
+	var collectedErr []error
 
 	for _, v := range namespacedSelectors {
 		var templateList analysisv1alpha1.AnalysisTemplateList
@@ -175,7 +184,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 			logger.Error(err, "failed to list AnalysisTemplates", "selector", v.String())
 			// TODO: we continue because we might still succeed listing other attempts
 			// but we might want to note that we hed an error, and schedule reconciliation
-			collectedErr = errors.Join(
+			collectedErr = append(
 				collectedErr,
 				fmt.Errorf("failed to list AnalysisTemplates with selector '%s': %w", v.String(), err),
 			)
@@ -190,7 +199,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		err := r.List(ctx, &templateList, client.MatchingLabelsSelector{Selector: v})
 		if err != nil {
 			logger.Error(err, "failed to list ClusterAnalysisTemplates", "selector", v.String())
-			collectedErr = errors.Join(
+			collectedErr = append(
 				collectedErr,
 				fmt.Errorf("failed to list ClusterAnalysisTemplates with selector '%s': %w", v.String(), err),
 			)
@@ -209,7 +218,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		return nil, newAnalysisReconcileJoinedError(
 			"failed to collect all templates for analysis generation",
 			true,
-			errors.Join(err, collectedErr),
+			append(collectedErr, err)...,
 		)
 	}
 
@@ -217,7 +226,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		analysis, err := createAnalysisRun(release, v)
 		if err != nil {
 			logger.Error(err, "failed to create AnalysisRun")
-			collectedErr = errors.Join(
+			collectedErr = append(
 				collectedErr,
 				fmt.Errorf("failed to create AnalysisRun: %w", err),
 			)
@@ -229,7 +238,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 			ret = append(ret, analysis)
 		}
 	}
-	return ret, newAnalysisReconcileJoinedError("errors while generating AnalysisRuns", false, collectedErr)
+	return ret, newAnalysisReconcileJoinedError("errors while generating AnalysisRuns", false, collectedErr...)
 }
 
 // splitHealthRollback splits AnalysisRuns into separate lists of AnalysysRuns

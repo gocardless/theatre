@@ -105,7 +105,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 
 		When("global templates are disabled", func() {
 			BeforeEach(func() {
-				obj.Annotations[v1alpha1.ReleaseLabelNoGlobalAnalysis] = "true"
+				obj.Annotations[v1alpha1.AnnotationKeyReleaseNoGlobalAnalysis] = "true"
 			})
 
 			AssertGlobalSelectorAbsent()
@@ -132,7 +132,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 
 			When("global templates are disabled", func() {
 				BeforeEach(func() {
-					obj.Annotations[v1alpha1.ReleaseLabelNoGlobalAnalysis] = "true"
+					obj.Annotations[v1alpha1.AnnotationKeyReleaseNoGlobalAnalysis] = "true"
 				})
 
 				AssertGlobalSelectorAbsent()

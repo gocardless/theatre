@@ -25,7 +25,7 @@ import (
 
 const (
 	AnalysisTimeBeforeDeployment             = time.Second * -5
-	AnalysisArgNameBeforeDeploymentTimestamp = "pre-timestamp"
+	AnalysisArgNameBeforeDeploymentTimestamp = "pre-release-timestamp"
 	AnalysisArgLabelPrefix                   = "label_"
 )
 
@@ -159,7 +159,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		}
 		controllerutil.SetControllerReference(release, analysis, r.Scheme)
 
-		if !slices.ContainsFunc(existingRuns, func(r analysisv1alpha1.AnalysisRun) bool { return r.Name == analysis.Name }) {
+		if !slices.ContainsFunc(existingRuns, func(run analysisv1alpha1.AnalysisRun) bool { return run.Name == analysis.Name }) {
 			ret = append(ret, analysis)
 		}
 	}
@@ -288,7 +288,6 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 			// we replace prefixed args with release labels
 			if metav1.HasLabel(release.ObjectMeta, labelName) {
 				labelStr := release.Labels[labelName]
-				fmt.Printf("replacing %s with %s\n", ret.Name, labelStr)
 				ret.Value = &labelStr
 			}
 		}
@@ -332,7 +331,7 @@ func generateSelectors(release *deployv1alpha1.Release, logger logr.Logger) ([]l
 		}
 	}
 
-	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.ReleaseLabelNoGlobalAnalysis) && release.GetAnnotations()[deployv1alpha1.ReleaseLabelNoGlobalAnalysis] == "true" {
+	if metav1.HasAnnotation(release.ObjectMeta, deployv1alpha1.AnnotationKeyReleaseNoGlobalAnalysis) && release.GetAnnotations()[deployv1alpha1.AnnotationKeyReleaseNoGlobalAnalysis] == "true" {
 		useGlobal = false
 	}
 

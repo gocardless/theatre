@@ -151,12 +151,8 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 	meta.SetStatusCondition(&release.Status.Conditions, healthCondition)
 	meta.SetStatusCondition(&release.Status.Conditions, rollbackCondition)
 
-	if statusErr := r.Status().Update(ctx, release); statusErr != nil {
-		logger.Error(statusErr, "failed to update Release status")
-	}
-
 	// return non-fatal errors to schedule another reconciliation
-	if collectedErr != nil {
+	if len(collectedErr) > 0 {
 		return newAnalysisReconcileJoinedError("errors encountered during analysis reconciliation", false, collectedErr...)
 	}
 	return nil
@@ -242,7 +238,11 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 			ret = append(ret, analysis)
 		}
 	}
-	return ret, newAnalysisReconcileJoinedError("errors while generating AnalysisRuns", false, collectedErr...)
+
+	if len(collectedErr) > 0 {
+		return ret, newAnalysisReconcileJoinedError("errors while generating AnalysisRuns", false, collectedErr...)
+	}
+	return ret, nil
 }
 
 // splitHealthRollback splits AnalysisRuns into separate lists of AnalysysRuns

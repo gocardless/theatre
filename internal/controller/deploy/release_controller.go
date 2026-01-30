@@ -2,14 +2,16 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/logging"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -82,11 +84,12 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	}
 
 	r.handleAnnotations(logger, release)
+	analysisErr := r.ReconcileAnalysis(ctx, logger, req, release)
 
 	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, release, recutil.StatusDiff)
 	if err != nil {
 		logger.Error(err, "failed to update release status")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, errors.Join(err, analysisErr)
 	}
 
 	switch outcome {
@@ -98,7 +101,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
 	}
 
-	return r.ReconcileAnalysis(ctx, logger, req, release)
+	return ctrl.Result{}, analysisErr
 }
 
 // The current way to active releases is by setting the deployment end time. The

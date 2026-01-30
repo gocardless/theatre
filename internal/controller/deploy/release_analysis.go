@@ -29,10 +29,51 @@ const (
 	AnalysisArgLabelPrefix                   = "label_"
 )
 
-func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
+// AnalysisReconcileJoinedError is an error that wraps multiple errors and can
+// be fatal or non-fatal
+type AnalysisReconcileJoinedError struct {
+	message string
+	fatal   bool
+	inner   []error
+}
+
+func (e AnalysisReconcileJoinedError) Error() string {
+	return fmt.Sprintf("%s: %v", e.message, e.inner)
+}
+
+func (e AnalysisReconcileJoinedError) Unwrap() []error {
+	return e.inner
+}
+
+// newAnalysisReconcileJoinedError returns a new AnalysisReconcileJoinedError
+// with the specified message and inner errors. If any of the inner errors
+// are of the same type and fatal, the returned error is also fatal. Otherwise,
+// the value provided in `fatal` is used.
+func newAnalysisReconcileJoinedError(message string, fatal bool, innerErr ...error) AnalysisReconcileJoinedError {
+	ret := AnalysisReconcileJoinedError{
+		message: message,
+		fatal:   fatal,
+		inner:   innerErr,
+	}
+	if fatal {
+		return ret
+	}
+
+	// if any of contained errors are fatal, consider the whole error fatal
+	for _, e := range innerErr {
+		var errToTest AnalysisReconcileJoinedError
+		if errors.As(e, &errToTest) && errToTest.fatal {
+			ret.fatal = errToTest.fatal
+			return ret
+		}
+	}
+	return ret
+}
+
+func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) error {
 	if !r.AnalysisEnabled {
 		logger.Info("analysis is disabled, skipping")
-		return ctrl.Result{}, nil
+		return nil
 	}
 
 	releaseActive := meta.IsStatusConditionTrue(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
@@ -43,7 +84,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 		// if release is inactive and health/rollback status is already known, there
 		// is nothing left to do and we can return immediately
 		logger.Info("release is inactive with known analysis status, skipping")
-		return ctrl.Result{}, nil
+		return nil
 	}
 
 	var childAnalysisRuns analysisv1alpha1.AnalysisRunList
@@ -52,7 +93,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 	err := r.List(ctx, &childAnalysisRuns, client.InNamespace(req.Namespace), client.MatchingFields{IndexFieldOwner: release.Name})
 	if err != nil {
 		logger.Error(err, "failed to list owned AnalysisRuns")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	healthAnalysisRuns, rollbackAnalysisRuns := splitHealthRollback(childAnalysisRuns)
@@ -69,8 +110,12 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 	} else {
 		analysisToCreate, err = r.generateAnalysisRuns(ctx, logger, req, release, childAnalysisRuns.Items)
 		if err != nil {
-			logger.Error(err, "failed to generate AnalysisRuns to create")
-			return ctrl.Result{}, err
+			var analysisErr AnalysisReconcileJoinedError
+			if errors.As(err, &analysisErr) && analysisErr.fatal {
+				logger.Error(err, "fatal error while attempting to determine AnalysisRuns to create, stopping")
+				return analysisErr
+			}
+			logger.Error(err, "error while attempting to determine AnalysisRuns to create, continuing")
 		}
 	}
 
@@ -82,7 +127,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 			err := r.Create(ctx, v)
 			if err != nil {
 				logger.Error(err, "failed to create AnalysisRun", "name", v.Name)
-				// return?
+				continue
 			}
 
 			// We just created this, so it is counted as pending.
@@ -105,7 +150,7 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 		logger.Error(statusErr, "failed to update Release status")
 	}
 
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func (r *ReleaseReconciler) generateAnalysisRuns(
@@ -120,12 +165,21 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	namespacedSelectors, clusterSelectors := generateSelectors(release, logger)
 	allAnalysisTemplateLists := []runtime.Object{}
 
+	// collect non-fatal errors
+	var collectedErr error
+
 	for _, v := range namespacedSelectors {
 		var templateList analysisv1alpha1.AnalysisTemplateList
 		err := r.List(ctx, &templateList, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: v})
 		if err != nil {
-			logger.Error(err, "failed to list AnalysisTemplates")
-			return nil, err
+			logger.Error(err, "failed to list AnalysisTemplates", "selector", v.String())
+			// TODO: we continue because we might still succeed listing other attempts
+			// but we might want to note that we hed an error, and schedule reconciliation
+			collectedErr = errors.Join(
+				collectedErr,
+				fmt.Errorf("failed to list AnalysisTemplates with selector '%s': %w", v.String(), err),
+			)
+			continue
 		}
 
 		allAnalysisTemplateLists = append(allAnalysisTemplateLists, &templateList)
@@ -135,8 +189,12 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		var templateList analysisv1alpha1.ClusterAnalysisTemplateList
 		err := r.List(ctx, &templateList, client.MatchingLabelsSelector{Selector: v})
 		if err != nil {
-			logger.Error(err, "failed to list ClusterAnalysisTemplates")
-			return nil, err
+			logger.Error(err, "failed to list ClusterAnalysisTemplates", "selector", v.String())
+			collectedErr = errors.Join(
+				collectedErr,
+				fmt.Errorf("failed to list ClusterAnalysisTemplates with selector '%s': %w", v.String(), err),
+			)
+			continue
 		}
 
 		allAnalysisTemplateLists = append(allAnalysisTemplateLists, &templateList)
@@ -147,14 +205,22 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	// ClusterAnalysisTemplate, but will convert to the correct type in analysisCreate
 	allTemplates, err := concatTemplateLists(allAnalysisTemplateLists)
 	if err != nil {
-		logger.Error(err, "failed to generate AnalysisRun")
-		// return?
+		logger.Error(err, "failed to collect all templates for analysis generation")
+		return nil, newAnalysisReconcileJoinedError(
+			"failed to collect all templates for analysis generation",
+			true,
+			errors.Join(err, collectedErr),
+		)
 	}
 
 	for _, v := range allTemplates {
 		analysis, err := createAnalysisRun(release, v)
 		if err != nil {
 			logger.Error(err, "failed to create AnalysisRun")
+			collectedErr = errors.Join(
+				collectedErr,
+				fmt.Errorf("failed to create AnalysisRun: %w", err),
+			)
 			continue
 		}
 		controllerutil.SetControllerReference(release, analysis, r.Scheme)
@@ -163,7 +229,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 			ret = append(ret, analysis)
 		}
 	}
-	return ret, nil
+	return ret, newAnalysisReconcileJoinedError("errors while generating AnalysisRuns", false, collectedErr)
 }
 
 // splitHealthRollback splits AnalysisRuns into separate lists of AnalysysRuns

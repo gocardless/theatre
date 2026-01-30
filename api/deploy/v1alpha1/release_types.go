@@ -53,6 +53,9 @@ const (
 	// ReasonAnalysisError indicates an error occurred during analysis.
 	ReasonAnalysisError = "AnalysisError"
 
+	// ReasonAnalysisMissing indicates no analysis was found for the release.
+	ReasonAnalysisMissing = "AnalysisMissing"
+
 	// ReleaseLabelNoGlobalAnalysis is a label that, when set to "true", indicates
 	// global analysis templates should not be used for the release
 	ReleaseLabelNoGlobalAnalysis = "no-global-analysis"

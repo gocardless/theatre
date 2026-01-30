@@ -392,6 +392,13 @@ func (c conditionGen) conditionFromResults(results map[analysisv1alpha1.Analysis
 		numTotal += len(v)
 	}
 
+	if numTotal == 0 {
+		ret.Status = metav1.ConditionUnknown
+		ret.Reason = deployv1alpha1.ReasonAnalysisMissing
+		ret.Message = "No AnalysisRun(s) found"
+		return ret
+	}
+
 	if len(results[analysisv1alpha1.AnalysisPhaseFailed]) > 0 {
 		ret.Status = c.conditionStatusBad
 		ret.Reason = deployv1alpha1.ReasonAnalysisFailed

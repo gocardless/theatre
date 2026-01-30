@@ -162,6 +162,10 @@ func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.L
 	return nil
 }
 
+// generateAnalysisRuns returns the AnalysisRuns that should be created for the
+// given release. This is determined by collecting all AnalysisTemplates and
+// ClusterAnalysisTemplates that match the release's selectors.
+// Any generated AnalysisRuns that already exist in `existingRuns` are skipped.
 func (r *ReleaseReconciler) generateAnalysisRuns(
 	ctx context.Context,
 	logger logr.Logger,

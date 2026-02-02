@@ -3,6 +3,7 @@ package deploy
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
@@ -243,33 +244,6 @@ var _ = Describe("ReleaseAnalysis", func() {
 					})
 				})
 			})
-		})
-	})
-
-	Describe("parseAnalysisResult", func() {
-		list := []analysisv1alpha1.AnalysisRun{}
-		phases := []analysisv1alpha1.AnalysisPhase{
-			analysisv1alpha1.AnalysisPhasePending,
-			analysisv1alpha1.AnalysisPhaseRunning,
-			analysisv1alpha1.AnalysisPhaseSuccessful,
-			analysisv1alpha1.AnalysisPhaseFailed,
-			analysisv1alpha1.AnalysisPhaseError,
-			analysisv1alpha1.AnalysisPhaseInconclusive,
-		}
-
-		BeforeEach(func() {
-			for i := range 10 {
-				for _, p := range phases {
-					list = append(list, genAnalysisRun(fmt.Sprintf("%s-%d", p, i), p, false, false))
-				}
-			}
-		})
-
-		It("returns appropriate count for each phase", func() {
-			result := parseAnalysisResults(list)
-			for _, v := range phases {
-				Expect(result[v]).To(HaveLen(10))
-			}
 		})
 	})
 
@@ -581,6 +555,127 @@ var _ = Describe("ReleaseAnalysis", func() {
 					AssertFatal()
 				})
 			})
+		})
+	})
+
+	Describe("result parsing", func() {
+		const runsPerPhase = 10
+
+		var (
+			// collect input for functions to test
+			runList []analysisv1alpha1.AnalysisRun
+
+			// which phases will be generated for each run - others will be empty
+			phasesToGenerate []analysisv1alpha1.AnalysisPhase
+
+			parsedResult map[analysisv1alpha1.AnalysisPhase][]string
+		)
+
+		phases := []analysisv1alpha1.AnalysisPhase{
+			analysisv1alpha1.AnalysisPhasePending,
+			analysisv1alpha1.AnalysisPhaseRunning,
+			analysisv1alpha1.AnalysisPhaseSuccessful,
+			analysisv1alpha1.AnalysisPhaseFailed,
+			analysisv1alpha1.AnalysisPhaseError,
+			analysisv1alpha1.AnalysisPhaseInconclusive,
+		}
+
+		BeforeEach(func() {
+			runList = []analysisv1alpha1.AnalysisRun{}
+			phasesToGenerate = []analysisv1alpha1.AnalysisPhase{}
+		})
+
+		JustBeforeEach(func() {
+			for i := range runsPerPhase {
+				for _, p := range phasesToGenerate {
+					runList = append(runList, genAnalysisRun(fmt.Sprintf("%s-%d", p, i), p, false, false))
+				}
+			}
+			parsedResult = parseAnalysisResults(runList)
+		})
+
+		AppendPhaseBeforeEach := func(phase analysisv1alpha1.AnalysisPhase) {
+			BeforeEach(func() {
+				phasesToGenerate = append(phasesToGenerate, phase)
+			})
+		}
+
+		AssertParseCountCorrect := func() {
+			It("parseAnalysisResults returns appropriate count for each phase", func() {
+				for _, v := range phases {
+					if slices.Contains(phasesToGenerate, v) {
+						Expect(parsedResult[v]).To(HaveLen(runsPerPhase))
+					} else {
+						Expect(parsedResult[v]).To(BeEmpty())
+					}
+				}
+			})
+		}
+
+		AssertConditionsUnknown := func() {
+			It("conditionFromResults returns both conditions as unknown", func() {
+				Expect(healthConditionGen.conditionFromResults(parsedResult).Status).To(Equal(metav1.ConditionUnknown))
+				Expect(rollbackConditionGen.conditionFromResults(parsedResult).Status).To(Equal(metav1.ConditionUnknown))
+			})
+		}
+
+		AssertCondition := func(generator conditionGen, expectedStatus metav1.ConditionStatus) {
+			It(fmt.Sprintf("conditionFromResults returns %s condition as %s", generator.conditionType, expectedStatus), func() {
+				Expect(generator.conditionFromResults(parsedResult).Status).To(Equal(expectedStatus))
+			})
+		}
+
+		AssertParseCountCorrect()
+		AssertConditionsUnknown()
+
+		When("successful phases are present", func() {
+			AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhaseSuccessful)
+
+			AssertParseCountCorrect()
+			AssertCondition(healthConditionGen, metav1.ConditionTrue)
+			AssertCondition(rollbackConditionGen, metav1.ConditionFalse)
+
+			When("errored phases are present", func() {
+				AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhaseError)
+
+				AssertParseCountCorrect()
+				AssertConditionsUnknown()
+			})
+
+			When("inconclusive phases are present", func() {
+				AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhaseInconclusive)
+
+				AssertParseCountCorrect()
+				AssertConditionsUnknown()
+			})
+
+			When("pending phases are present", func() {
+				AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhasePending)
+
+				AssertParseCountCorrect()
+				AssertConditionsUnknown()
+			})
+
+			When("running phases are present", func() {
+				AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhaseRunning)
+
+				AssertParseCountCorrect()
+				AssertConditionsUnknown()
+
+				When("failed phases are present", func() {
+					AppendPhaseBeforeEach(analysisv1alpha1.AnalysisPhaseFailed)
+
+					AssertParseCountCorrect()
+					AssertCondition(healthConditionGen, metav1.ConditionFalse)
+					AssertCondition(rollbackConditionGen, metav1.ConditionTrue)
+
+					It("correct message is set", func() {
+						Expect(rollbackConditionGen.conditionFromResults(parsedResult).Message).
+							To(Equal(fmt.Sprintf("%d out of %d AnalysisRun(s) failed", runsPerPhase, len(runList))))
+					})
+				})
+			})
+
 		})
 	})
 })

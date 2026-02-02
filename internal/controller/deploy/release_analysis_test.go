@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -499,6 +500,85 @@ var _ = Describe("ReleaseAnalysis", func() {
 				It("returns the argument with valueFrom unchanged", func() {
 					analysisRun, _ := createAnalysisRun(&obj, template)
 					Expect(analysisRun.Spec.Args).To(ContainElement(arg))
+				})
+			})
+		})
+	})
+
+	Describe("AnalysisReconcileJoinedError", func() {
+		var (
+			innerError1              = errors.New("inner error 1")
+			innerError2              = errors.New("inner error 2")
+			analysisErrorNonFatal    = newAnalysisReconcileJoinedError("non-fatal analysis error", false, nil)
+			analysisErrorFatal       = newAnalysisReconcileJoinedError("fatal analysis error", true, nil)
+			analysisErrorNestedFatal = newAnalysisReconcileJoinedError("analysis error nested fatal", false, analysisErrorFatal)
+
+			innerErrors       []error
+			testAnalysisError *AnalysisReconcileJoinedError
+		)
+
+		BeforeEach(func() {
+			innerErrors = []error{}
+		})
+
+		JustBeforeEach(func() {
+			// we test non-fatal outer error, for behavior based on inner errors
+			testAnalysisError = newAnalysisReconcileJoinedError("test analysis error", false, innerErrors...)
+		})
+
+		AssertFatal := func() {
+			It("is fatal", func() {
+				Expect(testAnalysisError.fatal).To(BeTrue())
+			})
+		}
+
+		AssertNonFatal := func() {
+			It("is non-fatal", func() {
+				Expect(testAnalysisError.fatal).To(BeFalse())
+			})
+		}
+
+		AssertNonFatal()
+
+		When("contains standard inner errors", func() {
+			BeforeEach(func() {
+				innerErrors = append(innerErrors, innerError1, innerError2)
+			})
+
+			AssertInnerStdErrPresent := func() {
+				It("contains standard inner errors", func() {
+					Expect(errors.Is(testAnalysisError, innerError1)).To(BeTrue())
+					Expect(errors.Is(testAnalysisError, innerError2)).To(BeTrue())
+				})
+			}
+
+			AssertInnerStdErrPresent()
+			AssertNonFatal()
+
+			When("inner errors contain a fatal analysis error", func() {
+				BeforeEach(func() {
+					innerErrors = append(innerErrors, analysisErrorFatal)
+				})
+
+				AssertInnerStdErrPresent()
+				AssertFatal()
+			})
+
+			When("inner errors contain a non-fatal analysis error", func() {
+				BeforeEach(func() {
+					innerErrors = append(innerErrors, analysisErrorNonFatal)
+				})
+
+				AssertInnerStdErrPresent()
+				AssertNonFatal()
+
+				When("inner errors contain a nested fatal analysis error", func() {
+					BeforeEach(func() {
+						innerErrors = append(innerErrors, analysisErrorNestedFatal)
+					})
+
+					AssertInnerStdErrPresent()
+					AssertFatal()
 				})
 			})
 		})

@@ -389,6 +389,13 @@ var _ = Describe("ReleaseAnalysis", func() {
 			AssertAnalysisReleaseLabelsEqual()
 		})
 
+		When("unsupported object is used as template", func() {
+			JustBeforeEach(func() {
+				template = &obj
+			})
+			AssertAnalysisRunError()
+		})
+
 		When("pre-deploy timestamp arg is requested", func() {
 			BeforeEach(func() {
 				analysisTemplate.Spec.Args = append(analysisTemplate.Spec.Args, analysisv1alpha1.Argument{

@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-type CullingConfigTestCase struct {
+type cullConfigTestCase struct {
 	namespaceName    string
 	namespace        *corev1.Namespace
 	expectedMax      int
@@ -30,8 +30,8 @@ var _ = Describe("Release controller unit tests", func() {
 	ctx := context.Background()
 	logger := logr.Discard()
 
-	DescribeTable("getCullingConfiguration",
-		func(tc CullingConfigTestCase) {
+	DescribeTable("cullConfig",
+		func(tc cullConfigTestCase) {
 			scheme := runtime.NewScheme()
 			Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
 
@@ -42,7 +42,7 @@ var _ = Describe("Release controller unit tests", func() {
 			c := builder.Build()
 
 			r := &ReleaseReconciler{Client: c}
-			maxReleasesPerTarget, cullingStrategy, err := r.getCullingConfiguration(ctx, logger, tc.namespaceName)
+			maxReleasesPerTarget, cullingStrategy, err := r.cullConfig(ctx, logger, tc.namespaceName)
 
 			if tc.expectErr {
 				Expect(err).To(HaveOccurred())
@@ -52,13 +52,13 @@ var _ = Describe("Release controller unit tests", func() {
 			Expect(maxReleasesPerTarget).To(Equal(tc.expectedMax))
 			Expect(cullingStrategy).To(Equal(tc.expectedStrategy))
 		},
-		Entry("defaults", CullingConfigTestCase{
+		Entry("defaults", cullConfigTestCase{
 			namespaceName:    "test-ns",
 			namespace:        createNewNamespace("test-ns", nil),
 			expectedMax:      DefaultMaxReleaseCount,
 			expectedStrategy: DefaultCullingStrategy,
 		}),
-		Entry("max releases valid", CullingConfigTestCase{
+		Entry("max releases valid", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyMaxReleasesPerTarget: "5",
@@ -66,7 +66,7 @@ var _ = Describe("Release controller unit tests", func() {
 			expectedMax:      5,
 			expectedStrategy: DefaultCullingStrategy,
 		}),
-		Entry("max releases invalid", CullingConfigTestCase{
+		Entry("max releases invalid", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyMaxReleasesPerTarget: "not-an-int",
@@ -74,7 +74,7 @@ var _ = Describe("Release controller unit tests", func() {
 			expectedMax:      DefaultMaxReleaseCount,
 			expectedStrategy: DefaultCullingStrategy,
 		}),
-		Entry("strategy end-time", CullingConfigTestCase{
+		Entry("strategy end-time", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyCullingStrategy: deployv1alpha1.AnnotationValueCullingStrategyEndTime,
@@ -82,7 +82,7 @@ var _ = Describe("Release controller unit tests", func() {
 			expectedMax:      DefaultMaxReleaseCount,
 			expectedStrategy: deployv1alpha1.AnnotationValueCullingStrategyEndTime,
 		}),
-		Entry("strategy signature", CullingConfigTestCase{
+		Entry("strategy signature", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyCullingStrategy: deployv1alpha1.AnnotationValueCullingStrategySignature,
@@ -90,7 +90,7 @@ var _ = Describe("Release controller unit tests", func() {
 			expectedMax:      DefaultMaxReleaseCount,
 			expectedStrategy: deployv1alpha1.AnnotationValueCullingStrategySignature,
 		}),
-		Entry("strategy invalid", CullingConfigTestCase{
+		Entry("strategy invalid", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyCullingStrategy: "banana",
@@ -98,7 +98,7 @@ var _ = Describe("Release controller unit tests", func() {
 			expectedMax:      DefaultMaxReleaseCount,
 			expectedStrategy: DefaultCullingStrategy,
 		}),
-		Entry("namespace missing", CullingConfigTestCase{
+		Entry("namespace missing", cullConfigTestCase{
 			namespaceName: "does-not-exist",
 			namespace:     nil,
 			expectErr:     true,

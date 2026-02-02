@@ -177,7 +177,7 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 	}
 }
 
-func (r *ReleaseReconciler) getCullingConfiguration(ctx context.Context, logger logr.Logger, namespace string) (maxReleasesPerTarget int, cullingStrategy string, err error) {
+func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, namespace string) (maxReleasesPerTarget int, cullingStrategy string, err error) {
 	maxReleasesPerTarget = DefaultMaxReleaseCount
 	cullingStrategy = DefaultCullingStrategy
 
@@ -217,7 +217,7 @@ func (r *ReleaseReconciler) getCullingConfiguration(ctx context.Context, logger 
 // signatures, and only then delete releases based on effective time (deployment
 // end time if set, otherwise creation time).
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	maxReleasesPerTarget, cullingStrategy, err := r.getCullingConfiguration(ctx, logger, namespace)
+	maxReleasesPerTarget, cullingStrategy, err := r.cullConfig(ctx, logger, namespace)
 	if err != nil {
 		return err
 	}

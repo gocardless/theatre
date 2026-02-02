@@ -1,10 +1,13 @@
 package cicd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/jsonpath"
 )
 
 // DeploymentRequest represents a request to trigger a deployment via a CICD system.
@@ -130,4 +133,32 @@ func (n *NoopDeployer) GetDeploymentStatus(ctx context.Context, deploymentID str
 
 func (n *NoopDeployer) Name() string {
 	return "noop"
+}
+
+// ParseDeploymentOptions parses deployment options (currently Rollback spec deploymentOptions)
+// using jsonpath. Any non-jsonpath values are left unchanged.
+// E.g. "revision": "{.config.revisions[?(@.name==\"infrastructure\")].id}" -> "revision": "abc123"
+// "skip_queue": "true" -> "skip_queue": "true"
+func ParseDeploymentOptions(options map[string]string, object runtime.Object) (map[string]string, error) {
+	for k, v := range options {
+		parser := jsonpath.New(fmt.Sprintf("rollback_deployment_options_%s", k))
+		parser.AllowMissingKeys(true)
+		err := parser.Parse(v)
+		if err != nil {
+			continue
+		}
+
+		buf := new(bytes.Buffer)
+		fmt.Println("new parser for", k, v)
+
+		err = parser.Execute(buf, object)
+		if err != nil {
+			fmt.Println("err", err)
+			continue
+		}
+		out := buf.String()
+		options[k] = out
+	}
+
+	return options, nil
 }

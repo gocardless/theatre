@@ -188,6 +188,35 @@ var _ = Describe("GitHub Deployer", func() {
 			})
 		})
 
+		Context("with no deployment_revision_name option set", func() {
+			BeforeEach(func() {
+				delete(req.Options, DeploymentRevisionNameKey)
+				req.ToRelease.ReleaseConfig.Revisions = []deployv1alpha1.Revision{
+					{
+						Name:   "commit",
+						Type:   "github",
+						Source: "gocardless/my-service",
+						ID:     "abc123def",
+					},
+				}
+			})
+
+			JustBeforeEach(func() {
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("missing %s option", DeploymentRevisionNameKey))
+			})
+
+			It("is not retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeFalse())
+			})
+		})
+
 		Context("with no github revision", func() {
 			BeforeEach(func() {
 				req.Options[DeploymentRevisionNameKey] = "commit"

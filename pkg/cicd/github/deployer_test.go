@@ -87,6 +87,9 @@ var _ = Describe("GitHub Deployer", func() {
 						},
 					},
 				},
+				Options: map[string]string{
+					DeploymentRevisionNameKey: "commit",
+				},
 			}
 		})
 
@@ -142,9 +145,10 @@ var _ = Describe("GitHub Deployer", func() {
 
 				BeforeEach(func() {
 					req.Options = map[string]string{
-						"environment": "staging",
-						"key_1":       "value_1",
-						"key_2":       "value_2",
+						DeploymentRevisionNameKey: "commit",
+						"environment":             "staging",
+						"key_1":                   "value_1",
+						"key_2":                   "value_2",
 					}
 
 					createDeploymentMatcher = func(req *http.Request, _ *gock.Request) (bool, error) {
@@ -186,6 +190,7 @@ var _ = Describe("GitHub Deployer", func() {
 
 		Context("with no github revision", func() {
 			BeforeEach(func() {
+				req.Options[DeploymentRevisionNameKey] = "commit"
 				req.ToRelease.ReleaseConfig.Revisions = []deployv1alpha1.Revision{
 					{
 						Name:   "image",
@@ -202,7 +207,7 @@ var _ = Describe("GitHub Deployer", func() {
 
 			It("returns an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("no revision with type 'github' found"))
+				Expect(err.Error()).To(ContainSubstring("no github revision found with name \"commit\""))
 			})
 
 			It("is not retryable", func() {
@@ -499,28 +504,28 @@ var _ = Describe("GitHub Deployer", func() {
 			_, err := deployer.findGitHubRevision(revisions, "")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("multiple github revisions found"))
-			Expect(err.Error()).To(ContainSubstring("repository"))
+			Expect(err.Error()).To(ContainSubstring("revisionName"))
 		})
 
 		It("finds matching revision when repository option is provided", func() {
 			revisions := []deployv1alpha1.Revision{
-				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
-				{Type: "github", Source: "gocardless/app2", ID: "def456"},
+				{Type: "github", Name: "app1", Source: "gocardless/app1", ID: "abc123"},
+				{Type: "github", Name: "app2", Source: "gocardless/app2", ID: "def456"},
 			}
 
-			rev, err := deployer.findGitHubRevision(revisions, "gocardless/app2")
+			rev, err := deployer.findGitHubRevision(revisions, "app2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rev.ID).To(Equal("def456"))
 		})
 
 		It("returns error when repository option doesn't match any revision", func() {
 			revisions := []deployv1alpha1.Revision{
-				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
+				{Type: "github", Name: "app1", Source: "gocardless/app1", ID: "abc123"},
 			}
 
-			_, err := deployer.findGitHubRevision(revisions, "gocardless/other")
+			_, err := deployer.findGitHubRevision(revisions, "other")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no github revision found with source"))
+			Expect(err.Error()).To(ContainSubstring("no github revision found with name"))
 		})
 	})
 })

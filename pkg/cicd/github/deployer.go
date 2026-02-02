@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	DeploymentRevisionNameKey  = "deployment_revision_name"
-	InfrastructureRevisionName = "infrastructure_revision_name"
+	DeploymentRevisionNameKey     = "deployment_revision_name"
+	InfrastructureRevisionNameKey = "infrastructure_revision_name"
 )
 
 // Deployer implements cicd.Deployer using the GitHub Deployments API.
@@ -188,7 +188,7 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface
 
 	// The error here is intentionally not handled, as we might decide that
 	// we don't need to fail the deployment if the infrastructure revision is not found.
-	infrastructureRevision, _ := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options[InfrastructureRevisionName])
+	infrastructureRevision, _ := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options[InfrastructureRevisionNameKey])
 	if infrastructureRevision != nil && infrastructureRevision.ID != "" {
 		payload["target_revision"] = infrastructureRevision.ID
 	}

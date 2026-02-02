@@ -138,7 +138,7 @@ func (n *NoopDeployer) Name() string {
 // ParseDeploymentOptions parses deployment options (currently Rollback spec deploymentOptions)
 // using jsonpath. Any non-jsonpath values are left unchanged.
 // E.g. "revision": "{.config.revisions[?(@.name==\"infrastructure\")].id}" -> "revision": "abc123"
-// "skip_queue": "true" -> "skip_queue": "true"
+// "skip_queue": "true" -> "skip_queue": "true "
 func ParseDeploymentOptions(options map[string]string, object runtime.Object) (map[string]string, error) {
 	for k, v := range options {
 		parser := jsonpath.New(fmt.Sprintf("rollback_deployment_options_%s", k))
@@ -149,11 +149,8 @@ func ParseDeploymentOptions(options map[string]string, object runtime.Object) (m
 		}
 
 		buf := new(bytes.Buffer)
-		fmt.Println("new parser for", k, v)
-
 		err = parser.Execute(buf, object)
 		if err != nil {
-			fmt.Println("err", err)
 			continue
 		}
 		out := buf.String()

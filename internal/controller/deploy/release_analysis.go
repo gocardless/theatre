@@ -49,25 +49,25 @@ func (e AnalysisReconcileJoinedError) Unwrap() []error {
 // with the specified message and inner errors. If any of the inner errors
 // are of the same type and fatal, the returned error is also fatal. Otherwise,
 // the value provided in `fatal` is used.
-func newAnalysisReconcileJoinedError(message string, fatal bool, innerErr ...error) AnalysisReconcileJoinedError {
+func newAnalysisReconcileJoinedError(message string, fatal bool, innerErr ...error) *AnalysisReconcileJoinedError {
 	ret := AnalysisReconcileJoinedError{
 		message: message,
 		fatal:   fatal,
 		inner:   innerErr,
 	}
 	if fatal {
-		return ret
+		return &ret
 	}
 
 	// if any of contained errors are fatal, consider the whole error fatal
 	for _, e := range innerErr {
-		var errToTest AnalysisReconcileJoinedError
+		var errToTest *AnalysisReconcileJoinedError
 		if errors.As(e, &errToTest) && errToTest.fatal {
 			ret.fatal = errToTest.fatal
-			return ret
+			return &ret
 		}
 	}
-	return ret
+	return &ret
 }
 
 func (r *ReleaseReconciler) ReconcileAnalysis(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) error {
@@ -321,9 +321,8 @@ func concatTemplateLists(list []runtime.Object) ([]runtime.Object, error) {
 				ret[counter] = &v
 				counter++
 			}
-		} else {
-			return nil, errors.New("object is not an AnalysisTemplateList or ClusterAnalysisTemplateList")
 		}
+		// default condition not needed - type assertion already done during counting
 	}
 	return ret, nil
 }

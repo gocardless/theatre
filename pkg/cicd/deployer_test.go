@@ -21,7 +21,7 @@ var _ = Describe("Deployer", func() {
 	It("should parse jsonpath values", func() {
 		options := map[string]string{
 			"revision": "{.config.revisions[?(@.name==\"infrastructure\")].id}",
-			"name":     " {.metadata.name}",
+			"name":     "{.metadata.name}",
 		}
 		release := deployv1alpha1.Release{
 			ObjectMeta: v1.ObjectMeta{
@@ -46,7 +46,7 @@ var _ = Describe("Deployer", func() {
 
 	It("should parse any empty values in the object as empty", func() {
 		options := map[string]string{
-			"name": " {.metadata.name}",
+			"name": "{.metadata.name}",
 		}
 		release := deployv1alpha1.Release{}
 

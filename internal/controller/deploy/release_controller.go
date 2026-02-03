@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -13,9 +13,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	"github.com/gocardless/theatre/v5/pkg/deploy"
 	"github.com/gocardless/theatre/v5/pkg/logging"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +29,7 @@ import (
 
 const (
 	DefaultCullingStrategy = deployv1alpha1.AnnotationValueCullingStrategyEndTime
-	DefaultMaxReleaseCount = 10
+	DefaultReleaseLimit    = 10
 
 	// Events
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
@@ -68,6 +71,34 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 				}
 				return []string{owner.Name}
 			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+	
+	err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		"config.targetName",
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{release.TargetName}
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&deployv1alpha1.Release{}).
+		Complete(
+			recutil.ResolveAndReconcile(
+				ctx, logger, mgr, &deployv1alpha1.Release{},
+				func(logger logr.Logger, request ctrl.Request, obj runtime.Object) (ctrl.Result, error) {
+					return r.Reconcile(ctx, logger, request, obj.(*deployv1alpha1.Release))
+				},
+			),
 		)
 		if err != nil {
 			return err
@@ -177,35 +208,35 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 	}
 }
 
-func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, namespace string) (maxReleasesPerTarget int, cullingStrategy string, err error) {
-	maxReleasesPerTarget = DefaultMaxReleaseCount
-	cullingStrategy = DefaultCullingStrategy
+func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, namespace string) (limit int, strategy string, err error) {
+	limit = DefaultReleaseLimit
+	strategy = DefaultCullingStrategy
 
 	var namespaceObj corev1.Namespace
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: namespace}, &namespaceObj); err != nil {
 		return 0, "", err
 	}
 
-	if mpt, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyMaxReleasesPerTarget]; ok {
-		newMaxReleasesPerTarget, err := strconv.Atoi(mpt)
+	if mpt, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyReleaseLimit]; ok {
+		newLimit, err := strconv.Atoi(mpt)
 		if err != nil {
-			logger.Error(err, fmt.Sprintf("invalid max releases per target annotation value, defaulting to %d", DefaultMaxReleaseCount),
-				"annotation", deployv1alpha1.AnnotationKeyMaxReleasesPerTarget, "value", mpt)
+			logger.Error(err, fmt.Sprintf("invalid release limit annotation value, defaulting to %d", DefaultReleaseLimit),
+				"annotation", deployv1alpha1.AnnotationKeyReleaseLimit, "value", mpt)
 		} else {
-			maxReleasesPerTarget = newMaxReleasesPerTarget
+			limit = newLimit
 		}
 	}
 
 	if cs, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyCullingStrategy]; ok {
 		if cs == deployv1alpha1.AnnotationValueCullingStrategyEndTime || cs == deployv1alpha1.AnnotationValueCullingStrategySignature {
-			cullingStrategy = cs
+			strategy = cs
 		} else {
 			logger.Error(fmt.Errorf("unsupported culling strategy"), fmt.Sprintf("%s=%s is not a valid culling strategy, defaulting to %s", deployv1alpha1.AnnotationKeyCullingStrategy, cs, DefaultCullingStrategy),
 				"annotation", deployv1alpha1.AnnotationKeyCullingStrategy, "value", cs)
 		}
 	}
 
-	return maxReleasesPerTarget, cullingStrategy, nil
+	return limit, strategy, nil
 }
 
 // This function ensures that the number of inactive releases does not exceed
@@ -217,7 +248,7 @@ func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, 
 // signatures, and only then delete releases based on effective time (deployment
 // end time if set, otherwise creation time).
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	maxReleasesPerTarget, cullingStrategy, err := r.cullConfig(ctx, logger, namespace)
+	limit, strategy, err := r.cullConfig(ctx, logger, namespace)
 	if err != nil {
 		return err
 	}
@@ -228,57 +259,149 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return err
 	}
 
-	if len(releaseList.Items) < maxReleasesPerTarget {
-		// No culling needed
+	if len(releaseList.Items) <= limit {
+		logger.Info("number of releases is within limit, skipping", "current", len(releaseList.Items), "limit", limit)
 		return nil
 	}
 
 	inactiveReleases := []deployv1alpha1.Release{}
 	for _, release := range releaseList.Items {
-		if !release.IsConditionActiveTrue() {
+		// We want to cull releases that are initialised but not active
+		if release.IsStatusInitialised() && !release.IsConditionActiveTrue() {
 			inactiveReleases = append(inactiveReleases, release)
 		}
 	}
 
-	logger.Info("found inactive releases", "count", len(releaseList.Items))
-	// excessReleaseCount is (active releases + inactive releases) - max releases
-	excessCount := len(releaseList.Items) - maxReleasesPerTarget
-
-	signatureOccurrences := make(map[string]int)
 	cullingCandidates := make([]deployv1alpha1.Release, 0)
-
-	if cullingStrategy == deployv1alpha1.AnnotationValueCullingStrategySignature {
-		for _, release := range inactiveReleases {
-			signatureOccurrences[release.Status.Signature]++
-		}
-
-		for _, release := range inactiveReleases {
-			if signatureOccurrences[release.Status.Signature] > 1 {
-				cullingCandidates = append(cullingCandidates, release)
-			}
-		}
+	if strategy == deployv1alpha1.AnnotationValueCullingStrategySignature {
+		cullingCandidates = releasesWithRepeatingSignatures(inactiveReleases)
 	}
 
+	// Regardless of the strategy, if no candidates were found, fall back to all inactive releases
 	if len(cullingCandidates) == 0 {
 		cullingCandidates = append(cullingCandidates, inactiveReleases...)
 	}
 
-	sort.Slice(cullingCandidates, func(i, j int) bool {
+	slices.SortFunc(cullingCandidates, func(a, b deployv1alpha1.Release) int {
 		// Oldest first (oldest at index 0, newest at the end)
-		return cullingCandidates[i].GetEffectiveTime().Before(cullingCandidates[j].GetEffectiveTime())
+		return a.GetEffectiveTime().Compare(b.GetEffectiveTime())
 	})
 
 	// trim releases to the configured maximum
-	releasesToDelete := cullingCandidates[:excessCount]
+	excessCount := len(releaseList.Items) - limit
+	if excessCount > len(cullingCandidates) {
+		logger.Info("not enough culling candidates to meet limit", "current", len(releaseList.Items), "limit", limit, "candidates", len(cullingCandidates))
+		return nil
+	}
 
-	for _, releaseToDelete := range releasesToDelete {
+	excessReleases := cullingCandidates[:excessCount]
+	logger.Info("acquiring culling lease", "target", target, "limit", limit, "strategy", strategy, "excessCount", excessCount)
+	acquired, err := r.acquireCullingLease(ctx, logger, namespace, target)
+	if err != nil {
+		return err
+	}
+
+	if !acquired {
+		logger.Info("culling lease not acquired, skipping culling", "target", target)
+		return nil
+	}
+
+	for _, releaseToDelete := range excessReleases {
+		logger.Info("deleting release", "name", releaseToDelete.Name)
 		err := r.Delete(ctx, &releaseToDelete)
 		if err != nil {
-			logger.Error(err, "failed to delete release", "release", releaseToDelete.Name)
+			logger.Error(err, "failed to delete release", "name", releaseToDelete.Name)
 			return err
 		}
 	}
 
-	logger.Info("deleted excess releases", "count", len(releasesToDelete))
+	logger.Info("deleted excess releases", "count", len(excessReleases))
 	return nil
+}
+
+// acquireCullingLease attempts to acquire a Lease for the given namespace/target.
+// Returns true if the lease was acquired (caller should proceed with culling),
+// false if another reconcile holds the lease (caller should skip culling).
+func (r *ReleaseReconciler) acquireCullingLease(ctx context.Context, logger logr.Logger, namespace, target string) (bool, error) {
+	leaseName := cullingLeaseName(target)
+	now := metav1.NowMicro()
+	leaseDuration := int32(5) // seconds
+	holderID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	lease := &coordinationv1.Lease{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: leaseName}, lease)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, err
+		}
+		// Lease doesn't exist, create it
+		lease = &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      leaseName,
+				Namespace: namespace,
+			},
+			Spec: coordinationv1.LeaseSpec{
+				HolderIdentity:       &holderID,
+				AcquireTime:          &now,
+				RenewTime:            &now,
+				LeaseDurationSeconds: &leaseDuration,
+			},
+		}
+		if err := r.Create(ctx, lease); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				// Another reconcile just created it, skip
+				return false, nil
+			}
+			return false, err
+		}
+		logger.Info("acquired culling lease", "lease", leaseName)
+		return true, nil
+	}
+
+	// Lease exists, check if it's expired
+	if lease.Spec.RenewTime != nil && lease.Spec.LeaseDurationSeconds != nil {
+		expiry := lease.Spec.RenewTime.Time.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
+		if time.Now().Before(expiry) {
+			// Lease is still valid, skip culling
+			return false, nil
+		}
+	}
+
+	// Lease is expired, try to take it over
+	lease.Spec.HolderIdentity = &holderID
+	lease.Spec.AcquireTime = &now
+	lease.Spec.RenewTime = &now
+	lease.Spec.LeaseDurationSeconds = &leaseDuration
+	if err := r.Update(ctx, lease); err != nil {
+		if apierrors.IsConflict(err) {
+			// Another reconcile updated it first, skip
+			return false, nil
+		}
+		return false, err
+	}
+
+	logger.Info("acquired expired culling lease", "lease", leaseName)
+	return true, nil
+}
+
+func cullingLeaseName(target string) string {
+	hash := deploy.HashString([]byte(target))
+	return fmt.Sprintf("theatre-release-cull-%s", hash)
+}
+
+func releasesWithRepeatingSignatures(releases []deployv1alpha1.Release) []deployv1alpha1.Release {
+	signatureOccurrences := make(map[string]int)
+	cullingCandidates := make([]deployv1alpha1.Release, 0)
+
+	for _, release := range releases {
+		signatureOccurrences[release.Status.Signature]++
+	}
+
+	for _, release := range releases {
+		if signatureOccurrences[release.Status.Signature] > 1 {
+			cullingCandidates = append(cullingCandidates, release)
+		}
+	}
+
+	return cullingCandidates
 }

@@ -54,7 +54,7 @@ func validateRevisions(revisions []deployv1alpha1.Revision) error {
 	return nil
 }
 
-func hashString(b []byte) string {
+func HashString(b []byte) string {
 	hash := sha256.Sum256(b)
 	return fmt.Sprintf("%x", hash)[:7]
 }
@@ -74,7 +74,7 @@ func GenerateReleaseName(release deployv1alpha1.Release) (string, error) {
 		return "", err
 	}
 
-	releaseHash := hashString(release.Serialise())
+	releaseHash := HashString(release.Serialise())
 
 	return fmt.Sprintf("%s-%s", targetName, releaseHash), nil
 }

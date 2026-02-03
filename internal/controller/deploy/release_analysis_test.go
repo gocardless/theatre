@@ -49,6 +49,9 @@ var _ = Describe("ReleaseAnalysis", func() {
 	Describe("generateSelectors", func() {
 		var (
 			expectedSelectors map[string]labels.Selector
+
+			returnedClusterSelectors    []labels.Selector
+			returnedNamespacedSelectors []labels.Selector
 		)
 
 		selectorKeyGlobal := "global"
@@ -62,45 +65,37 @@ var _ = Describe("ReleaseAnalysis", func() {
 			}
 		})
 
+		JustBeforeEach(func() {
+			returnedNamespacedSelectors, returnedClusterSelectors = generateSelectors(&obj, logr.Discard())
+		})
+
 		AssertGlobalSelectorPresent := func() {
 			It("generates a global selector for cluster resource, but not namespaced resource", func() {
-				namespacedSelectors, clusterSelectors := generateSelectors(&obj, logr.Discard())
-				Expect(clusterSelectors).To(ContainElement(expectedSelectors[selectorKeyGlobal]))
-				Expect(namespacedSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
+				Expect(returnedClusterSelectors).To(ContainElement(expectedSelectors[selectorKeyGlobal]))
+				Expect(returnedNamespacedSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
 			})
 		}
 
 		AssertGlobalSelectorAbsent := func() {
 			It("does not generate a global selector for any resource", func() {
-				namespacedSelectors, clusterSelectors := generateSelectors(&obj, logr.Discard())
-				Expect(clusterSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
-				Expect(namespacedSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
+				Expect(returnedClusterSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
+				Expect(returnedNamespacedSelectors).ToNot(ContainElement(expectedSelectors[selectorKeyGlobal]))
 			})
 		}
 
 		AssertSelector := func(key string) {
 			It(fmt.Sprintf("generates %s selector for namespaced and cluster resources", key), func() {
-				namespacedSelectors, clusterSelectors := generateSelectors(&obj, logr.Discard())
-				Expect(clusterSelectors).To(ContainElement(expectedSelectors[key]))
-				Expect(namespacedSelectors).To(ContainElement(expectedSelectors[key]))
+				Expect(returnedClusterSelectors).To(ContainElement(expectedSelectors[key]))
+				Expect(returnedNamespacedSelectors).To(ContainElement(expectedSelectors[key]))
 			})
 		}
 
 		AssertSelectorNamespacedOnly := func(key string) {
 			It(fmt.Sprintf("generates %s selector for namespaced resource only", key), func() {
-				namespacedSelectors, clusterSelectors := generateSelectors(&obj, logr.Discard())
-				Expect(clusterSelectors).ToNot(ContainElement(expectedSelectors[key]))
-				Expect(namespacedSelectors).To(ContainElement(expectedSelectors[key]))
+				Expect(returnedClusterSelectors).ToNot(ContainElement(expectedSelectors[key]))
+				Expect(returnedNamespacedSelectors).To(ContainElement(expectedSelectors[key]))
 			})
 		}
-
-		// AssertSelectorClusterOnly := func(selector labels.Selector) {
-		// 	It("generates a custom selector for namespaced and cluster resource", func() {
-		// 		namespacedSelectors, clusterSelectors := generateSelectors(&obj)
-		// 		Expect(clusterSelectors).To(ContainElement(selector))
-		// 		Expect(namespacedSelectors).ToNot(ContainElement(selector))
-		// 	})
-		// }
 
 		AssertGlobalSelectorPresent()
 		AssertSelectorNamespacedOnly(selectorKeyRelease)
@@ -166,6 +161,8 @@ var _ = Describe("ReleaseAnalysis", func() {
 	Describe("splitHealthRollback", func() {
 		var (
 			analysisList analysisv1alpha1.AnalysisRunList
+
+			healthResult, rollbackResult []analysisv1alpha1.AnalysisRun
 		)
 
 		BeforeEach(func() {
@@ -174,17 +171,19 @@ var _ = Describe("ReleaseAnalysis", func() {
 			}
 		})
 
+		JustBeforeEach(func() {
+			healthResult, rollbackResult = splitHealthRollback(analysisList)
+		})
+
 		AssertHealthEmpty := func() {
 			It("returns empty health list", func() {
-				health, _ := splitHealthRollback(analysisList)
-				Expect(health).To(BeEmpty())
+				Expect(healthResult).To(BeEmpty())
 			})
 		}
 
 		AssertRollbackEmpty := func() {
 			It("returns empty rollback list", func() {
-				_, rollback := splitHealthRollback(analysisList)
-				Expect(rollback).To(BeEmpty())
+				Expect(rollbackResult).To(BeEmpty())
 			})
 		}
 
@@ -196,9 +195,8 @@ var _ = Describe("ReleaseAnalysis", func() {
 
 			AssertHealthReturned := func() {
 				It("contains health analysis only in health list", func() {
-					health, rollback := splitHealthRollback(analysisList)
-					Expect(health).To(ContainElement(healthAnalysis))
-					Expect(rollback).ToNot(ContainElement(healthAnalysis))
+					Expect(healthResult).To(ContainElement(healthAnalysis))
+					Expect(rollbackResult).ToNot(ContainElement(healthAnalysis))
 				})
 			}
 
@@ -214,9 +212,8 @@ var _ = Describe("ReleaseAnalysis", func() {
 
 				AssertRollbackReturned := func() {
 					It("contains rollback analysis only in rollback list", func() {
-						health, rollback := splitHealthRollback(analysisList)
-						Expect(health).ToNot(ContainElement(rollbackAnalysis))
-						Expect(rollback).To(ContainElement(rollbackAnalysis))
+						Expect(healthResult).ToNot(ContainElement(rollbackAnalysis))
+						Expect(rollbackResult).To(ContainElement(rollbackAnalysis))
 					})
 				}
 
@@ -315,6 +312,9 @@ var _ = Describe("ReleaseAnalysis", func() {
 			template                runtime.Object
 
 			selectCluster bool // if true, use clusterAnalysisTemplate, else use analysisTemplate
+
+			returnedAnalysisRun *analysisv1alpha1.AnalysisRun
+			err                 error
 		)
 
 		BeforeEach(func() {
@@ -329,26 +329,24 @@ var _ = Describe("ReleaseAnalysis", func() {
 			} else {
 				template = &analysisTemplate
 			}
+			returnedAnalysisRun, err = createAnalysisRun(&obj, template)
 		})
 
 		AssertAnalysisRunReturned := func() {
 			It("returns an analysis run", func() {
-				analysisRun, err := createAnalysisRun(&obj, template)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(analysisRun).ToNot(BeNil())
+				Expect(returnedAnalysisRun).ToNot(BeNil())
 			})
 		}
 
 		AssertAnalysisReleaseLabelsEqual := func() {
 			It("returns an analysis run with release labels", func() {
-				analysisRun, _ := createAnalysisRun(&obj, template)
-				Expect(analysisRun.GetLabels()).To(Equal(obj.GetLabels()))
+				Expect(returnedAnalysisRun.GetLabels()).To(Equal(obj.GetLabels()))
 			})
 		}
 
 		AssertAnalysisRunError := func() {
 			It("returns an error", func() {
-				_, err := createAnalysisRun(&obj, template)
 				Expect(err).To(HaveOccurred())
 			})
 		}
@@ -365,10 +363,12 @@ var _ = Describe("ReleaseAnalysis", func() {
 		})
 
 		When("unsupported object is used as template", func() {
-			JustBeforeEach(func() {
-				template = &obj
+			It("returns an error", func() {
+				// can not reuse AssertAnalysisRunError because JustBeforeEach in parent
+				// only uses template objects
+				_, invalidTypeErr := createAnalysisRun(&obj, &obj)
+				Expect(invalidTypeErr).To(HaveOccurred())
 			})
-			AssertAnalysisRunError()
 		})
 
 		When("pre-deploy timestamp arg is requested", func() {
@@ -380,8 +380,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 
 			AssertTimestampArg := func() {
 				It("sets the pre-deploy timestamp", func() {
-					analysisRun, _ := createAnalysisRun(&obj, template)
-					Expect(analysisRun.Spec.Args).To(ContainElement(And(
+					Expect(returnedAnalysisRun.Spec.Args).To(ContainElement(And(
 						HaveField("Name", Equal(AnalysisArgNameBeforeDeploymentTimestamp)),
 						HaveField("Value", HaveValue(Not(BeEmpty()))),
 					)))
@@ -404,8 +403,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 				AssertTimestampArg()
 
 				It("sets the argument to the corret value", func() {
-					analysisRun, _ := createAnalysisRun(&obj, template)
-					Expect(analysisRun.Spec.Args).To(ContainElement(And(
+					Expect(returnedAnalysisRun.Spec.Args).To(ContainElement(And(
 						HaveField("Name", Equal(AnalysisArgLabelPrefix+"service")),
 						HaveField("Value", HaveValue(Equal(obj.GetLabels()["service"]))),
 					)))
@@ -444,8 +442,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 				AssertTimestampArg()
 
 				It("returns the argument with the pre-set value unchanged", func() {
-					analysisRun, _ := createAnalysisRun(&obj, template)
-					Expect(analysisRun.Spec.Args).To(ContainElement(arg))
+					Expect(returnedAnalysisRun.Spec.Args).To(ContainElement(arg))
 				})
 			})
 
@@ -472,8 +469,7 @@ var _ = Describe("ReleaseAnalysis", func() {
 				AssertTimestampArg()
 
 				It("returns the argument with valueFrom unchanged", func() {
-					analysisRun, _ := createAnalysisRun(&obj, template)
-					Expect(analysisRun.Spec.Args).To(ContainElement(arg))
+					Expect(returnedAnalysisRun.Spec.Args).To(ContainElement(arg))
 				})
 			})
 		})

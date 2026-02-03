@@ -99,7 +99,7 @@ func GenerateAnalysisRunName(releaseName, templateName string) string {
 		return candidate
 	}
 
-	hash := hashString([]byte(releaseName + templateName))
+	hash := HashString([]byte(releaseName + templateName))
 
 	for i, v := range parts {
 		if len(v) > 27 {

@@ -19,7 +19,6 @@ import (
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -76,7 +75,7 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 			return err
 		}
 	}
-	
+
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
@@ -88,21 +87,6 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 	)
 	if err != nil {
 		return err
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&deployv1alpha1.Release{}).
-		Complete(
-			recutil.ResolveAndReconcile(
-				ctx, logger, mgr, &deployv1alpha1.Release{},
-				func(logger logr.Logger, request ctrl.Request, obj runtime.Object) (ctrl.Result, error) {
-					return r.Reconcile(ctx, logger, request, obj.(*deployv1alpha1.Release))
-				},
-			),
-		)
-		if err != nil {
-			return err
-		}
 	}
 
 	return ctrlBuilder.Complete(

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/alecthomas/kingpin"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
@@ -28,12 +29,17 @@ var (
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("false").Bool()
-	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
+	enableArgoRolloutsAnalysis = app.Flag("enable-argo-rollouts-analysis", "Enable health analysis for releases. Requires Argo Rollouts").Default("true").Bool()
+	commonOptions              = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
+
+	if *enableArgoRolloutsAnalysis {
+		utilruntime.Must(analysisv1alpha1.AddToScheme(scheme))
+	}
 }
 
 func main() {
@@ -61,9 +67,10 @@ func main() {
 	}
 
 	if err = (&releasecontroller.ReleaseReconciler{
-		Client: manager.GetClient(),
-		Scheme: scheme,
-		Log:    logger,
+		Client:          manager.GetClient(),
+		Scheme:          scheme,
+		Log:             logger,
+		AnalysisEnabled: *enableArgoRolloutsAnalysis,
 	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}

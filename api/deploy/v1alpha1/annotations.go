@@ -22,4 +22,12 @@ const (
 	// AnnotationKeyReleasePreviousRelease is an annotation that can be set on a Release
 	// to set `status.previousRelease.releaseRef`.
 	AnnotationKeyReleasePreviousRelease = AnnotationKeyBase + "/previous-release"
+
+	// AnnotationKeyReleaseAnalysisTemplateSelector is the name of the annotation
+	// containing optional analysis template selectors
+	AnnotationKeyReleaseAnalysisTemplateSelector = AnnotationKeyBase + "/analysis-selector"
+
+	// AnnotationKeyReleaseNoGlobalAnalysis is the name of the annotation
+	// to opt-out of using global analysis templates for the release
+	AnnotationKeyReleaseNoGlobalAnalysis = "no-global-analysis"
 )

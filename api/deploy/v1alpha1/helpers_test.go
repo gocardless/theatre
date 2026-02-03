@@ -79,7 +79,7 @@ var _ = Describe("Release Type Methods", func() {
 
 			release.InitialiseStatus("test message")
 
-			Expect(release.Status.Conditions).To(HaveLen(2))
+			Expect(release.Status.Conditions).To(ContainElement(HaveField("Type", ReleaseConditionActive)))
 		})
 
 		It("should set the message when initialised", func() {

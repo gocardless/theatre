@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gocardless/theatre/v5/pkg/recutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -17,12 +18,13 @@ const (
 )
 
 // Rollback helpers
+
 func (rollback *Rollback) IsCompleted() bool {
-	succeededCondition := meta.FindStatusCondition(rollback.Status.Conditions, RollbackConditionSucceded)
-	return succeededCondition != nil && succeededCondition.Status != metav1.ConditionUnknown
+	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceded})
 }
 
 // Release helpers
+
 func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {
 	return bytes.Equal(releaseConfig.Serialise(), other.Serialise())
 }
@@ -54,9 +56,15 @@ func (releaseConfig *ReleaseConfig) Serialise() []byte {
 }
 
 func (release *Release) IsStatusInitialised() bool {
-	return len(release.Status.Conditions) > 0 &&
-		meta.FindStatusCondition(release.Status.Conditions, ReleaseConditionActive) != nil &&
+	return meta.FindStatusCondition(release.Status.Conditions, ReleaseConditionActive) != nil &&
 		release.Status.Signature != ""
+}
+
+func (release *Release) IsAnalysisStatusKnown() bool {
+	return recutil.IsConditionStatusKnown(release.Status.Conditions, []string{
+		ReleaseConditionHealthy,
+		ReleaseConditionRollbackRequired,
+	})
 }
 
 func (release *Release) generateSignature() string {
@@ -71,7 +79,6 @@ func (release *Release) InitialiseStatus(message string) {
 	release.Status.Signature = release.generateSignature()[:SignatureLength]
 
 	release.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
-	release.setConditionHealthy(metav1.ConditionUnknown, ReasonInitialised, message)
 }
 
 func (release *Release) SetDeploymentStartTime(timestamp metav1.Time) {
@@ -99,15 +106,6 @@ func (release *Release) IsConditionActiveTrue() bool {
 func (release *Release) setConditionActive(status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
 		Type:    ReleaseConditionActive,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
-	})
-}
-
-func (release *Release) setConditionHealthy(status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
-		Type:    ReleaseConditionHealthy,
 		Status:  status,
 		Reason:  reason,
 		Message: message,

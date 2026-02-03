@@ -104,12 +104,12 @@ var _ = Describe("Helpers", func() {
 
 		It("Should generate consistent release names for the same input if sorted differently", func() {
 			// Create two releases with the same revisions but in different orders
-			release.ReleaseConfig.Revisions = append(release.ReleaseConfig.Revisions, deployv1alpha1.Revision{Name: "database", ID: "def456"})
+			release.Revisions = append(release.Revisions, deployv1alpha1.Revision{Name: "database", ID: "def456"})
 
 			release1 := release.DeepCopy()
 			release2 := release.DeepCopy()
 
-			release2.ReleaseConfig.Revisions[0], release2.ReleaseConfig.Revisions[1] = release2.ReleaseConfig.Revisions[1], release2.ReleaseConfig.Revisions[0]
+			release2.Revisions[0], release2.Revisions[1] = release2.Revisions[1], release2.Revisions[0]
 
 			name1, err1 := GenerateReleaseName(*release1)
 			name2, err2 := GenerateReleaseName(*release2)
@@ -120,16 +120,59 @@ var _ = Describe("Helpers", func() {
 		})
 
 		It("Should error when invalid a revision is provided", func() {
-			release.ReleaseConfig.Revisions = append(release.ReleaseConfig.Revisions, deployv1alpha1.Revision{Name: "", ID: ""})
+			release.Revisions = append(release.Revisions, deployv1alpha1.Revision{Name: "", ID: ""})
 			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should error when invalid targetName is provided", func() {
-			release.ReleaseConfig.TargetName = ""
+			release.TargetName = ""
 			_, err := GenerateReleaseName(release)
 			Expect(err).To(HaveOccurred())
 		})
 
+	})
+
+	Context("GenerateAnalysisRunName", func() {
+		DescribeTable("GenerateAnalysisRunName", func(releaseName, templateName, expected string) {
+			result := GenerateAnalysisRunName(releaseName, templateName)
+			Expect(len(result)).To(BeNumerically("<=", 64))
+
+			var releaseNameTrim string
+			var templateNameTrim string
+
+			if len(releaseName) > 27 {
+				releaseNameTrim = releaseName[:27]
+			} else {
+				releaseNameTrim = releaseName
+			}
+
+			if len(templateName) > 27 {
+				templateNameTrim = templateName[:27]
+			} else {
+				templateNameTrim = templateName
+			}
+
+			// we should always have AT LEAST the first 27 characters of each part.
+			Expect(result).To(HavePrefix(releaseNameTrim))
+			Expect(result).To(ContainSubstring(templateNameTrim))
+
+			// only check expected value if it is not empty.
+			// if names are truncated, we don't know what the hash will be
+			if expected != "" {
+				Expect(result).To(Equal(expected))
+			}
+		},
+			Entry("short names", "release", "template", "release-template"),
+			Entry("short names 2", "foo", "bar", "foo-bar"),
+			Entry("missing release name", "", "bar", "release-name-missing-bar"),
+			Entry("missing template name", "foo", "", "foo-template-name-missing"),
+			Entry("both names missing", "", "", "release-name-missing-template-name-missing"),
+			Entry("long but acceptable release name", "release-name-is-very-long-but-still-fits-in-the-maxx", "template12", "release-name-is-very-long-but-still-fits-in-the-maxx-template12"),
+			Entry("long but acceptable template name", "releasefoo", "template-name-is-very-long-but-still-fits-in-the-max", "releasefoo-template-name-is-very-long-but-still-fits-in-the-max"),
+			Entry("release name too long", "release-name-is-very-long-and-does-not-fit-in-the-max", "template12", ""),
+			Entry("template name too long", "releasefoo", "template-name-is-very-long-and-does-not-fit-in-the-max", ""),
+			Entry("both names too long", "release-name-is-very-long-too-longx", "template-name-is-very-long-too-long", ""),
+		)
 	})
 })

@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -260,4 +261,16 @@ func normaliseStatus(statusVal reflect.Value) interface{} {
 	}
 
 	return statusCopy.Interface()
+}
+
+// IsConditionStatusKnown returns true if all provided conditions are present and
+// have true or false, but not unknown, status
+func IsConditionStatusKnown(conditions []metav1.Condition, conditionTypes []string) bool {
+	for _, v := range conditionTypes {
+		cond := meta.FindStatusCondition(conditions, v)
+		if cond == nil || cond.Status == metav1.ConditionUnknown {
+			return false
+		}
+	}
+	return true
 }

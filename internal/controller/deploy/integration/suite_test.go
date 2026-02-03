@@ -187,7 +187,7 @@ func setupTestNamespace(ctx context.Context) string {
 	return ns
 }
 
-func generateRelease(target string, namespace string) *v1alpha1.Release {
+func generateRelease(namespace string, target string) *v1alpha1.Release {
 	appSHA := generateCommitSHA()
 	infraSHA := generateCommitSHA()
 	return &v1alpha1.Release{
@@ -205,8 +205,9 @@ func generateRelease(target string, namespace string) *v1alpha1.Release {
 	}
 }
 
-func createRelease(ctx context.Context, namespace string, target string) *v1alpha1.Release {
-	release := generateRelease(target, namespace)
+func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *v1alpha1.Release {
+	release := generateRelease(namespace, target)
+	release.Annotations = annotations
 	err := mgr.GetClient().Create(ctx, release)
 	Expect(err).NotTo(HaveOccurred())
 	return release

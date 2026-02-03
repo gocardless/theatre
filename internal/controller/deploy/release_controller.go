@@ -192,6 +192,8 @@ func (r *ReleaseReconciler) handleAnnotations(logger logr.Logger, release *deplo
 	}
 }
 
+// Parses namespace annotations to determine culling configuration
+// Returns the release limit and culling strategy, or defaults if annotations are invalid
 func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, namespace string) (limit int, strategy string, err error) {
 	limit = DefaultReleaseLimit
 	strategy = DefaultCullingStrategy

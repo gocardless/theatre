@@ -15,8 +15,8 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/logging"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/apis/core"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -181,7 +181,7 @@ func (r *ReleaseReconciler) getCullingConfiguration(ctx context.Context, logger 
 	maxReleasesPerTarget = DefaultMaxReleaseCount
 	cullingStrategy = DefaultCullingStrategy
 
-	var namespaceObj core.Namespace
+	var namespaceObj corev1.Namespace
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: namespace}, &namespaceObj); err != nil {
 		return 0, "", err
 	}

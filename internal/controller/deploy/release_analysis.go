@@ -24,7 +24,11 @@ import (
 )
 
 const (
-	AnalysisTimeBeforeDeployment             = time.Second * -5
+	// AnalysisPreDeploymentOffset is subtracted from DeploymentStartTime to ensure
+	// analysis queries capture metrics from slightly before the deployment began,
+	// accounting for clock drift between systems.
+	AnalysisPreDeploymentOffset = 5 * time.Second
+
 	AnalysisArgNameBeforeDeploymentTimestamp = "pre-release-timestamp"
 	AnalysisArgLabelPrefix                   = "label_"
 )
@@ -169,7 +173,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	release *deployv1alpha1.Release,
 	existingRuns []analysisv1alpha1.AnalysisRun,
 ) ([]*analysisv1alpha1.AnalysisRun, error) {
-	ret := []*analysisv1alpha1.AnalysisRun{}
+	var ret []*analysisv1alpha1.AnalysisRun
 
 	namespacedSelectors, clusterSelectors := generateSelectors(release, logger)
 	allAnalysisTemplateLists := []runtime.Object{}
@@ -248,8 +252,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 // resource can be included in both lists.
 func splitHealthRollback(analysisList analysisv1alpha1.AnalysisRunList) ([]analysisv1alpha1.AnalysisRun, []analysisv1alpha1.AnalysisRun) {
 
-	health := []analysisv1alpha1.AnalysisRun{}
-	rollback := []analysisv1alpha1.AnalysisRun{}
+	var health, rollback []analysisv1alpha1.AnalysisRun
 
 	for _, v := range analysisList.Items {
 		if metav1.HasLabel(v.ObjectMeta, "health") && v.Labels["health"] == "true" {
@@ -348,7 +351,7 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 
 		// special value to insert timestamp evaluation
 		if ret.Name == AnalysisArgNameBeforeDeploymentTimestamp {
-			unix := release.Status.DeploymentStartTime.Time.Add(AnalysisTimeBeforeDeployment).Unix()
+			unix := release.Status.DeploymentStartTime.Time.Add(-AnalysisPreDeploymentOffset).Unix()
 			unixStr := strconv.FormatInt(unix, 10)
 			ret.Value = &unixStr
 			ret.ValueFrom = nil
@@ -414,7 +417,7 @@ func generateSelectors(release *deployv1alpha1.Release, logger logr.Logger) ([]l
 	globalSelector := labels.SelectorFromValidatedSet(labels.Set{"global": "true"})
 
 	namespacedSelectors := []labels.Selector{releaseLabelsSelector}
-	clusterSelectors := []labels.Selector{}
+	var clusterSelectors []labels.Selector
 
 	if customTemplateSelector != nil {
 		namespacedSelectors = append(namespacedSelectors, customTemplateSelector)
@@ -515,7 +518,13 @@ func (c conditionGen) conditionFromResults(results map[analysisv1alpha1.Analysis
 		if numPendingOrRunning > 0 {
 			ret.Reason = deployv1alpha1.ReasonAnalysisInProgress
 			if numPendingOrRunning == 1 {
-				ret.Message = fmt.Sprintf("Awaiting results from AnalysisRun \"%s\"", results[analysisv1alpha1.AnalysisPhasePending][0])
+				var pendingName string
+				if len(results[analysisv1alpha1.AnalysisPhasePending]) > 0 {
+					pendingName = results[analysisv1alpha1.AnalysisPhasePending][0]
+				} else {
+					pendingName = results[analysisv1alpha1.AnalysisPhaseRunning][0]
+				}
+				ret.Message = fmt.Sprintf("Awaiting results from AnalysisRun \"%s\"", pendingName)
 			} else {
 				ret.Message = fmt.Sprintf("Awaiting results from %d out of %d AnalysisRuns", numPendingOrRunning, numTotal)
 			}

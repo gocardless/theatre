@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +26,7 @@ var _ = Describe("ReleaseController", func() {
 
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
-		defaultRelease = createRelease(ctx, testNamespace, "default-target")
+		defaultRelease = createRelease(ctx, testNamespace, "default-target", nil)
 		k8sClient = mgr.GetClient()
 	})
 
@@ -268,7 +271,7 @@ var _ = Describe("ReleaseController", func() {
 
 	Context("Reconcile", func() {
 		It("Should initialise status of new releases", func() {
-			release := createRelease(ctx, testNamespace, "test-target")
+			release := createRelease(ctx, testNamespace, "test-target", nil)
 
 			Eventually(func() bool {
 				fetchedRelease := &v1alpha1.Release{}
@@ -281,7 +284,175 @@ var _ = Describe("ReleaseController", func() {
 			}).Should(BeTrue())
 		})
 	})
+
+	Context("cullReleases", func() {
+		BeforeEach(func() {
+			// annotate namespace with max releases per target and culling strategy
+			namespace := &v1.Namespace{}
+			k8sClient.Get(ctx, client.ObjectKey{Name: testNamespace}, namespace)
+			namespace.Annotations = map[string]string{
+				v1alpha1.AnnotationKeyReleaseLimit:    "5",
+				v1alpha1.AnnotationKeyCullingStrategy: v1alpha1.AnnotationValueCullingStrategyEndTime,
+			}
+
+			Expect(k8sClient.Update(ctx, namespace)).To(Succeed())
+		})
+
+		It("should never delete active releases", func() {
+			targetName := generateTargetName()
+			annotations := map[string]string{
+				v1alpha1.AnnotationKeyReleaseActivate: v1alpha1.AnnotationValueReleaseActivateTrue,
+			}
+			generateReleases(ctx, testNamespace, targetName, annotations, 6)
+
+			// The number of releases should be 6
+			Eventually(func() int {
+				releases := &v1alpha1.ReleaseList{}
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))).To(Succeed())
+				return len(releases.Items)
+			}).Should(Equal(6))
+		})
+
+		Context("cull strategy - end time", func() {
+			It("should not delete releases that are not in the target", func() {
+				targetName := generateTargetName()
+				generateReleases(ctx, testNamespace, targetName, nil, 6)
+
+				otherTarget := generateTargetName()
+				generateReleases(ctx, testNamespace, otherTarget, nil, 3)
+
+				// The number of releases of the first target should be 5
+				Eventually(func() int {
+					releases := &v1alpha1.ReleaseList{}
+					Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))).To(Succeed())
+					return len(releases.Items)
+				}).Should(Equal(5))
+
+				// The number of releases in the other target should still be 3
+				Eventually(func() int {
+					releases := &v1alpha1.ReleaseList{}
+					Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": otherTarget}))).To(Succeed())
+					return len(releases.Items)
+				}).Should(Equal(3))
+			})
+
+			It("should not delete releases if there are less than or equal to the max", func() {
+				targetName := generateTargetName()
+				generateReleases(ctx, testNamespace, targetName, nil, 5)
+
+				Eventually(func() int {
+					releases := &v1alpha1.ReleaseList{}
+					Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))).To(Succeed())
+					return len(releases.Items)
+				}).Should(Equal(5))
+			})
+
+			It("should delete the oldest release (oldest end time) if there are more than the max", func() {
+				// Create 6 releases with different end times
+				targetName := generateTargetName()
+				releases := generateReleases(ctx, testNamespace, targetName, nil, 6)
+				oldestRelease := releases[0]
+
+				// The number of releases should be 5
+				Eventually(func() int {
+					releases := &v1alpha1.ReleaseList{}
+					Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))).To(Succeed())
+					return len(releases.Items)
+				}).Should(Equal(5))
+
+				// The oldest release (index 0) should be deleted
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: oldestRelease.Name, Namespace: testNamespace}, &v1alpha1.Release{})
+					return apierrors.IsNotFound(err)
+				}).Should(BeTrue())
+			})
+		})
+
+		Context("cull strategy - signature", func() {
+			BeforeEach(func() {
+				namespace := &v1.Namespace{}
+				k8sClient.Get(ctx, client.ObjectKey{Name: testNamespace}, namespace)
+				namespace.Annotations[v1alpha1.AnnotationKeyCullingStrategy] = v1alpha1.AnnotationValueCullingStrategySignature
+				Expect(k8sClient.Update(ctx, namespace)).To(Succeed())
+			})
+
+			It("should delete oldest release when there are multiple releases with the same signature", func() {
+				targetName := generateTargetName()
+				baseRelease := generateRelease(testNamespace, targetName)
+
+				var oldestRelease *v1alpha1.Release
+				// create 2 releases with the same signature
+				for i := 0; i < 2; i++ {
+					release := baseRelease.DeepCopy()
+					release.Annotations = map[string]string{
+						v1alpha1.AnnotationKeyReleaseDeploymentEndTime: time.Now().Add(time.Duration(i) * time.Hour).Format(time.RFC3339),
+					}
+					Expect(k8sClient.Create(ctx, release)).To(Succeed())
+					if i == 0 {
+						oldestRelease = release
+					}
+				}
+
+				// create 4 releases with unique signatures
+				generateReleases(ctx, testNamespace, targetName, nil, 4)
+
+				// verify that the oldest release with the same signature is deleted
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: oldestRelease.Name, Namespace: testNamespace}, &v1alpha1.Release{})
+					return apierrors.IsNotFound(err)
+				}).Should(BeTrue())
+
+				Eventually(func() int {
+					releaseList := &v1alpha1.ReleaseList{}
+					err := k8sClient.List(ctx, releaseList, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))
+					Expect(err).NotTo(HaveOccurred())
+					return len(releaseList.Items)
+				}).Should(Equal(5))
+			})
+
+			It("should delete the oldest release if there are not repeating signatures", func() {
+				targetName := generateTargetName()
+				releases := generateReleases(ctx, testNamespace, targetName, nil, 6)
+				oldestRelease := releases[0]
+
+				Eventually(func() int {
+					releaseList := &v1alpha1.ReleaseList{}
+					err := k8sClient.List(ctx, releaseList, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{"config.targetName": targetName}))
+					Expect(err).NotTo(HaveOccurred())
+					return len(releaseList.Items)
+				}).Should(Equal(5))
+
+				// verify that the oldest release is deleted
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: oldestRelease.Name, Namespace: testNamespace}, &v1alpha1.Release{})
+					return apierrors.IsNotFound(err)
+				}).Should(BeTrue())
+			})
+		})
+	})
 })
+
+// Creates and returns a slice of Release objects with the specified count
+// Each release has an end time annotation that is 1 hour apart
+func generateReleases(ctx context.Context, namespace, targetName string, extraAnnotations map[string]string, count int) []*v1alpha1.Release {
+	ret := make([]*v1alpha1.Release, 0, count)
+	for i := 0; i < count; i++ {
+		annotations := map[string]string{
+			v1alpha1.AnnotationKeyReleaseDeploymentEndTime: time.Now().Add(time.Duration(i) * time.Hour).Format(time.RFC3339),
+		}
+		for k, v := range extraAnnotations {
+			annotations[k] = v
+		}
+
+		release := createRelease(ctx, namespace, targetName, annotations)
+		ret = append(ret, release)
+	}
+	return ret
+}
+
+func generateTargetName() string {
+	return fmt.Sprintf("test-target-%d-%d", GinkgoParallelProcess(), namespaceCounter.Add(1))
+}
 
 func generateCommitSHA() string {
 	bytes := make([]byte, 20)

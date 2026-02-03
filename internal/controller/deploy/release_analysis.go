@@ -174,7 +174,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	namespacedSelectors, clusterSelectors := generateSelectors(release, logger)
 	allAnalysisTemplateLists := []runtime.Object{}
 
-	// collect non-fatal errors
+	// collect non-fatal errors, returned at the end of function
 	var collectedErr []error
 
 	for _, v := range namespacedSelectors {
@@ -182,8 +182,6 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 		err := r.List(ctx, &templateList, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: v})
 		if err != nil {
 			logger.Error(err, "failed to list AnalysisTemplates", "selector", v.String())
-			// TODO: we continue because we might still succeed listing other attempts
-			// but we might want to note that we hed an error, and schedule reconciliation
 			collectedErr = append(
 				collectedErr,
 				fmt.Errorf("failed to list AnalysisTemplates with selector '%s': %w", v.String(), err),
@@ -245,7 +243,7 @@ func (r *ReleaseReconciler) generateAnalysisRuns(
 	return ret, nil
 }
 
-// splitHealthRollback splits AnalysisRuns into separate lists of AnalysysRuns
+// splitHealthRollback splits AnalysisRuns into separate lists of AnalysisRuns
 // contributing to health or rollback status, based on their labels. The same
 // resource can be included in both lists.
 func splitHealthRollback(analysisList analysisv1alpha1.AnalysisRunList) ([]analysisv1alpha1.AnalysisRun, []analysisv1alpha1.AnalysisRun) {
@@ -381,8 +379,7 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploy.GenerateAnalysisRunName(release.Name, templateName),
 			Namespace: release.Namespace,
-			// TODO: should we merge release labels with template labels?
-			Labels: release.GetLabels(),
+			Labels:    release.GetLabels(),
 		},
 		Spec: analysisv1alpha1.AnalysisRunSpec{
 			Args:    args,
@@ -393,7 +390,15 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 	return run, nil
 }
 
-// generateSelectors generates the release selectors for AnalysisRun and ClusterAnalysisRun
+// generateSelectors generates analysis template selectors for the given release.
+// Returns two slices of selectors, based on their target resource type:
+// - for (namespaced) AnalysisTemplate resources
+// - for ClusterAnalysisTemplate resources
+//
+// Returns selectors:
+// - release labels (namespaced)
+// - "global: true" label (cluster) - can be disabled with Release annotation
+// - custom selector (namespaced and cluster) - parsed from Release annotation
 func generateSelectors(release *deployv1alpha1.Release, logger logr.Logger) ([]labels.Selector, []labels.Selector) {
 	useGlobal := true
 

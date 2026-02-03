@@ -32,7 +32,7 @@ const (
 	AnnotationKeyReleaseNoGlobalAnalysis = AnnotationKeyBase + "/no-global-analysis"
 	// AnnotationKeyMaxReleasesPerTarget is an annotation that can be set on a namespace
 	// to limit the number of releases per target.
-	AnnotationKeyMaxReleasesPerTarget = AnnotationKeyBase + "/max-releases-per-target"
+	AnnotationKeyReleaseLimit = AnnotationKeyBase + "/release-limit"
 
 	// AnnotationKeyCullingStrategy is an annotation that can be set on a namespace
 	// to specify the culling strategy to use.

@@ -83,8 +83,15 @@ func GenerateReleaseName(release deployv1alpha1.Release) (string, error) {
 // release name and template. If the result would be too long, parts are trimmed
 // to 27 characters and a hash is appended.
 // 27 char maximum is to ensure final name doesn't exceed 64 characters:
-// <release>-<template>-<hash>
+// <release(27)>-<template(27)>-<hash(7)>
 func GenerateAnalysisRunName(releaseName, templateName string) string {
+	if releaseName == "" {
+		releaseName = "release-name-missing"
+	}
+	if templateName == "" {
+		templateName = "template-name-missing"
+	}
+
 	parts := []string{releaseName, templateName}
 	candidate := strings.Join(parts, "-")
 

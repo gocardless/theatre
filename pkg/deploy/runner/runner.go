@@ -146,3 +146,12 @@ func (r *Runner) GetRelease(ctx context.Context, opts GetReleaseOptions) (*deplo
 	}
 	return &release, nil
 }
+
+func HasRevision(release deployv1alpha1.Release, revisionName string) bool {
+	for _, revision := range release.ReleaseConfig.Revisions {
+		if revision.Name == revisionName {
+			return true
+		}
+	}
+	return false
+}

@@ -372,6 +372,9 @@ var _ = Describe("ReleaseController", func() {
 			BeforeEach(func() {
 				namespace := &v1.Namespace{}
 				k8sClient.Get(ctx, client.ObjectKey{Name: testNamespace}, namespace)
+				if namespace.Annotations == nil {
+					namespace.Annotations = make(map[string]string)
+				}
 				namespace.Annotations[v1alpha1.AnnotationKeyCullingStrategy] = v1alpha1.AnnotationValueCullingStrategySignature
 				Expect(k8sClient.Update(ctx, namespace)).To(Succeed())
 			})

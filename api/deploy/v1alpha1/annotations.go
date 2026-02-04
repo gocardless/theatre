@@ -29,5 +29,5 @@ const (
 
 	// AnnotationKeyReleaseNoGlobalAnalysis is the name of the annotation
 	// to opt-out of using global analysis templates for the release
-	AnnotationKeyReleaseNoGlobalAnalysis = "no-global-analysis"
+	AnnotationKeyReleaseNoGlobalAnalysis = AnnotationKeyBase + "/no-global-analysis"
 )

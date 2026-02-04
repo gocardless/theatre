@@ -16,6 +16,8 @@ import (
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const namespace = "default"
+
 var _ = Describe("RollbackTargetWebhook", func() {
 	var (
 		ctx        context.Context
@@ -38,7 +40,20 @@ var _ = Describe("RollbackTargetWebhook", func() {
 
 	Context("when ToReleaseRef is already set", func() {
 		It("should allow the request without mutation", func() {
-			fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
+			// Seed a release matching the ToReleaseRef so validation passes
+			release := newRelease(
+				"my-release-v1",
+				false, // active
+				true,  // healthy
+				"",
+				nil,
+			)
+
+			fakeClient = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(release).
+				Build()
+
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
 				scheme,
@@ -48,7 +63,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			rollback := &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-rollback",
-					Namespace: "default",
+					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
 					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-release-v1"},
@@ -76,7 +91,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			rollback := &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-rollback",
-					Namespace: "default",
+					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
 					Reason: "Testing",
@@ -113,7 +128,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			rollback := &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-rollback",
-					Namespace: "default",
+					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
 					Reason: "Testing",
@@ -166,7 +181,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			rollback := &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-rollback",
-					Namespace: "default",
+					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
 					Reason: "Testing",
@@ -230,7 +245,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			rollback := &deployv1alpha1.Rollback{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-rollback",
-					Namespace: "default",
+					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
 					Reason: "Testing",
@@ -256,7 +271,8 @@ var _ = Describe("RollbackTargetWebhook", func() {
 
 func reqWithObj(obj runtime.Object) admission.Request {
 	return admission.Request{AdmissionRequest: v1.AdmissionRequest{
-		Object: objectToRaw(obj),
+		Namespace: namespace,
+		Object:    objectToRaw(obj),
 	}}
 }
 
@@ -299,7 +315,7 @@ func newRelease(
 	return &deployv1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: "default",
+			Namespace: namespace,
 		},
 		ReleaseConfig: deployv1alpha1.ReleaseConfig{
 			TargetName: "my-service",

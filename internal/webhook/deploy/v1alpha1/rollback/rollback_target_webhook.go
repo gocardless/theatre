@@ -3,10 +3,12 @@ package rollback
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -36,8 +38,15 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	// If ToReleaseRef is already set, no mutation needed
+	// If ToReleaseRef is already set, validate that the referenced Release exists
 	if rollback.Spec.ToReleaseRef != (deployv1alpha1.ReleaseReference{}) {
+		release := &deployv1alpha1.Release{}
+		if err := w.client.Get(ctx, client.ObjectKey{Name: rollback.Spec.ToReleaseRef.Name, Namespace: req.Namespace}, release); err != nil {
+			if apierrors.IsNotFound(err) {
+				return admission.Denied(fmt.Sprintf("ToReleaseRef %q not found", rollback.Spec.ToReleaseRef.Name))
+			}
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
 		return admission.Allowed("ToReleaseRef already set")
 	}
 

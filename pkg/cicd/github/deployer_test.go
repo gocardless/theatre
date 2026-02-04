@@ -525,7 +525,7 @@ var _ = Describe("GitHub Deployer", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("returns error when multiple github revisions exist without repository option", func() {
+		It("returns error when multiple github revisions exist without revisionName option", func() {
 			revisions := []deployv1alpha1.Revision{
 				{Type: "github", Source: "gocardless/app1", ID: "abc123"},
 				{Type: "github", Source: "gocardless/app2", ID: "def456"},
@@ -536,7 +536,7 @@ var _ = Describe("GitHub Deployer", func() {
 			Expect(err.Error()).To(ContainSubstring("revisionName"))
 		})
 
-		It("finds matching revision when repository option is provided", func() {
+		It("finds matching revision when revisionName option is provided", func() {
 			revisions := []deployv1alpha1.Revision{
 				{Type: "github", Name: "app1", Source: "gocardless/app1", ID: "abc123"},
 				{Type: "github", Name: "app2", Source: "gocardless/app2", ID: "def456"},
@@ -547,7 +547,7 @@ var _ = Describe("GitHub Deployer", func() {
 			Expect(rev.ID).To(Equal("def456"))
 		})
 
-		It("returns error when repository option doesn't match any revision", func() {
+		It("returns error when revisionName doesn't match any revision", func() {
 			revisions := []deployv1alpha1.Revision{
 				{Type: "github", Name: "app1", Source: "gocardless/app1", ID: "abc123"},
 			}

@@ -198,8 +198,9 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface
 }
 
 // findGitHubRevision finds the revision with Type="github".
-// If repository is specified, it matches the revision with that Source.
-// If no revisionName is specified and multiple github revisions exist, it returns an error.
+// If revisionName is specified, it returns the github revision with that name.
+// If no revisionName is specified and there is only one github revision it returns
+// it, otherwise if multiple github revisions exist it returns an error.
 func (d *Deployer) findGitHubRevision(revisions []deployv1alpha1.Revision, revisionName string) (*deployv1alpha1.Revision, error) {
 	// If revisionName option is specified, find the matching revision
 	if revisionName != "" {
@@ -211,7 +212,7 @@ func (d *Deployer) findGitHubRevision(revisions []deployv1alpha1.Revision, revis
 		return nil, fmt.Errorf("no github revision found with name %q", revisionName)
 	}
 
-	// No optionsKey specified - find all github revisions
+	// No revisionName specified - find all github revisions
 	var ghRevisions []*deployv1alpha1.Revision
 	for i := range revisions {
 		if revisions[i].Type == "github" {

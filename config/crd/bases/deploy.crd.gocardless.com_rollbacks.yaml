@@ -23,13 +23,15 @@ spec:
     - jsonPath: .spec.toReleaseRef.name
       name: To
       type: string
+    - jsonPath: .spec.initiatedBy
+      name: Initiator
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Succeeded")].status
+      name: Succeeded
+      type: string
     - jsonPath: .spec.reason
       name: Reason
-      priority: 1
       type: string
-    - jsonPath: .metadata.creationTimestamp
-      name: Age
-      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:

@@ -47,14 +47,15 @@ func (d *Deployer) Name() string {
 // "deployment_revision_name": "application". This is the name of the revision on which
 // the GitHub deployment will be created.
 func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentRequest) (*cicd.DeploymentResult, error) {
-	if _, ok := req.Options[DeploymentRevisionNameKey]; !ok {
+	revisionName, ok := req.Options[DeploymentRevisionNameKey].(string)
+	if !ok || revisionName == "" {
 		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false,
 			fmt.Errorf("missing %s option", DeploymentRevisionNameKey))
 	}
 
 	// Extract owner/repo from the github revision in the target release
 	// rename to deployment revision
-	deploymentRevision, err := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options[DeploymentRevisionNameKey])
+	deploymentRevision, err := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, revisionName)
 	if err != nil {
 		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false, err)
 	}
@@ -87,7 +88,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	}
 
 	// Set environment from Options if provided
-	if env, ok := req.Options["environment"]; ok && env != "" {
+	if env, ok := req.Options["environment"].(string); ok && env != "" {
 		deploymentReq.Environment = github.String(env)
 	}
 
@@ -188,10 +189,6 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface
 	// Merge user-provided options
 	for key, value := range req.Options {
 		payload[key] = value
-	}
-
-	if skipQueue, ok := req.Options["skip_queue"]; skipQueue != "" && ok {
-		payload["skip_queue"] = skipQueue == "true"
 	}
 
 	return payload

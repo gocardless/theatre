@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,7 +41,7 @@ type RollbackSpec struct {
 
 	// DeploymentOptions contains additional provider-specific options.
 	// +kubebuilder:validation:Optional
-	DeploymentOptions map[string]string `json:"deploymentOptions,omitempty"`
+	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
 }
 
 // ReleaseReference is a reference to a Release resource

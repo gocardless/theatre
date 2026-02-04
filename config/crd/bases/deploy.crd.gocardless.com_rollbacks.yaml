@@ -59,7 +59,7 @@ spec:
             properties:
               deploymentOptions:
                 additionalProperties:
-                  type: string
+                  x-kubernetes-preserve-unknown-fields: true
                 description: DeploymentOptions contains additional provider-specific
                   options.
                 type: object

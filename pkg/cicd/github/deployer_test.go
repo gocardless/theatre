@@ -87,7 +87,7 @@ var _ = Describe("GitHub Deployer", func() {
 						},
 					},
 				},
-				Options: map[string]string{
+				Options: map[string]interface{}{
 					DeploymentRevisionNameKey: "commit",
 				},
 			}
@@ -144,7 +144,7 @@ var _ = Describe("GitHub Deployer", func() {
 				)
 
 				BeforeEach(func() {
-					req.Options = map[string]string{
+					req.Options = map[string]interface{}{
 						DeploymentRevisionNameKey: "commit",
 						"environment":             "staging",
 						"key_1":                   "value_1",
@@ -219,7 +219,9 @@ var _ = Describe("GitHub Deployer", func() {
 
 		Context("with no github revision", func() {
 			BeforeEach(func() {
-				req.Options[DeploymentRevisionNameKey] = "commit"
+				req.Options = map[string]interface{}{
+					DeploymentRevisionNameKey: "commit",
+				}
 				req.ToRelease.ReleaseConfig.Revisions = []deployv1alpha1.Revision{
 					{
 						Name:   "image",

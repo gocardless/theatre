@@ -4,24 +4,28 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("Deployer", func() {
 	It("should skip non-jsonpath values", func() {
-		options := map[string]string{"skip_queue": "true"}
+		options := map[string]apiextv1.JSON{
+			"skip_queue": {Raw: []byte("true")},
+		}
 		release := deployv1alpha1.Release{}
 
-		ParseDeploymentOptions(options, &release)
-		Expect(options).To(Equal(map[string]string{
-			"skip_queue": "true",
+		parsed, err := ParseDeploymentOptions(options, &release)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(Equal(map[string]interface{}{
+			"skip_queue": true,
 		}))
 	})
 
 	It("should parse jsonpath values", func() {
-		options := map[string]string{
-			"revision": "{.config.revisions[?(@.name==\"infrastructure\")].id}",
-			"name":     "{.metadata.name}",
+		options := map[string]apiextv1.JSON{
+			"revision": {Raw: []byte("{.config.revisions[?(@.name==\"infrastructure\")].id}")},
+			"name":     {Raw: []byte("{.metadata.name}")},
 		}
 		release := deployv1alpha1.Release{
 			ObjectMeta: v1.ObjectMeta{
@@ -37,33 +41,36 @@ var _ = Describe("Deployer", func() {
 			},
 		}
 
-		ParseDeploymentOptions(options, &release)
-		Expect(options).To(Equal(map[string]string{
+		parsed, err := ParseDeploymentOptions(options, &release)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(Equal(map[string]interface{}{
 			"revision": "abc123",
 			"name":     "test-release",
 		}))
 	})
 
 	It("should parse any empty values in the object as empty", func() {
-		options := map[string]string{
-			"name": "{.metadata.name}",
+		options := map[string]apiextv1.JSON{
+			"name": {Raw: []byte("{.metadata.name}")},
 		}
 		release := deployv1alpha1.Release{}
 
-		ParseDeploymentOptions(options, &release)
-		Expect(options).To(Equal(map[string]string{
+		parsed, err := ParseDeploymentOptions(options, &release)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(Equal(map[string]interface{}{
 			"name": "",
 		}))
 	})
 
 	It("should ignore invalid deployment options", func() {
-		options := map[string]string{
-			"revision": "{.config.revisions[?(@.name==\"infrastructure\")].",
+		options := map[string]apiextv1.JSON{
+			"revision": {Raw: []byte("{.config.revisions[?(@.name==\"infrastructure\")].")},
 		}
 		release := deployv1alpha1.Release{}
 
-		ParseDeploymentOptions(options, &release)
-		Expect(options).To(Equal(map[string]string{
+		parsed, err := ParseDeploymentOptions(options, &release)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(Equal(map[string]interface{}{
 			"revision": "{.config.revisions[?(@.name==\"infrastructure\")].",
 		}))
 	})

@@ -5,6 +5,7 @@
 package v1alpha1
 
 import (
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -256,9 +257,9 @@ func (in *RollbackSpec) DeepCopyInto(out *RollbackSpec) {
 	out.InitiatedBy = in.InitiatedBy
 	if in.DeploymentOptions != nil {
 		in, out := &in.DeploymentOptions, &out.DeploymentOptions
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]apiextensionsv1.JSON, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }

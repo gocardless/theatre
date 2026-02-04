@@ -31,6 +31,7 @@ spec:
       type: string
     - jsonPath: .spec.reason
       name: Reason
+      priority: 10
       type: string
     name: v1alpha1
     schema:

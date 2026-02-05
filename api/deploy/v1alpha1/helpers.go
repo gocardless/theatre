@@ -174,6 +174,8 @@ func FindLastHealthyRelease(releaseList *ReleaseList) *Release {
 	}
 
 	return nil
+}
+
 // Returns the effective time of the release, which is the deployment end time,
 // if set, otherwise the creation time.
 func (r *Release) GetEffectiveTime() time.Time {

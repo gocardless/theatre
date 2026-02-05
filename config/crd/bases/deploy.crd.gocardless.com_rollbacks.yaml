@@ -70,14 +70,14 @@ spec:
                 description: InitiatedBy tracks who or what triggered the rollback
                   for audit purposes.
                 properties:
-                  system:
-                    description: |-
-                      System is the automated system that initiated the rollback, if applicable
-                      (e.g., "health-check-policy", "canary-analysis").
+                  principal:
+                    description: Principal is the identifier of the person or system
+                      who initiated the rollback
                     type: string
-                  user:
-                    description: User is the username or email of the person who initiated
-                      the rollback.
+                  type:
+                    description: |-
+                      Type indicates what type of principal initiated the rollback
+                      (e.g. "user", "system")
                     type: string
                 type: object
               reason:

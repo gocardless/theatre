@@ -170,16 +170,11 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 // buildPayload constructs the deployment payload from rollback metadata
 // and user-provided options.
 func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface{} {
-	creator := req.Rollback.Spec.InitiatedBy.System
-	if req.Rollback.Spec.InitiatedBy.User != "" {
-		creator = req.Rollback.Spec.InitiatedBy.User
-	}
-
 	payload := map[string]interface{}{
 		// Standard rollback fields
 		"version":       3,
 		"target":        req.ToRelease.ReleaseConfig.TargetName,
-		"creator":       creator,
+		"creator":       req.Rollback.Spec.InitiatedBy.Principal,
 		"is_rollback":   true,
 		"rollback_from": req.Rollback.Status.FromReleaseRef,
 		"rollback_to":   req.Rollback.Spec.ToReleaseRef,

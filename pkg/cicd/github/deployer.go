@@ -172,7 +172,6 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface{} {
 	payload := map[string]interface{}{
 		// Standard rollback fields
-		"version":       3,
 		"target":        req.ToRelease.ReleaseConfig.TargetName,
 		"creator":       req.Rollback.Spec.InitiatedBy.Principal,
 		"is_rollback":   true,

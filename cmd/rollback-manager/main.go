@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2"
 
 	rollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
+	rollbackwebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/rollback"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	ghdeployer "github.com/gocardless/theatre/v5/pkg/cicd/github"
 	"github.com/gocardless/theatre/v5/pkg/signals"
@@ -22,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -96,6 +98,11 @@ func main() {
 	if err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}
+
+	// Register mutating webhook to auto-set rollback target
+	manager.GetWebhookServer().Register("/mutate-rollbacks", &admission.Webhook{
+		Handler: rollbackwebhook.NewRollbackTargetWebhook(logger, manager.GetScheme(), manager.GetClient()),
+	})
 
 	if err := manager.Start(ctx); err != nil {
 		app.Fatalf("failed to start manager: %v", err)

@@ -29,11 +29,11 @@ func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, 
 		return 0, err
 	}
 
-	if mpt, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyReleaseLimit]; ok {
-		newLimit, err := strconv.Atoi(mpt)
+	if limitString, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyReleaseLimit]; ok {
+		newLimit, err := strconv.Atoi(limitString)
 		if err != nil {
 			logger.Error(err, fmt.Sprintf("invalid release limit annotation value, defaulting to %d", DefaultReleaseLimit),
-				"annotation", deployv1alpha1.AnnotationKeyReleaseLimit, "value", mpt)
+				"annotation", deployv1alpha1.AnnotationKeyReleaseLimit, "value", limitString)
 		} else {
 			limit = newLimit
 		}
@@ -63,24 +63,12 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return nil
 	}
 
-	cullingCandidates := []deployv1alpha1.Release{}
+	var cullingCandidates []deployv1alpha1.Release
 	for _, release := range releaseList.Items {
 		// We want to cull releases that are initialised but not active
 		if release.IsStatusInitialised() && !release.IsConditionActiveTrue() {
 			cullingCandidates = append(cullingCandidates, release)
 		}
-	}
-
-	slices.SortFunc(cullingCandidates, func(a, b deployv1alpha1.Release) int {
-		// Oldest first (oldest at index 0, newest at the end)
-		return a.GetEffectiveTime().Compare(b.GetEffectiveTime())
-	})
-
-	// trim releases to the configured maximum
-	excess := len(releaseList.Items) - limit
-	if excess > len(cullingCandidates) {
-		logger.Info("not enough culling candidates to safely cull, skipping", "current", len(releaseList.Items), "limit", limit, "candidates", len(cullingCandidates))
-		return nil
 	}
 
 	acquired, err := r.acquireCullingLease(ctx, logger, namespace, target)
@@ -93,6 +81,13 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return nil
 	}
 
+	slices.SortFunc(cullingCandidates, func(a, b deployv1alpha1.Release) int {
+		// Oldest first (oldest at index 0, newest at the end)
+		return a.GetEffectiveTime().Compare(b.GetEffectiveTime())
+	})
+
+	// We can't cull more than the number of candidates
+	excess := min(len(releaseList.Items)-limit, len(cullingCandidates))
 	excessReleases := cullingCandidates[:excess]
 	for _, releaseToDelete := range excessReleases {
 		logger.Info("deleting release", "name", releaseToDelete.Name)

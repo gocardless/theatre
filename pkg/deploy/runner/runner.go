@@ -41,8 +41,8 @@ type CreateRollbackOptions struct {
 	Reason        string
 	ToReleaseName string
 
-	InitiatedByUser   string
-	InitiatedBySystem string
+	InitiatedByPrincipal string
+	InitiatedByType      string
 
 	DeploymentOptions map[string]string
 }
@@ -61,8 +61,8 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	spec := deployv1alpha1.RollbackSpec{
 		Reason: opts.Reason,
 		InitiatedBy: deployv1alpha1.RollbackInitiator{
-			User:   opts.InitiatedByUser,
-			System: opts.InitiatedBySystem,
+			Principal: opts.InitiatedByPrincipal,
+			Type:      opts.InitiatedByType,
 		},
 		DeploymentOptions: opts.DeploymentOptions,
 	}

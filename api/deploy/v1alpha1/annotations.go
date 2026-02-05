@@ -30,4 +30,18 @@ const (
 	// AnnotationKeyReleaseNoGlobalAnalysis is the name of the annotation
 	// to opt-out of using global analysis templates for the release
 	AnnotationKeyReleaseNoGlobalAnalysis = AnnotationKeyBase + "/no-global-analysis"
+	// AnnotationKeyMaxReleasesPerTarget is an annotation that can be set on a namespace
+	// to limit the number of releases per target.
+	AnnotationKeyMaxReleasesPerTarget = AnnotationKeyBase + "/max-releases-per-target"
+
+	// AnnotationKeyCullingStrategy is an annotation that can be set on a namespace
+	// to specify the culling strategy to use.
+	AnnotationKeyCullingStrategy = AnnotationKeyBase + "/culling-strategy"
+
+	// There are two culling strategies:
+	// 1. end-time: Cull releases based on the status.deploymentEndTime
+	// 2. signature: Cull releases repeating status.signature first,
+	// before deleting the oldest releases sorted by status.deploymentEndTime
+	AnnotationValueCullingStrategyEndTime   = "end-time"
+	AnnotationValueCullingStrategySignature = "signature"
 )

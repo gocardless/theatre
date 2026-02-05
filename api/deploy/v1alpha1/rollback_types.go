@@ -52,14 +52,14 @@ type ReleaseReference struct {
 
 // RollbackInitiator tracks who or what initiated the rollback
 type RollbackInitiator struct {
-	// User is the username or email of the person who initiated the rollback.
+	// Principal is the identifier of the person or system who initiated the rollback
 	// +kubebuilder:validation:Optional
-	User string `json:"user,omitempty"`
+	Principal string `json:"principal,omitempty"`
 
-	// System is the automated system that initiated the rollback, if applicable
-	// (e.g., "health-check-policy", "canary-analysis").
+	// Type indicates what type of principal initiated the rollback
+	// (e.g. "user", "system")
 	// +kubebuilder:validation:Optional
-	System string `json:"system,omitempty"`
+	Type string `json:"type,omitempty"`
 }
 
 // RollbackStatus defines the observed state of Rollback

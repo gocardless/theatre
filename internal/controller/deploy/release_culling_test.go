@@ -15,11 +15,10 @@ import (
 )
 
 type cullConfigTestCase struct {
-	namespaceName    string
-	namespace        *corev1.Namespace
-	expectedMax      int
-	expectedStrategy string
-	expectErr        bool
+	namespaceName string
+	namespace     *corev1.Namespace
+	expectedLimit int
+	expectErr     bool
 }
 
 func createNewNamespace(name string, annotations map[string]string) *corev1.Namespace {
@@ -42,61 +41,33 @@ var _ = Describe("Release controller unit tests", func() {
 			c := builder.Build()
 
 			r := &ReleaseReconciler{Client: c}
-			maxReleasesPerTarget, cullingStrategy, err := r.cullConfig(ctx, logger, tc.namespaceName)
+			limit, err := r.cullConfig(ctx, logger, tc.namespaceName)
 
 			if tc.expectErr {
 				Expect(err).To(HaveOccurred())
 				return
 			}
 			Expect(err).NotTo(HaveOccurred())
-			Expect(maxReleasesPerTarget).To(Equal(tc.expectedMax))
-			Expect(cullingStrategy).To(Equal(tc.expectedStrategy))
+			Expect(limit).To(Equal(tc.expectedLimit))
 		},
 		Entry("defaults", cullConfigTestCase{
-			namespaceName:    "test-ns",
-			namespace:        createNewNamespace("test-ns", nil),
-			expectedMax:      DefaultReleaseLimit,
-			expectedStrategy: DefaultCullingStrategy,
+			namespaceName: "test-ns",
+			namespace:     createNewNamespace("test-ns", nil),
+			expectedLimit: DefaultReleaseLimit,
 		}),
 		Entry("max releases valid", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyReleaseLimit: "5",
 			}),
-			expectedMax:      5,
-			expectedStrategy: DefaultCullingStrategy,
+			expectedLimit: 5,
 		}),
 		Entry("max releases invalid", cullConfigTestCase{
 			namespaceName: "test-ns",
 			namespace: createNewNamespace("test-ns", map[string]string{
 				deployv1alpha1.AnnotationKeyReleaseLimit: "not-an-int",
 			}),
-			expectedMax:      DefaultReleaseLimit,
-			expectedStrategy: DefaultCullingStrategy,
-		}),
-		Entry("strategy end-time", cullConfigTestCase{
-			namespaceName: "test-ns",
-			namespace: createNewNamespace("test-ns", map[string]string{
-				deployv1alpha1.AnnotationKeyCullingStrategy: deployv1alpha1.AnnotationValueCullingStrategyEndTime,
-			}),
-			expectedMax:      DefaultReleaseLimit,
-			expectedStrategy: deployv1alpha1.AnnotationValueCullingStrategyEndTime,
-		}),
-		Entry("strategy signature", cullConfigTestCase{
-			namespaceName: "test-ns",
-			namespace: createNewNamespace("test-ns", map[string]string{
-				deployv1alpha1.AnnotationKeyCullingStrategy: deployv1alpha1.AnnotationValueCullingStrategySignature,
-			}),
-			expectedMax:      DefaultReleaseLimit,
-			expectedStrategy: deployv1alpha1.AnnotationValueCullingStrategySignature,
-		}),
-		Entry("strategy invalid", cullConfigTestCase{
-			namespaceName: "test-ns",
-			namespace: createNewNamespace("test-ns", map[string]string{
-				deployv1alpha1.AnnotationKeyCullingStrategy: "banana",
-			}),
-			expectedMax:      DefaultReleaseLimit,
-			expectedStrategy: DefaultCullingStrategy,
+			expectedLimit: DefaultReleaseLimit,
 		}),
 		Entry("namespace missing", cullConfigTestCase{
 			namespaceName: "does-not-exist",

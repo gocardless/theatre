@@ -20,14 +20,14 @@ import (
 )
 
 const (
-	DefaultCullingStrategy = deployv1alpha1.AnnotationValueCullingStrategyEndTime
-	DefaultReleaseLimit    = 10
+	DefaultReleaseLimit = 30
 
 	// Events
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
 	EventNoStatusUpdate         = "NoStatusUpdate"
 
 	IndexFieldOwner = ".metadata.controller"
+	TargetName      = ".config.targetName"
 )
 
 var apiGVStr = deployv1alpha1.GroupVersion.String()
@@ -72,7 +72,7 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		"config.targetName",
+		TargetName,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			return []string{release.TargetName}
@@ -121,7 +121,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 	err = r.cullReleases(ctx, logger, req.Namespace, release.TargetName)
 	if err != nil {
 		logger.Error(err, "failed to cull releases")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, errors.Join(err, analysisErr)
 	}
 
 	return ctrl.Result{}, analysisErr

@@ -52,7 +52,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	}
 
 	releaseList := &deployv1alpha1.ReleaseList{}
-	matchFields := client.MatchingFields(map[string]string{TargetName: target})
+	matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: target})
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace), matchFields); err != nil {
 		return err
 	}
@@ -95,12 +95,13 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 
 	excessReleases := cullingCandidates[:excess]
 	for _, releaseToDelete := range excessReleases {
-		logger.Info("deleting release", "name", releaseToDelete.Name)
+		logger.Info("attempt to delete release", "name", releaseToDelete.Name)
 		err := r.Delete(ctx, &releaseToDelete)
 		if err != nil {
 			logger.Error(err, "failed to delete release", "name", releaseToDelete.Name)
 			return err
 		}
+		logger.Info("Deleted oldest release due to culling limit", "name", releaseToDelete.Name, "event", EventReleaseCulled)
 	}
 
 	logger.Info("deleted excess releases", "count", len(excessReleases))

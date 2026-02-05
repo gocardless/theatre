@@ -20,14 +20,17 @@ import (
 )
 
 const (
+	// DefaultReleaseLimit is the default number of releases to keep in a namespace
 	DefaultReleaseLimit = 30
 
 	// Events
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
 	EventNoStatusUpdate         = "NoStatusUpdate"
+	EventReleaseCulled          = "ReleasedCulled"
 
-	IndexFieldOwner = ".metadata.controller"
-	TargetName      = ".config.targetName"
+	// Indexes
+	IndexFieldOwner      = ".metadata.controller"
+	IndexFieldTargetName = ".config.targetName"
 )
 
 var apiGVStr = deployv1alpha1.GroupVersion.String()
@@ -72,7 +75,7 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		TargetName,
+		IndexFieldTargetName,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			return []string{release.TargetName}

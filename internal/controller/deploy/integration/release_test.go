@@ -308,7 +308,7 @@ var _ = Describe("ReleaseController", func() {
 			// The number of releases should be 6
 			Eventually(func() int {
 				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.TargetName: targetName}))).To(Succeed())
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(6))
 		})
@@ -323,14 +323,14 @@ var _ = Describe("ReleaseController", func() {
 			// The number of releases of the first target should be 5
 			Eventually(func() int {
 				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.TargetName: targetName}))).To(Succeed())
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(5))
 
 			// The number of releases in the other target should still be 3
 			Eventually(func() int {
 				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.TargetName: otherTarget}))).To(Succeed())
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: otherTarget}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(3))
 		})
@@ -341,7 +341,7 @@ var _ = Describe("ReleaseController", func() {
 
 			Eventually(func() int {
 				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.TargetName: targetName}))).To(Succeed())
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(5))
 		})
@@ -355,7 +355,7 @@ var _ = Describe("ReleaseController", func() {
 			// The number of releases should be 5
 			Eventually(func() int {
 				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.TargetName: targetName}))).To(Succeed())
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(5))
 

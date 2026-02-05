@@ -36,15 +36,15 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(deployv1alpha1.AddToScheme(scheme))
-
-	if *enableArgoRolloutsAnalysis {
-		utilruntime.Must(analysisv1alpha1.AddToScheme(scheme))
-	}
 }
 
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	logger := commonOptions.Logger()
+
+	if *enableArgoRolloutsAnalysis {
+		utilruntime.Must(analysisv1alpha1.AddToScheme(scheme))
+	}
 
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()

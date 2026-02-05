@@ -102,7 +102,7 @@ type RollbackStatus struct {
 // +kubebuilder:resource:shortName=rb
 // +kubebuilder:printcolumn:name="From",type=string,JSONPath=`.status.fromReleaseRef.name`
 // +kubebuilder:printcolumn:name="To",type=string,JSONPath=`.spec.toReleaseRef.name`
-// +kubebuilder:printcolumn:name="Initiator",type=string,JSONPath=`.spec.initiatedBy`
+// +kubebuilder:printcolumn:name="Initiator",type=string,JSONPath=`.spec.initiatedBy.principal`
 // +kubebuilder:printcolumn:name="Succeeded",type=string,JSONPath=`.status.conditions[?(@.type=="Succeeded")].status`
 // +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.spec.reason`,priority=10
 

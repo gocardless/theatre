@@ -23,7 +23,7 @@ spec:
     - jsonPath: .spec.toReleaseRef.name
       name: To
       type: string
-    - jsonPath: .spec.initiatedBy
+    - jsonPath: .spec.initiatedBy.principal
       name: Initiator
       type: string
     - jsonPath: .status.conditions[?(@.type=="Succeeded")].status

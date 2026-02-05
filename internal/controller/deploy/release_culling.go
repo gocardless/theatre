@@ -46,7 +46,6 @@ func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, 
 // the configured maximum. It will delete based on effective time (deployment
 // end time if set, otherwise creation time).
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	// TODO: use new logger without the release key
 	limit, err := r.cullConfig(ctx, logger, namespace)
 	if err != nil {
 		return err
@@ -58,8 +57,10 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return err
 	}
 
+	logger = logger.WithValues("current", len(releaseList.Items), "limit", limit)
+
 	if len(releaseList.Items) <= limit {
-		logger.Info("number of releases is within limit, skipping", "current", len(releaseList.Items), "limit", limit)
+		logger.Info("number of releases is within limit, skipping")
 		return nil
 	}
 
@@ -69,6 +70,12 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		if release.IsStatusInitialised() && !release.IsConditionActiveTrue() {
 			cullingCandidates = append(cullingCandidates, release)
 		}
+	}
+
+	excess := len(releaseList.Items) - limit
+	if excess > len(cullingCandidates) {
+		logger.Info("not enough culling candidates to safely cull, skipping", "candidates", len(cullingCandidates))
+		return nil
 	}
 
 	acquired, err := r.acquireCullingLease(ctx, logger, namespace, target)
@@ -86,8 +93,6 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return a.GetEffectiveTime().Compare(b.GetEffectiveTime())
 	})
 
-	// We can't cull more than the number of candidates
-	excess := min(len(releaseList.Items)-limit, len(cullingCandidates))
 	excessReleases := cullingCandidates[:excess]
 	for _, releaseToDelete := range excessReleases {
 		logger.Info("deleting release", "name", releaseToDelete.Name)

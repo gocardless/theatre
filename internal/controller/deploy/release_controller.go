@@ -93,7 +93,8 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
-	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
+	baseLogger := logger.WithValues("namespace", req.Namespace)
+	logger = baseLogger.WithValues("release", release.Name)
 
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
@@ -118,7 +119,9 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
 	}
 
-	err = r.cullReleases(ctx, logger, req.Namespace, release.TargetName)
+	// When culling, we don't want to log the release that triggered the culling
+	// as it introduces a confusion. Hence its not included in the logging.
+	err = r.cullReleases(ctx, baseLogger, req.Namespace, release.TargetName)
 	if err != nil {
 		logger.Error(err, "failed to cull releases")
 		return ctrl.Result{}, errors.Join(err, analysisErr)

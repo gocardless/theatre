@@ -150,10 +150,14 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		return r.markRollbackFailed(ctx, logger, rollback, "max retry attempts exceeded")
 	}
 
+	// Prepare deployment options using the shared CICD helper, which handles
+	// jsonpath expressions and JSON decoding into native types.
+	parsedOptions, _ := cicd.ParseDeploymentOptions(rollback.Spec.DeploymentOptions, toRelease)
+
 	deployReq := cicd.DeploymentRequest{
 		Rollback:  rollback,
 		ToRelease: toRelease,
-		Options:   rollback.Spec.DeploymentOptions,
+		Options:   parsedOptions,
 	}
 
 	// Update attempt tracking

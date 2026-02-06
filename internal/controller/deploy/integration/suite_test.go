@@ -134,7 +134,7 @@ func (f *FakeDeployer) TriggerDeployment(ctx context.Context, req cicd.Deploymen
 	if len(req.Options) > 0 {
 		params := url.Values{}
 		for k, v := range req.Options {
-			params.Set(k, v)
+			params.Set(k, fmt.Sprint(v))
 		}
 		deploymentURL += "?" + params.Encode()
 	}

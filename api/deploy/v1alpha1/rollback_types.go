@@ -108,6 +108,7 @@ type RollbackStatus struct {
 // +kubebuilder:printcolumn:name="Initiator",type=string,JSONPath=`.spec.initiatedBy.principal`
 // +kubebuilder:printcolumn:name="Succeeded",type=string,JSONPath=`.status.conditions[?(@.type=="Succeeded")].status`
 // +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.spec.reason`,priority=10
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Rollback is the Schema for the rollbacks API. It represents a historical
 // record of a release rollback operation.

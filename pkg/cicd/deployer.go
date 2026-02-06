@@ -151,35 +151,36 @@ func ParseDeploymentOptions(options map[string]apiextv1.JSON, object runtime.Obj
 			continue
 		}
 
-		valueStr := string(raw.Raw)
+		var decoded interface{}
+		if err := json.Unmarshal(raw.Raw, &decoded); err != nil {
+			continue
+		}
+
+		// If it's not a string, use the decoded value directly (e.g., bool, number, object)
+		valueStr, ok := decoded.(string)
+		if !ok {
+			result[k] = decoded
+			continue
+		}
+
+		// Try to parse as JSONPath
 		parser := jsonpath.New(fmt.Sprintf("rollback_deployment_options_%s", k))
 		parser.AllowMissingKeys(true)
 
-		// If the value is not a valid jsonpath expression, treat it as a plain JSON value.
+		// If the value is not a valid jsonpath expression, treat it as a plain string value.
 		if err := parser.Parse(valueStr); err != nil {
-			var decoded interface{}
-			if err := json.Unmarshal(raw.Raw, &decoded); err == nil {
-				result[k] = decoded
-			} else {
-				result[k] = valueStr
-			}
+			result[k] = valueStr
 			continue
 		}
 
 		buf := new(bytes.Buffer)
 		if err := parser.Execute(buf, object); err != nil {
-			// On execution error, fall back to the original JSON value.
-			var decoded interface{}
-			if err := json.Unmarshal(raw.Raw, &decoded); err == nil {
-				result[k] = decoded
-			} else {
-				result[k] = valueStr
-			}
+			// On execution error, fall back to the original string value.
+			result[k] = valueStr
 			continue
 		}
 
 		out := buf.String()
-		var decoded interface{}
 		if err := json.Unmarshal([]byte(out), &decoded); err == nil {
 			result[k] = decoded
 		} else {

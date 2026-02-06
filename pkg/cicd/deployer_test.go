@@ -24,8 +24,8 @@ var _ = Describe("Deployer", func() {
 
 	It("should parse jsonpath values", func() {
 		options := map[string]apiextv1.JSON{
-			"revision": {Raw: []byte("{.config.revisions[?(@.name==\"infrastructure\")].id}")},
-			"name":     {Raw: []byte("{.metadata.name}")},
+			"revision": {Raw: []byte("\"{.config.revisions[?(@.name==\\\"infrastructure\\\")].id}\"")},
+			"name":     {Raw: []byte("\"{.metadata.name}\"")},
 		}
 		release := deployv1alpha1.Release{
 			ObjectMeta: v1.ObjectMeta{
@@ -51,7 +51,7 @@ var _ = Describe("Deployer", func() {
 
 	It("should parse any empty values in the object as empty", func() {
 		options := map[string]apiextv1.JSON{
-			"name": {Raw: []byte("{.metadata.name}")},
+			"name": {Raw: []byte("\"{.metadata.name}\"")},
 		}
 		release := deployv1alpha1.Release{}
 
@@ -64,7 +64,7 @@ var _ = Describe("Deployer", func() {
 
 	It("should ignore invalid deployment options", func() {
 		options := map[string]apiextv1.JSON{
-			"revision": {Raw: []byte("{.config.revisions[?(@.name==\"infrastructure\")].")},
+			"revision": {Raw: []byte("\"{.config.revisions[?(@.name==\\\"infrastructure\\\")].\"")},
 		}
 		release := deployv1alpha1.Release{}
 

@@ -29,7 +29,7 @@ var (
 		"Enable release uniqueness webhooks - when enabled, the release name will be set by the controller based on the"+
 			" release.config object. Kubernetes will then handle the uniqueness of Release resources in the namespace.",
 	).Default("false").Bool()
-	enableArgoRolloutsAnalysis = app.Flag("enable-argo-rollouts-analysis", "Enable health analysis for releases. Requires Argo Rollouts").Default("true").Bool()
+	enableArgoRolloutsAnalysis = app.Flag("enable-argo-rollouts-analysis", "Enable health analysis for releases. Requires Argo Rollouts").Default("false").Bool()
 	commonOptions              = cmd.NewCommonOptions(app).WithMetrics(app)
 )
 

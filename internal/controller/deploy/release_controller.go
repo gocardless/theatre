@@ -96,7 +96,7 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
-	baseLogger := logger.WithValues("namespace", req.Namespace)
+	baseLogger := logger.WithValues("namespace", req.Namespace, "target", release.TargetName)
 	logger = baseLogger.WithValues("release", release.Name)
 
 	if !release.IsStatusInitialised() {

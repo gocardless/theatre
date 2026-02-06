@@ -56,7 +56,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	releaseList := &deployv1alpha1.ReleaseList{}
 	matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: target})
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace), matchFields); err != nil {
-		return err
+		return fmt.Errorf("failed to list releases: %w", err)
 	}
 
 	if len(releaseList.Items) <= limit {
@@ -80,7 +80,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 
 	acquired, err := r.acquireCullingLease(ctx, logger, namespace, target)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to acquire culling lease: %w", err)
 	}
 
 	if !acquired {
@@ -98,8 +98,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		logger.Info("attempt to delete release", "name", releaseToDelete.Name)
 		err := r.Delete(ctx, &releaseToDelete)
 		if err != nil {
-			logger.Error(err, "failed to delete release", "name", releaseToDelete.Name)
-			return err
+			return fmt.Errorf("failed to delete release: %w", err)
 		}
 		logger.Info("Deleted oldest release due to culling limit", "name", releaseToDelete.Name, "event", EventReleaseCulled)
 	}

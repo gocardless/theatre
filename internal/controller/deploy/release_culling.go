@@ -21,15 +21,10 @@ import (
 
 // Parses namespace annotations to determine culling configuration
 // Returns the release limit, or defaults if the annotation is invalid
-func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, namespace string) (limit int, err error) {
+func cullConfig(logger logr.Logger, namespace corev1.Namespace) (limit int, err error) {
 	limit = DefaultReleaseLimit
 
-	var namespaceObj corev1.Namespace
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: namespace}, &namespaceObj); err != nil {
-		return 0, err
-	}
-
-	if limitString, ok := namespaceObj.Annotations[deployv1alpha1.AnnotationKeyReleaseLimit]; ok {
+	if limitString, ok := namespace.Annotations[deployv1alpha1.AnnotationKeyReleaseLimit]; ok {
 		newLimit, err := strconv.Atoi(limitString)
 		if err != nil {
 			logger.Error(err, fmt.Sprintf("invalid release limit annotation value, defaulting to %d", DefaultReleaseLimit),
@@ -46,7 +41,12 @@ func (r *ReleaseReconciler) cullConfig(ctx context.Context, logger logr.Logger, 
 // the configured maximum. It will delete based on effective time (deployment
 // end time if set, otherwise creation time).
 func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger, namespace string, target string) error {
-	limit, err := r.cullConfig(ctx, logger, namespace)
+	var namespaceObj corev1.Namespace
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: namespace}, &namespaceObj); err != nil {
+		return fmt.Errorf("failed to get namespace: %w", err)
+	}
+
+	limit, err := cullConfig(logger, namespaceObj)
 	if err != nil {
 		return err
 	}

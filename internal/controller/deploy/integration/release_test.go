@@ -318,11 +318,11 @@ var _ = Describe("ReleaseController", func() {
 		})
 
 		It("should not delete releases that are not in the target", func() {
-			targetName := generateTargetName()
-			createReleases(ctx, testNamespace, targetName, nil, 6)
-
 			otherTarget := generateTargetName()
 			createReleases(ctx, testNamespace, otherTarget, nil, 3)
+
+			targetName := generateTargetName()
+			createReleases(ctx, testNamespace, targetName, nil, 6)
 
 			// The number of releases of the first target should be 5
 			Eventually(func() int {

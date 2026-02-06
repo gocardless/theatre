@@ -51,16 +51,16 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 		return err
 	}
 
+	logger = logger.WithValues("release_count_limit", limit)
+
 	releaseList := &deployv1alpha1.ReleaseList{}
 	matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: target})
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace), matchFields); err != nil {
 		return err
 	}
 
-	logger = logger.WithValues("current", len(releaseList.Items), "limit", limit)
-
 	if len(releaseList.Items) <= limit {
-		logger.Info("number of releases is within limit, skipping")
+		logger.Info("number of releases is within limit, skipping", "release_count", len(releaseList.Items))
 		return nil
 	}
 

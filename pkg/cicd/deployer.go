@@ -1,10 +1,15 @@
 package cicd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/jsonpath"
 )
 
 // DeploymentRequest represents a request to trigger a deployment via a CICD system.
@@ -17,7 +22,7 @@ type DeploymentRequest struct {
 
 	// Options contains provider-specific options to include in the deployment
 	// payload
-	Options map[string]string
+	Options map[string]interface{}
 }
 
 // DeploymentStatus represents the status of a deployment in the CICD system.
@@ -130,4 +135,58 @@ func (n *NoopDeployer) GetDeploymentStatus(ctx context.Context, deploymentID str
 
 func (n *NoopDeployer) Name() string {
 	return "noop"
+}
+
+// ParseDeploymentOptions parses deployment options (currently Rollback spec deploymentOptions)
+// using jsonpath when values are jsonpath expressions. Non-jsonpath values are returned as
+// their native JSON types based on the RawExtension contents.
+// E.g. "revision": "{.config.revisions[?(@.name==\"infrastructure\")].id}" -> "abc123" (string)
+//
+//	"skip_queue": true -> true (bool)
+func ParseDeploymentOptions(options map[string]apiextv1.JSON, object runtime.Object) (map[string]interface{}, error) {
+	result := make(map[string]interface{}, len(options))
+
+	for k, raw := range options {
+		if len(raw.Raw) == 0 {
+			continue
+		}
+
+		var decoded interface{}
+		if err := json.Unmarshal(raw.Raw, &decoded); err != nil {
+			continue
+		}
+
+		// If it's not a string, use the decoded value directly (e.g., bool, number, object)
+		valueStr, ok := decoded.(string)
+		if !ok {
+			result[k] = decoded
+			continue
+		}
+
+		// Try to parse as JSONPath
+		parser := jsonpath.New(fmt.Sprintf("rollback_deployment_options_%s", k))
+		parser.AllowMissingKeys(true)
+
+		// If the value is not a valid jsonpath expression, treat it as a plain string value.
+		if err := parser.Parse(valueStr); err != nil {
+			result[k] = valueStr
+			continue
+		}
+
+		buf := new(bytes.Buffer)
+		if err := parser.Execute(buf, object); err != nil {
+			// On execution error, fall back to the original string value.
+			result[k] = valueStr
+			continue
+		}
+
+		out := buf.String()
+		if err := json.Unmarshal([]byte(out), &decoded); err == nil {
+			result[k] = decoded
+		} else {
+			result[k] = out
+		}
+	}
+
+	return result, nil
 }

@@ -11,6 +11,10 @@ import (
 	"github.com/google/go-github/v34/github"
 )
 
+const (
+	DeploymentRevisionNameKey = "deployment_revision_name"
+)
+
 // Deployer implements cicd.Deployer using the GitHub Deployments API.
 // This creates GitHub deployment events that can be consumed by any CICD
 // system that watches for them.
@@ -38,21 +42,31 @@ func (d *Deployer) Name() string {
 	return "github"
 }
 
-// TriggerDeployment creates a GitHub deployment event.
+// TriggerDeployment creates a GitHub deployment event. GitHub deployments require
+// the "deployment_revision_name" field to be set in the req.Options map. E.g.
+// "deployment_revision_name": "application". This is the name of the revision on which
+// the GitHub deployment will be created.
 func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentRequest) (*cicd.DeploymentResult, error) {
+	revisionName, ok := req.Options[DeploymentRevisionNameKey].(string)
+	if !ok || revisionName == "" {
+		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false,
+			fmt.Errorf("missing %s option", DeploymentRevisionNameKey))
+	}
+
 	// Extract owner/repo from the github revision in the target release
-	ghRevision, err := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, req.Options)
+	// rename to deployment revision
+	deploymentRevision, err := d.findGitHubRevision(req.ToRelease.ReleaseConfig.Revisions, revisionName)
 	if err != nil {
 		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false, err)
 	}
 
-	owner, repo, err := d.parseOwnerRepo(ghRevision.Source)
+	owner, repo, err := d.parseOwnerRepo(deploymentRevision.Source)
 	if err != nil {
 		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false, err)
 	}
 
-	revision := ghRevision.ID
-	if revision == "" {
+	deploymentRevisionId := deploymentRevision.ID
+	if deploymentRevisionId == "" {
 		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false,
 			fmt.Errorf("github revision has no ID"))
 	}
@@ -66,7 +80,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	}
 
 	deploymentReq := &github.DeploymentRequest{
-		Ref:              github.String(revision),
+		Ref:              github.String(deploymentRevisionId),
 		Description:      github.String(description),
 		AutoMerge:        github.Bool(false),
 		RequiredContexts: &[]string{}, // Bypass status checks for rollbacks
@@ -74,14 +88,14 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	}
 
 	// Set environment from Options if provided
-	if env, ok := req.Options["environment"]; ok && env != "" {
+	if env, ok := req.Options["environment"].(string); ok && env != "" {
 		deploymentReq.Environment = github.String(env)
 	}
 
 	d.logger.Info("creating GitHub deployment",
 		"owner", owner,
 		"repo", repo,
-		"ref", revision,
+		"ref", deploymentRevisionId,
 		"rollback", req.Rollback.Name,
 	)
 
@@ -159,7 +173,7 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface
 	payload := map[string]interface{}{
 		// Standard rollback fields
 		"target":        req.ToRelease.ReleaseConfig.TargetName,
-		"creator":       req.Rollback.Spec.InitiatedBy,
+		"creator":       req.Rollback.Spec.InitiatedBy.Principal,
 		"is_rollback":   true,
 		"rollback_from": req.Rollback.Status.FromReleaseRef,
 		"rollback_to":   req.Rollback.Spec.ToReleaseRef,
@@ -175,20 +189,21 @@ func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface
 }
 
 // findGitHubRevision finds the revision with Type="github".
-// If options contains a "repository" key, it matches the revision with that Source.
-// If no "repository" option is provided and multiple github revisions exist, it returns an error.
-func (d *Deployer) findGitHubRevision(revisions []deployv1alpha1.Revision, options map[string]string) (*deployv1alpha1.Revision, error) {
-	// If repository option is specified, find the matching revision
-	if repo, ok := options["repository"]; ok && repo != "" {
+// If revisionName is specified, it returns the github revision with that name.
+// If no revisionName is specified and there is only one github revision it returns
+// it, otherwise if multiple github revisions exist it returns an error.
+func (d *Deployer) findGitHubRevision(revisions []deployv1alpha1.Revision, revisionName string) (*deployv1alpha1.Revision, error) {
+	// If revisionName option is specified, find the matching revision
+	if revisionName != "" {
 		for i := range revisions {
-			if revisions[i].Type == "github" && revisions[i].Source == repo {
+			if revisions[i].Type == "github" && revisions[i].Name == revisionName {
 				return &revisions[i], nil
 			}
 		}
-		return nil, fmt.Errorf("no github revision found with source %q", repo)
+		return nil, fmt.Errorf("no github revision found with name %q", revisionName)
 	}
 
-	// No repository specified - find all github revisions
+	// No revisionName specified - find all github revisions
 	var ghRevisions []*deployv1alpha1.Revision
 	for i := range revisions {
 		if revisions[i].Type == "github" {
@@ -203,9 +218,9 @@ func (d *Deployer) findGitHubRevision(revisions []deployv1alpha1.Revision, optio
 	if len(ghRevisions) > 1 {
 		var sources []string
 		for _, r := range ghRevisions {
-			sources = append(sources, r.Source)
+			sources = append(sources, r.Name)
 		}
-		return nil, fmt.Errorf("multiple github revisions found (%v); specify 'repository' option to select one", sources)
+		return nil, fmt.Errorf("multiple github revisions found (%v); specify a 'revisionName' to select one", sources)
 	}
 
 	return ghRevisions[0], nil

@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -178,9 +179,9 @@ var _ = Describe("RollbackReconciler", func() {
 				Spec: deployv1alpha1.RollbackSpec{
 					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: release.Name},
 					Reason:       "Testing options",
-					DeploymentOptions: map[string]string{
-						"skip_canary": "true",
-						"timeout":     "300",
+					DeploymentOptions: map[string]apiextv1.JSON{
+						"skip_canary": {Raw: []byte("true")},
+						"timeout":     {Raw: []byte("300")},
 					},
 				},
 			}

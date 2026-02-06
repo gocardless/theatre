@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
+
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/deploy"
 
@@ -329,17 +331,20 @@ func concatTemplateLists(list []runtime.Object) ([]runtime.Object, error) {
 // provided template. Template must be an AnalysisTemplate or ClusterAnalysisTemplate
 func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object) (*analysisv1alpha1.AnalysisRun, error) {
 	var (
-		templateName string
-		templateSpec analysisv1alpha1.AnalysisTemplateSpec
+		templateName   string
+		templateSpec   analysisv1alpha1.AnalysisTemplateSpec
+		templateLabels map[string]string
 	)
 
 	switch t := template.(type) {
 	case *analysisv1alpha1.AnalysisTemplate:
 		templateName = t.Name
 		templateSpec = *t.Spec.DeepCopy()
+		templateLabels = t.GetLabels()
 	case *analysisv1alpha1.ClusterAnalysisTemplate:
 		templateName = t.Name
 		templateSpec = *t.Spec.DeepCopy()
+		templateLabels = t.GetLabels()
 	default:
 		return nil, errors.New("object is not an AnalysisTemplate or ClusterAnalysisTemplate")
 	}
@@ -370,11 +375,19 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 		args = append(args, ret)
 	}
 
+	finalLabels := maps.Clone(release.GetLabels())
+	if healthLabel, found := templateLabels["health"]; found {
+		finalLabels["health"] = healthLabel
+	}
+	if rollbackLabel, found := templateLabels["rollback"]; found {
+		finalLabels["rollback"] = rollbackLabel
+	}
+
 	run := &analysisv1alpha1.AnalysisRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploy.GenerateAnalysisRunName(release.Name, templateName),
 			Namespace: release.Namespace,
-			Labels:    release.GetLabels(),
+			Labels:    finalLabels,
 		},
 		Spec: analysisv1alpha1.AnalysisRunSpec{
 			Args:    args,

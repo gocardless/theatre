@@ -292,9 +292,7 @@ var _ = Describe("ReleaseController", func() {
 			// annotate namespace with max releases per target
 			namespace := &v1.Namespace{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: testNamespace}, namespace)).To(Succeed())
-			if namespace.Annotations == nil {
-				namespace.Annotations = map[string]string{v1alpha1.AnnotationKeyReleaseLimit: "5"}
-			}
+			metav1.SetMetaDataAnnotation(&namespace.ObjectMeta, v1alpha1.AnnotationKeyReleaseLimit, "5")
 			Expect(k8sClient.Update(ctx, namespace)).To(Succeed())
 		})
 

@@ -309,6 +309,12 @@ var _ = Describe("ReleaseController", func() {
 				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
 				return len(releases.Items)
 			}).Should(Equal(6))
+
+			Consistently(func() int {
+				releases := &v1alpha1.ReleaseList{}
+				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldTargetName: targetName}))).To(Succeed())
+				return len(releases.Items)
+			}).Should(Equal(6))
 		})
 
 		It("should not delete releases that are not in the target", func() {

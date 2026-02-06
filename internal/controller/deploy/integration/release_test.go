@@ -389,7 +389,7 @@ func createReleases(ctx context.Context, namespace, targetName string, extraAnno
 }
 
 func generateTargetName() string {
-	return fmt.Sprintf("test-target-%d-%d", GinkgoParallelProcess(), namespaceCounter.Add(1))
+	return fmt.Sprintf("test-target-%d-%d", GinkgoParallelProcess(), testCounter.Add(1))
 }
 
 func generateCommitSHA() string {

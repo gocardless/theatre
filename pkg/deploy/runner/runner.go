@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -44,7 +45,7 @@ type CreateRollbackOptions struct {
 	InitiatedByPrincipal string
 	InitiatedByType      string
 
-	DeploymentOptions map[string]string
+	DeploymentOptions map[string]apiextv1.JSON
 }
 
 func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions) (*deployv1alpha1.Rollback, error) {
@@ -145,4 +146,13 @@ func (r *Runner) GetRelease(ctx context.Context, opts GetReleaseOptions) (*deplo
 		return nil, err
 	}
 	return &release, nil
+}
+
+func HasRevision(release deployv1alpha1.Release, revisionName string) bool {
+	for _, revision := range release.ReleaseConfig.Revisions {
+		if revision.Name == revisionName {
+			return true
+		}
+	}
+	return false
 }

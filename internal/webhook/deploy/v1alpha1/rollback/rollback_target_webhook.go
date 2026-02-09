@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -38,41 +39,46 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	// If ToReleaseRef is already set, validate that the referenced Release exists
+	var targetRelease *deployv1alpha1.Release
+	copy := rollback.DeepCopy()
+
 	if rollback.Spec.ToReleaseRef != (deployv1alpha1.ReleaseReference{}) {
-		release := &deployv1alpha1.Release{}
-		if err := w.client.Get(ctx, client.ObjectKey{Name: rollback.Spec.ToReleaseRef.Name, Namespace: req.Namespace}, release); err != nil {
+		// If ToReleaseRef is already set, validate that the referenced Release exists
+		targetRelease = &deployv1alpha1.Release{}
+		if err := w.client.Get(ctx, client.ObjectKey{Name: rollback.Spec.ToReleaseRef.Name, Namespace: req.Namespace}, targetRelease); err != nil {
 			if apierrors.IsNotFound(err) {
 				return admission.Denied(fmt.Sprintf("ToReleaseRef %q not found", rollback.Spec.ToReleaseRef.Name))
 			}
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
-		return admission.Allowed("ToReleaseRef already set")
+	} else {
+		w.logger.Info("ToReleaseRef not set, finding latest healthy release")
+
+		releaseList := &deployv1alpha1.ReleaseList{}
+		if err := w.client.List(ctx, releaseList, client.InNamespace(req.Namespace)); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+
+		// Ensure there is an active release to roll back from
+		activeRelease := deployv1alpha1.FindActiveRelease(releaseList)
+		if activeRelease == nil {
+			return admission.Denied("no active release found to rollback from")
+		}
+
+		// Walk back from the active release to find the last healthy release
+		targetRelease = deployv1alpha1.FindLastHealthyRelease(releaseList)
+		if targetRelease == nil {
+			return admission.Denied("no healthy release found to rollback to")
+		}
+
+		// Mutate the rollback to set the target release
+		w.logger.Info("auto-setting rollback target", "targetRelease", targetRelease.Name)
+		copy.Spec.ToReleaseRef = deployv1alpha1.ReleaseReference{Name: targetRelease.Name}
 	}
 
-	releaseList := &deployv1alpha1.ReleaseList{}
-	if err := w.client.List(ctx, releaseList, client.InNamespace(req.Namespace)); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
-	}
-
-	// Ensure there is an active release to roll back from
-	activeRelease := deployv1alpha1.FindActiveRelease(releaseList)
-	if activeRelease == nil {
-		return admission.Denied("no active release found to rollback from")
-	}
-
-	// Walk back from the active release to find the last healthy release
-	targetRelease := deployv1alpha1.FindLastHealthyRelease(releaseList)
-	if targetRelease == nil {
-		return admission.Denied("no healthy release found to rollback to")
-	}
-
-	w.logger.Info("auto-setting rollback target", "targetRelease", targetRelease.Name)
-
-	// Mutate the rollback to set the target release
-	copy := rollback.DeepCopy()
-	copy.Spec.ToReleaseRef = deployv1alpha1.ReleaseReference{Name: targetRelease.Name}
-
+	// Set owner ref on the target release
+	w.logger.Info("setting release owner reference on rollback")
+	controllerutil.SetControllerReference(targetRelease, copy, w.client.Scheme())
 	copyBytes, err := json.Marshal(copy)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)

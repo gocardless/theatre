@@ -39,7 +39,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 	})
 
 	Context("when ToReleaseRef is already set", func() {
-		It("should allow the request without mutation", func() {
+		It("should set owner reference to the target release", func() {
 			// Seed a release matching the ToReleaseRef so validation passes
 			release := newRelease(
 				"my-release-v1",
@@ -74,8 +74,18 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeTrue())
-			Expect(resp.Result.Message).To(Equal("ToReleaseRef already set"))
-			Expect(len(resp.Patches)).To(Equal(0))
+			Expect(len(resp.Patches)).To(BeNumerically(">=", 1), "expected patches for owner reference")
+
+			// Verify owner reference is set in the patches
+			var foundOwnerRef bool
+			for _, patch := range resp.Patches {
+				if patch.Path == "/metadata/ownerReferences" {
+					foundOwnerRef = true
+					// Verify it's an array with at least one owner reference
+					Expect(patch.Value).ToNot(BeNil())
+				}
+			}
+			Expect(foundOwnerRef).To(BeTrue(), "expected patch for /metadata/ownerReferences, got patches: %+v", resp.Patches)
 		})
 	})
 
@@ -195,13 +205,19 @@ var _ = Describe("RollbackTargetWebhook", func() {
 
 			// Verify the patch sets the correct target release
 			var foundTargetRelease bool
+			var foundOwnerRef bool
 			for _, patch := range resp.Patches {
 				if patch.Path == "/spec/toReleaseRef/name" {
 					Expect(patch.Value).To(Equal("my-service-v1"))
 					foundTargetRelease = true
 				}
+				if patch.Path == "/metadata/ownerReferences" {
+					foundOwnerRef = true
+					Expect(patch.Value).ToNot(BeNil())
+				}
 			}
 			Expect(foundTargetRelease).To(BeTrue(), "expected patch for /spec/toReleaseRef/name, got patches: %+v", resp.Patches)
+			Expect(foundOwnerRef).To(BeTrue(), "expected patch for /metadata/ownerReferences, got patches: %+v", resp.Patches)
 		})
 
 		It("should select the immediate previous release if it is healthy", func() {
@@ -258,13 +274,19 @@ var _ = Describe("RollbackTargetWebhook", func() {
 
 			// Verify the patch sets v2 as the target (most recent healthy)
 			var foundTargetRelease bool
+			var foundOwnerRef bool
 			for _, patch := range resp.Patches {
 				if patch.Path == "/spec/toReleaseRef/name" {
 					Expect(patch.Value).To(Equal("my-service-v2"))
 					foundTargetRelease = true
 				}
+				if patch.Path == "/metadata/ownerReferences" {
+					foundOwnerRef = true
+					Expect(patch.Value).ToNot(BeNil())
+				}
 			}
 			Expect(foundTargetRelease).To(BeTrue(), "expected patch for /spec/toReleaseRef/name, got patches: %+v", resp.Patches)
+			Expect(foundOwnerRef).To(BeTrue(), "expected patch for /metadata/ownerReferences, got patches: %+v", resp.Patches)
 		})
 	})
 })

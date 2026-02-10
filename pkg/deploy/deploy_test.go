@@ -50,22 +50,22 @@ var _ = Describe("Helpers", func() {
 		}, HaveOccurred()),
 	)
 
-	Context("hashString", func() {
+	Context("HashString", func() {
 		It("Should hash a string and return hex representation", func() {
-			result := hashString([]byte("test"))
+			result := HashString([]byte("test"))
 			Expect(result).To(HaveLen(7))
 			Expect(result).To(MatchRegexp("^[0-9a-f]+$"))
 		})
 
 		It("Should produce consistent hashes for the same input", func() {
-			result1 := hashString([]byte("test"))
-			result2 := hashString([]byte("test"))
+			result1 := HashString([]byte("test"))
+			result2 := HashString([]byte("test"))
 			Expect(result1).To(Equal(result2))
 		})
 
 		It("Should produce different hashes for different inputs", func() {
-			result1 := hashString([]byte("test"))
-			result2 := hashString([]byte("different"))
+			result1 := HashString([]byte("test"))
+			result2 := HashString([]byte("different"))
 			Expect(result1).NotTo(Equal(result2))
 		})
 	})

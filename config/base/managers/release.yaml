@@ -30,7 +30,7 @@ rules:
       - releases/finalizers
     verbs:
       - update
-  # Need to create events for reconciliation logging
+  # Needed to create events for reconciliation logging
   - apiGroups:
       - ""
     resources:
@@ -38,6 +38,26 @@ rules:
     verbs:
       - create
       - patch
+  # Needed to create leases for culling
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+  # Needed to read namespaces for culling config
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
 ---
 apiVersion: v1
 kind: ServiceAccount

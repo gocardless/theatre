@@ -28,12 +28,12 @@ import (
 )
 
 var (
-	testEnv          *envtest.Environment
-	deployer         *FakeDeployer
-	mgr              ctrl.Manager
-	ctx              context.Context
-	cancel           context.CancelFunc
-	namespaceCounter atomic.Int32
+	testEnv     *envtest.Environment
+	deployer    *FakeDeployer
+	mgr         ctrl.Manager
+	ctx         context.Context
+	cancel      context.CancelFunc
+	testCounter atomic.Int32
 )
 
 func TestSuite(t *testing.T) {
@@ -173,7 +173,7 @@ func (f *FakeDeployer) SetStatusResult(deploymentID string, result StatusResult)
 }
 
 func generateNamespaceName() string {
-	return fmt.Sprintf("test-ns-%d-%d", GinkgoParallelProcess(), namespaceCounter.Add(1))
+	return fmt.Sprintf("test-ns-%d-%d", GinkgoParallelProcess(), testCounter.Add(1))
 }
 
 func setupTestNamespace(ctx context.Context) string {
@@ -187,7 +187,7 @@ func setupTestNamespace(ctx context.Context) string {
 	return ns
 }
 
-func generateRelease(target string, namespace string) *v1alpha1.Release {
+func generateRelease(namespace string, target string) *v1alpha1.Release {
 	appSHA := generateCommitSHA()
 	infraSHA := generateCommitSHA()
 	return &v1alpha1.Release{
@@ -205,8 +205,9 @@ func generateRelease(target string, namespace string) *v1alpha1.Release {
 	}
 }
 
-func createRelease(ctx context.Context, namespace string, target string) *v1alpha1.Release {
-	release := generateRelease(target, namespace)
+func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *v1alpha1.Release {
+	release := generateRelease(namespace, target)
+	release.Annotations = annotations
 	err := mgr.GetClient().Create(ctx, release)
 	Expect(err).NotTo(HaveOccurred())
 	return release

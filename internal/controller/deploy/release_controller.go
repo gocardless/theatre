@@ -20,10 +20,17 @@ import (
 )
 
 const (
+	// DefaultReleaseLimit is the default number of releases to keep in a namespace
+	DefaultReleaseLimit = 30
+
+	// Events
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
 	EventNoStatusUpdate         = "NoStatusUpdate"
+	EventReleaseCulled          = "ReleasedCulled"
 
-	IndexFieldOwner = ".metadata.controller"
+	// Indexes
+	IndexFieldOwner      = ".metadata.controller"
+	IndexFieldTargetName = ".config.targetName"
 )
 
 var apiGVStr = deployv1alpha1.GroupVersion.String()
@@ -65,6 +72,19 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 		}
 	}
 
+	err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		IndexFieldTargetName,
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{release.TargetName}
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	return ctrlBuilder.Complete(
 		recutil.ResolveAndReconcile(
 			ctx, logger, mgr, &deployv1alpha1.Release{},
@@ -76,7 +96,8 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, req ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
-	logger = logger.WithValues("namespace", req.Namespace, "release", release.Name)
+	baseLogger := logger.WithValues("namespace", req.Namespace, "target", release.TargetName)
+	logger = baseLogger.WithValues("release", release.Name)
 
 	if !release.IsStatusInitialised() {
 		logger.Info("release is new, will initialise")
@@ -99,6 +120,14 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 		logging.WithNoRecord(logger).Info("No status update needed", "event", EventNoStatusUpdate)
 	default:
 		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
+	}
+
+	// When culling, we don't want to log the release that triggered the culling
+	// as it introduces a confusion. Hence its not included in the logging.
+	err = r.cullReleases(ctx, baseLogger, req.Namespace, release.TargetName)
+	if err != nil {
+		logger.Error(err, "failed to cull releases")
+		return ctrl.Result{}, errors.Join(err, analysisErr)
 	}
 
 	return ctrl.Result{}, analysisErr

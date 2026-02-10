@@ -30,4 +30,8 @@ const (
 	// AnnotationKeyReleaseNoGlobalAnalysis is the name of the annotation
 	// to opt-out of using global analysis templates for the release
 	AnnotationKeyReleaseNoGlobalAnalysis = AnnotationKeyBase + "/no-global-analysis"
+
+	// AnnotationKeyReleaseLimit is an annotation that can be set on a namespace
+	// to limit the number of releases per target.
+	AnnotationKeyReleaseLimit = AnnotationKeyBase + "/release-limit"
 )

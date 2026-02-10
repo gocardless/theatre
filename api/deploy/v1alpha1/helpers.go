@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/gocardless/theatre/v5/pkg/recutil"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -173,4 +174,13 @@ func FindLastHealthyRelease(releaseList *ReleaseList) *Release {
 	}
 
 	return nil
+}
+
+// Returns the effective time of the release, which is the deployment end time,
+// if set, otherwise the creation time.
+func (r *Release) GetEffectiveTime() time.Time {
+	if r.Status.DeploymentEndTime.IsZero() {
+		return r.ObjectMeta.CreationTimestamp.Time
+	}
+	return r.Status.DeploymentEndTime.Time
 }

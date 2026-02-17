@@ -44,7 +44,7 @@ type AutomatedRollbackPolicy struct {
 	Enabled bool `json:"enabled"`
 
 	// MaxConsecutiveRollbacks is the maximum number of consecutive automated
-	// rollbacks before automation is disabled. nil means unlimited, 0 means disabled.
+	// rollbacks before automation is disabled. Unset means unlimited, 0 means disabled.
 	// +optional
 	MaxConsecutiveRollbacks *int32 `json:"maxConsecutiveRollbacks,omitempty"`
 
@@ -53,7 +53,8 @@ type AutomatedRollbackPolicy struct {
 	CooldownPeriod *metav1.Duration `json:"cooldownPeriod,omitempty"`
 
 	// ResetOnRecovery re-enables automation and resets the consecutive
-	// rollback counter when the trigger condition returns to normal.
+	// rollback counter when the trigger condition returns to normal (e.g.
+	// "True" if spec.trigger.conditionStatus is "False" and vice versa).
 	// +kubebuilder:default=false
 	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
 }

@@ -9,10 +9,69 @@ import (
 
 // RollbackPolicySpec defines the desired state of RollbackPolicy
 type RollbackPolicySpec struct {
+	// TargetName identifies which releases this policy applies to,
+	// matching Release.config.targetName.
+	// +kubebuilder:validation:Required
+	TargetName string `json:"targetName"`
+
+	// Trigger defines the Release condition that triggers a rollback.
+	// +optional
+	Trigger RollbackTrigger `json:"trigger,omitempty"`
+
+	// Automated configures automated rollback behavior.
+	// +optional
+	Automated AutomatedRollbackPolicy `json:"automated,omitempty"`
+}
+
+// RollbackTrigger defines the Release condition that triggers a rollback
+type RollbackTrigger struct {
+	// ConditionType is the Release status condition type to watch.
+	// +kubebuilder:default="Healthy"
+	// +kubebuilder:validation:Optional
+	ConditionType string `json:"conditionType,omitempty"`
+
+	// ConditionStatus is the status value that triggers a rollback.
+	// +kubebuilder:default="False"
+	// +kubebuilder:validation:Enum=True;False
+	// +optional
+	ConditionStatus *metav1.ConditionStatus `json:"conditionStatus,omitempty"`
+}
+
+// AutomatedRollbackPolicy configures automated rollback behavior
+type AutomatedRollbackPolicy struct {
+	// Enabled controls whether automated rollbacks are active.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// MaxConsecutiveRollbacks is the maximum number of consecutive automated
+	// rollbacks before automation is disabled. nil means unlimited, 0 means disabled.
+	// +optional
+	MaxConsecutiveRollbacks *int32 `json:"maxConsecutiveRollbacks,omitempty"`
+
+	// CooldownPeriod is the minimum time to wait between automated rollbacks.
+	// +optional
+	CooldownPeriod *metav1.Duration `json:"cooldownPeriod,omitempty"`
+
+	// ResetOnRecovery re-enables automation and resets the consecutive
+	// rollback counter when the trigger condition returns to normal.
+	// +kubebuilder:default=false
+	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
 }
 
 // RollbackPolicyStatus defines the observed state of RollbackPolicy
 type RollbackPolicyStatus struct {
+	// ConsecutiveRollbackCount tracks how many automated rollbacks have
+	// been performed since the last recovery.
+	// +optional
+	ConsecutiveRollbackCount int32 `json:"consecutiveRollbackCount,omitempty"`
+
+	// LastAutomatedRollbackTime is when the last automated rollback was created.
+	// +optional
+	LastAutomatedRollbackTime *metav1.Time `json:"lastAutomatedRollbackTime,omitempty"`
+
+	// Conditions represent the latest observations of the policy's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

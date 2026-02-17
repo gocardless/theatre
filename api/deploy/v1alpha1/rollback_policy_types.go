@@ -52,6 +52,12 @@ type AutomatedRollbackPolicy struct {
 	// +optional
 	CooldownPeriod *metav1.Duration `json:"cooldownPeriod,omitempty"`
 
+	// ConsecutiveRollbackWindow is the time window to count consecutive rollbacks.
+	// Automated rollbacks are disabled if the number of consecutive rollbacks
+	// exceeds MaxConsecutiveRollbacks within this window.
+	// +optional
+	ConsecutiveRollbackWindow *metav1.Duration `json:"consecutiveRollbackWindow,omitempty"`
+
 	// ResetOnRecovery re-enables automation and resets the consecutive
 	// rollback counter when the trigger condition returns to normal (e.g.
 	// "True" if spec.trigger.conditionStatus is "False" and vice versa).
@@ -70,6 +76,10 @@ type RollbackPolicyStatus struct {
 	// +optional
 	LastAutomatedRollbackTime *metav1.Time `json:"lastAutomatedRollbackTime,omitempty"`
 
+	// WindowStartTime is the start time of the consecutive rollback window.
+	// +optional
+	WindowStartTime *metav1.Time `json:"windowStartTime,omitempty"`
+
 	// Conditions represent the latest observations of the policy's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -79,8 +89,8 @@ type RollbackPolicyStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=rbp
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetName`
-// +kubebuilder:printcolumn:name="Trigger_Condition",type=string,JSONPath=`.spec.trigger.conditionType`
-// +kubebuilder:printcolumn:name="Trigger_When",type=string,JSONPath=`.spec.trigger.conditionStatus`
+// +kubebuilder:printcolumn:name="TriggerCondition",type=string,JSONPath=`.spec.trigger.conditionType`
+// +kubebuilder:printcolumn:name="TriggerWhen",type=string,JSONPath=`.spec.trigger.conditionStatus`
 // +kubebuilder:printcolumn:name="Automated",type=boolean,JSONPath=`.spec.automated.enabled`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

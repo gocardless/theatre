@@ -46,7 +46,7 @@ type AutomatedRollbackPolicy struct {
 	// Limit is the maximum number of consecutive automated
 	// rollbacks before automation is disabled. 0 means unlimited. Default is 3.
 	// +kubebuilder:default=3
-	Limit *int32 `json:"limit,omitempty"`
+	Limit int32 `json:"limit,omitempty"`
 
 	// MinInterval is the minimum time to wait between automated rollbacks. Default is 5m.
 	MinInterval *metav1.Duration `json:"minInterval,omitempty"`

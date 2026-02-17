@@ -16,7 +16,23 @@ spec:
     singular: rollbackpolicy
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.targetName
+      name: Target
+      type: string
+    - jsonPath: .spec.trigger.conditionType
+      name: TriggerCondition
+      type: string
+    - jsonPath: .spec.trigger.conditionStatus
+      name: TriggerWhen
+      type: string
+    - jsonPath: .spec.automated.enabled
+      name: Automated
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: RollbackPolicy is the Schema for the rollbackpolicies API.
@@ -44,21 +60,28 @@ spec:
               automated:
                 description: Automated configures automated rollback behavior.
                 properties:
-                  cooldownPeriod:
-                    description: CooldownPeriod is the minimum time to wait between
-                      automated rollbacks.
+                  breakerWindow:
+                    description: |-
+                      BreakerResetWindow is the "cooldown" period. If this duration passes
+                      since the first rollback, the status.consecutiveRollbackCount is reset to 0.
+                      Default is 1h.
                     type: string
                   enabled:
                     default: false
                     description: Enabled controls whether automated rollbacks are
                       active.
                     type: boolean
-                  maxConsecutiveRollbacks:
+                  limit:
+                    default: 3
                     description: |-
-                      MaxConsecutiveRollbacks is the maximum number of consecutive automated
-                      rollbacks before automation is disabled. Unset means unlimited, 0 means disabled.
+                      Limit is the maximum number of consecutive automated
+                      rollbacks before automation is disabled. 0 means unlimited. Default is 3.
                     format: int32
                     type: integer
+                  minInterval:
+                    description: MinInterval is the minimum time to wait between automated
+                      rollbacks. Default is 5m.
+                    type: string
                   resetOnRecovery:
                     default: false
                     description: |-
@@ -156,15 +179,20 @@ spec:
                   - type
                   type: object
                 type: array
-              consecutiveRollbackCount:
+              consecutiveCount:
                 description: |-
-                  ConsecutiveRollbackCount tracks how many automated rollbacks have
+                  ConsecutiveCount tracks how many automated rollbacks have
                   been performed since the last recovery.
                 format: int32
                 type: integer
               lastAutomatedRollbackTime:
                 description: LastAutomatedRollbackTime is when the last automated
                   rollback was created.
+                format: date-time
+                type: string
+              windowStartTime:
+                description: WindowStartTime is the start time of the consecutive
+                  rollback window.
                 format: date-time
                 type: string
             type: object

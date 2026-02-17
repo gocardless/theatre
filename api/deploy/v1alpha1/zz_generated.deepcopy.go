@@ -460,6 +460,10 @@ func (in *RollbackPolicyStatus) DeepCopyInto(out *RollbackPolicyStatus) {
 		in, out := &in.LastAutomatedRollbackTime, &out.LastAutomatedRollbackTime
 		*out = (*in).DeepCopy()
 	}
+	if in.WindowStartTime != nil {
+		in, out := &in.WindowStartTime, &out.WindowStartTime
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

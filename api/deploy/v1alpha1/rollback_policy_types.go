@@ -43,20 +43,18 @@ type AutomatedRollbackPolicy struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
 
-	// MaxConsecutiveRollbacks is the maximum number of consecutive automated
-	// rollbacks before automation is disabled. Unset means unlimited, 0 means disabled.
-	// +optional
-	MaxConsecutiveRollbacks *int32 `json:"maxConsecutiveRollbacks,omitempty"`
+	// Limit is the maximum number of consecutive automated
+	// rollbacks before automation is disabled. 0 means unlimited. Default is 3.
+	// +kubebuilder:default=3
+	Limit *int32 `json:"limit,omitempty"`
 
-	// CooldownPeriod is the minimum time to wait between automated rollbacks.
-	// +optional
-	CooldownPeriod *metav1.Duration `json:"cooldownPeriod,omitempty"`
+	// MinInterval is the minimum time to wait between automated rollbacks. Default is 5m.
+	MinInterval *metav1.Duration `json:"minInterval,omitempty"`
 
-	// ConsecutiveRollbackWindow is the time window to count consecutive rollbacks.
-	// Automated rollbacks are disabled if the number of consecutive rollbacks
-	// exceeds MaxConsecutiveRollbacks within this window.
-	// +optional
-	ConsecutiveRollbackWindow *metav1.Duration `json:"consecutiveRollbackWindow,omitempty"`
+	// BreakerResetWindow is the "cooldown" period. If this duration passes
+	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
+	// Default is 1h.
+	BreakerWindow *metav1.Duration `json:"breakerWindow,omitempty"`
 
 	// ResetOnRecovery re-enables automation and resets the consecutive
 	// rollback counter when the trigger condition returns to normal (e.g.
@@ -67,10 +65,10 @@ type AutomatedRollbackPolicy struct {
 
 // RollbackPolicyStatus defines the observed state of RollbackPolicy
 type RollbackPolicyStatus struct {
-	// ConsecutiveRollbackCount tracks how many automated rollbacks have
+	// ConsecutiveCount tracks how many automated rollbacks have
 	// been performed since the last recovery.
 	// +optional
-	ConsecutiveRollbackCount int32 `json:"consecutiveRollbackCount,omitempty"`
+	ConsecutiveCount int32 `json:"consecutiveCount,omitempty"`
 
 	// LastAutomatedRollbackTime is when the last automated rollback was created.
 	// +optional

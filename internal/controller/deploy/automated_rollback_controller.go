@@ -132,7 +132,7 @@ func rollbackAllowed(rollbackPolicy *deployv1alpha1.RollbackPolicy) bool {
 }
 
 func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release) error {
-	// these deployment options are git specific, maybe we need a template for this?
+	// these deployment options are git specific, maybe we need a template for this? or add them to the automated rollback policy.
 	deploymentOptions := map[string]apiextv1.JSON{
 		// Forces a deployment to be created immediately, skipping the dispatcher queue
 		// https://github.com/gocardless/dispatcher/blob/master/pkg/deployments/deployments.go#L43

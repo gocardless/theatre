@@ -97,11 +97,11 @@ type AutomatedRollbackPolicy struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of AutomatedRollbackPolicyList
+	// Spec defines the desired state of AutomatedRollbackPolicy
 	// +required
 	Spec AutomatedRollbackPolicySpec `json:"spec"`
 
-	// Status defines the observed state of AutomatedRollbackPolicyList
+	// Status defines the observed state of AutomatedRollbackPolicy
 	// +optional
 	Status AutomatedRollbackPolicyStatus `json:"status,omitempty"`
 }

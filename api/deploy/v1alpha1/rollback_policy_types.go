@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -61,6 +62,10 @@ type AutomatedRollbackPolicy struct {
 	// "True" if spec.trigger.conditionStatus is "False" and vice versa).
 	// +kubebuilder:default=false
 	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
+
+	// DeploymentOptions contains additional rollback provider-specific options.
+	// +kubebuilder:validation:Optional
+	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
 }
 
 // RollbackPolicyStatus defines the observed state of RollbackPolicy

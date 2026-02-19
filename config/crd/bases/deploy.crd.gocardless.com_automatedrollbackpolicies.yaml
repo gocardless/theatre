@@ -56,7 +56,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of RollbackPolicy
+            description: Spec defines the desired state of AutomatedRollbackPolicyList
             properties:
               deploymentOptions:
                 additionalProperties:
@@ -119,7 +119,7 @@ spec:
             - targetName
             type: object
           status:
-            description: Status defines the observed state of RollbackPolicy
+            description: Status defines the observed state of AutomatedRollbackPolicyList
             properties:
               conditions:
                 description: Conditions represent the latest observations of the policy's

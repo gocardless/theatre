@@ -8,8 +8,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// RollbackPolicySpec defines the desired state of RollbackPolicy
-type RollbackPolicySpec struct {
+// AutomatedRollbackPolicySpec defines the desired state of RollbackPolicy
+type AutomatedRollbackPolicySpec struct {
 	// TargetName identifies which releases this policy applies to,
 	// matching Release.config.targetName.
 	// +kubebuilder:validation:Required
@@ -19,9 +19,35 @@ type RollbackPolicySpec struct {
 	// +optional
 	Trigger RollbackTrigger `json:"trigger,omitempty"`
 
-	// Automated configures automated rollback behavior.
-	// +optional
-	Automated AutomatedRollbackPolicy `json:"automated,omitempty"`
+	// Enabled controls whether automated rollbacks are active.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// MaxConsecutiveRollbacks is the maximum number of consecutive automated
+	// rollbacks before automation is disabled. If left empty, the limit is
+	// unlimited.
+	// +kubebuilder:validation:Optional
+	MaxConsecutiveRollbacks *int32 `json:"limit,omitempty"`
+
+	// MinInterval is the minimum time to wait between automated rollbacks.
+	// +kubebuilder:validation:Optional
+	MinInterval *metav1.Duration `json:"minInterval,omitempty"`
+
+	// ResetPeriod is the "cooldown" period. If this duration passes
+	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
+	// +kubebuilder:validation:Optional
+	ResetPeriod *metav1.Duration `json:"breakerWindow,omitempty"`
+
+	// ResetOnRecovery re-enables automation and resets the consecutive
+	// rollback counter when the trigger condition returns to normal for a
+	// following release (e.g. "True" if spec.trigger.conditionStatus is
+	// "False" and vice versa).
+	// +kubebuilder:validation:Optional
+	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
+
+	// DeploymentOptions contains additional rollback provider-specific options.
+	// +kubebuilder:validation:Optional
+	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
 }
 
 // RollbackTrigger defines the Release condition that triggers a rollback
@@ -36,39 +62,6 @@ type RollbackTrigger struct {
 	// +kubebuilder:validation:Enum=True;False
 	// +optional
 	ConditionStatus metav1.ConditionStatus `json:"conditionStatus,omitempty"`
-}
-
-// AutomatedRollbackPolicy configures automated rollback behavior
-type AutomatedRollbackPolicy struct {
-	// Enabled controls whether automated rollbacks are active.
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled"`
-
-	// Limit is the maximum number of consecutive automated
-	// rollbacks before automation is disabled. If left empty, the limit is
-	// unlimited.
-	// +kubebuilder:validation:Optional
-	Limit *int32 `json:"limit,omitempty"`
-
-	// MinInterval is the minimum time to wait between automated rollbacks.
-	// +kubebuilder:validation:Optional
-	MinInterval *metav1.Duration `json:"minInterval,omitempty"`
-
-	// BreakerResetWindow is the "cooldown" period. If this duration passes
-	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
-	// +kubebuilder:validation:Optional
-	BreakerWindow *metav1.Duration `json:"breakerWindow,omitempty"`
-
-	// ResetOnRecovery re-enables automation and resets the consecutive
-	// rollback counter when the trigger condition returns to normal for a
-	// following release (e.g. "True" if spec.trigger.conditionStatus is
-	// "False" and vice versa).
-	// +kubebuilder:validation:Optional
-	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
-
-	// DeploymentOptions contains additional rollback provider-specific options.
-	// +kubebuilder:validation:Optional
-	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
 }
 
 // RollbackPolicyStatus defines the observed state of RollbackPolicy
@@ -96,8 +89,8 @@ type RollbackPolicyStatus struct {
 // +kubebuilder:printcolumn:name="Automated",type=boolean,JSONPath=`.spec.automated.enabled`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// RollbackPolicy is the Schema for the rollbackpolicies API.
-type RollbackPolicy struct {
+// AutomatedRollbackPolicy is the Schema for the automatedrollbackpolicies API.
+type AutomatedRollbackPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// Metadata is a standard object metadata
@@ -106,7 +99,7 @@ type RollbackPolicy struct {
 
 	// Spec defines the desired state of RollbackPolicy
 	// +required
-	Spec RollbackPolicySpec `json:"spec"`
+	Spec AutomatedRollbackPolicySpec `json:"spec"`
 
 	// Status defines the observed state of RollbackPolicy
 	// +optional
@@ -116,12 +109,12 @@ type RollbackPolicy struct {
 // +kubebuilder:object:root=true
 
 // RollbackPolicyList contains a list of RollbackPolicy
-type RollbackPolicyList struct {
+type AutomatedRollbackPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []RollbackPolicy `json:"items"`
+	Items           []AutomatedRollbackPolicy `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&RollbackPolicy{}, &RollbackPolicyList{})
+	SchemeBuilder.Register(&AutomatedRollbackPolicy{}, &AutomatedRollbackPolicyList{})
 }

@@ -2,13 +2,11 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -134,7 +132,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 }
 
 func rollbackAllowed(rollbackPolicy *deployv1alpha1.AutomatedRollbackPolicy) bool {
-	// TODO: expand this to handle the rest of the fields in the spec.automated
+	// TODO: expand this to handle the rest of the fields in the spec
 	return rollbackPolicy.Spec.Enabled
 }
 
@@ -191,12 +189,4 @@ func (r *AutomatedRollbackReconciler) getRollbackPolicy(ctx context.Context, rel
 	}
 
 	return &policyList.Items[0], nil
-}
-
-func mustMarshal(s any) apiextv1.JSON {
-	b, err := json.Marshal(s)
-	if err != nil {
-		panic(err)
-	}
-	return apiextv1.JSON{Raw: b}
 }

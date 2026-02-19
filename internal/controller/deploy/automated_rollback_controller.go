@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
-	cicd "github.com/gocardless/theatre/v5/pkg/cicd/github"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,17 +93,25 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 
 	// fetch the rollback policy for that target name
 	var err error
-	var rollbackPolicy *deployv1alpha1.RollbackPolicy
-	if rollbackPolicy, err = r.getRollbackPolicy(ctx, release); err != nil {
+	var policy *deployv1alpha1.RollbackPolicy
+	if policy, err = r.getRollbackPolicy(ctx, release); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if !rollbackAllowed(rollbackPolicy) {
+	if !rollbackAllowed(policy) {
 		// nothing to do, exit early
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.createRollback(ctx, release); err != nil {
+	var rollback *deployv1alpha1.Rollback
+	if rollback, err = r.createRollback(ctx, release, policy); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Update policy
+	rollbackTime := metav1.NewTime(rollback.CreationTimestamp.Time)
+	policy.Status.LastAutomatedRollbackTime = &rollbackTime
+	if err := r.Status().Update(ctx, policy); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -131,25 +138,14 @@ func rollbackAllowed(rollbackPolicy *deployv1alpha1.RollbackPolicy) bool {
 	return rollbackPolicy.Spec.Automated.Enabled
 }
 
-func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release) error {
-	// these deployment options are git specific, maybe we need a template for this? or add them to the automated rollback policy.
-	deploymentOptions := map[string]apiextv1.JSON{
-		// Forces a deployment to be created immediately, skipping the dispatcher queue
-		// https://github.com/gocardless/dispatcher/blob/master/pkg/deployments/deployments.go#L43
-		"skip_queue":                   mustMarshal(true),
-		cicd.DeploymentRevisionNameKey: mustMarshal("application"),
-		"target_revision":              mustMarshal("{.config.revisions[?(@.name==\"infrastructure\")].id}"),
-		"version":                      mustMarshal(3),
-		"environment":                  mustMarshal(release.Labels["environment"]),
-	}
-
+func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.RollbackPolicy) (*deployv1alpha1.Rollback, error) {
 	spec := deployv1alpha1.RollbackSpec{
 		Reason: "automated rollback",
 		InitiatedBy: deployv1alpha1.RollbackInitiator{
 			Principal: "system",
 			Type:      "system",
 		},
-		DeploymentOptions: deploymentOptions,
+		DeploymentOptions: policy.Spec.Automated.DeploymentOptions,
 	}
 
 	rb := &deployv1alpha1.Rollback{
@@ -162,10 +158,10 @@ func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, releas
 	}
 
 	if err := r.Create(ctx, rb); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return rb, nil
 }
 
 func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *deployv1alpha1.Release) (bool, error) {

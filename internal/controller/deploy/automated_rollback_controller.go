@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,16 +17,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const (
+var (
 	ErrNoRollbackPolicyFound = errors.New("no rollback policies found for target")
+)
 
+const (
 	IndexFieldSpecTargetName = ".spec.targetName"
 )
 
 type AutomatedRollbackReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	ServiceAccountName string
 }
 
 func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -83,6 +87,7 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, request ctrl.Request, release *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger.Info("Automated rollback reconciler for release ", "release", release.Name)
 	if !release.IsConditionActiveTrue() {
+		logger.Info("release is not active, nothing to do")
 		// nothing to do, exit early
 		return ctrl.Result{}, nil
 	}
@@ -90,7 +95,8 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	if hasRollback, err := r.hasRollback(ctx, release); err != nil {
 		return ctrl.Result{}, err
 	} else if hasRollback {
-		// nothing to do, exit early
+		logger.Info("release already has a rollback, nothing to do")
+		// release already has a rollback, exit early
 		return ctrl.Result{}, nil
 	}
 
@@ -106,18 +112,35 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	}
 
 	if !rollbackAllowed(policy) {
+		logger.Info("rollback is not allowed, nothing to do")
 		// nothing to do, exit early
 		return ctrl.Result{}, nil
 	}
 
+	triggerConditionType := policy.Spec.Trigger.ConditionType
+	triggerConditionStatus := policy.Spec.Trigger.ConditionStatus
+	if !meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, triggerConditionType, triggerConditionStatus) {
+		logger.Info("trigger condition is not met, nothing to do")
+		// nothing to do, exit early
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("trigger condition is met, creating rollback")
 	var rollback *deployv1alpha1.Rollback
 	if rollback, err = r.createRollback(ctx, release, policy); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// TODO: temporary adding label to indicate this release has been rolled back from
+	release.Labels["rollback"] = rollback.Name
+	if err := r.Update(ctx, release); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Update policy
 	rollbackTime := metav1.NewTime(rollback.CreationTimestamp.Time)
 	policy.Status.LastAutomatedRollbackTime = &rollbackTime
+	policy.Status.ConsecutiveCount++
 	if err := r.Status().Update(ctx, policy); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -140,20 +163,21 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 	}
 }
 
-func rollbackAllowed(rollbackPolicy *deployv1alpha1.AutomatedRollbackPolicy) bool {
-	// TODO: expand this to handle the rest of the fields in the spec
-	return rollbackPolicy.Spec.Enabled
+func rollbackAllowed(policy *deployv1alpha1.AutomatedRollbackPolicy) bool {
+	return policy.Spec.Enabled
+	// if !policy.Spec.Enabled {
+	// 	return false
+	// }
+
+	// if policy.Spec.MaxConsecutiveRollbacks != nil && policy.Status.ConsecutiveCount >= *policy.Spec.MaxConsecutiveRollbacks {
+	// 	return false
+	// }
+
+	// return true
 }
 
 func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Rollback, error) {
-	spec := deployv1alpha1.RollbackSpec{
-		Reason: "automated rollback",
-		InitiatedBy: deployv1alpha1.RollbackInitiator{
-			Principal: "system",
-			Type:      "system",
-		},
-		DeploymentOptions: policy.Spec.DeploymentOptions,
-	}
+	reason := fmt.Sprintf("Release %s status condition %s is %s", release.Name, policy.Spec.Trigger.ConditionType, policy.Spec.Trigger.ConditionStatus)
 
 	rb := &deployv1alpha1.Rollback{
 		ObjectMeta: metav1.ObjectMeta{
@@ -161,7 +185,14 @@ func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, releas
 			Namespace:    release.Namespace,
 			Labels:       release.Labels,
 		},
-		Spec: spec,
+		Spec: deployv1alpha1.RollbackSpec{
+			Reason: reason,
+			InitiatedBy: deployv1alpha1.RollbackInitiator{
+				Principal: r.ServiceAccountName,
+				Type:      "system",
+			},
+			DeploymentOptions: policy.Spec.DeploymentOptions,
+		},
 	}
 
 	if err := r.Create(ctx, rb); err != nil {
@@ -172,12 +203,15 @@ func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, releas
 }
 
 func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *deployv1alpha1.Release) (bool, error) {
-	rollbackList := &deployv1alpha1.RollbackList{}
-	if err := r.List(ctx, rollbackList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{IndexFieldOwner: release.Name})); err != nil {
-		return false, fmt.Errorf("failed to list rollbacks: %w", err)
-	}
+	// rollbackList := &deployv1alpha1.RollbackList{}
+	// if err := r.List(ctx, rollbackList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{IndexFieldOwner: release.Name})); err != nil {
+	// 	return false, fmt.Errorf("failed to list rollbacks: %w", err)
+	// }
 
-	return len(rollbackList.Items) > 0, nil
+	// return len(rollbackList.Items) > 0, nil
+	// TODO: temporary check for label instead
+	_, ok := release.Labels["rollback"]
+	return ok, nil
 }
 
 func (r *AutomatedRollbackReconciler) getRollbackPolicy(ctx context.Context, release *deployv1alpha1.Release) (*deployv1alpha1.AutomatedRollbackPolicy, error) {

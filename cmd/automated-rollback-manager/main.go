@@ -55,9 +55,10 @@ func main() {
 	}
 
 	if err = (&automatedrollbackcontroller.AutomatedRollbackReconciler{
-		Client: manager.GetClient(),
-		Scheme: scheme,
-		Log:    logger,
+		Client:             manager.GetClient(),
+		Scheme:             scheme,
+		Log:                logger,
+		ServiceAccountName: getServiceAccountName(),
 	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}
@@ -65,4 +66,11 @@ func main() {
 	if err := manager.Start(ctx); err != nil {
 		app.Fatalf("failed to start manager: %v", err)
 	}
+}
+
+func getServiceAccountName() string {
+	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/service-account-name"); err == nil {
+		return string(data)
+	}
+	return "automated-rollback-manager" // fallback
 }

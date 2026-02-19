@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -15,7 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const IndexFieldSpecTargetName = ".spec.targetName"
+const (
+	ErrNoRollbackPolicyFound = errors.New("no rollback policies found for target")
+
+	IndexFieldSpecTargetName = ".spec.targetName"
+)
 
 type AutomatedRollbackReconciler struct {
 	client.Client
@@ -93,6 +98,10 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	var err error
 	var policy *deployv1alpha1.AutomatedRollbackPolicy
 	if policy, err = r.getRollbackPolicy(ctx, release); err != nil {
+		if err == ErrNoRollbackPolicyFound {
+			logger.Info("no rollback policy found for target", "target", release.TargetName)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -181,7 +190,7 @@ func (r *AutomatedRollbackReconciler) getRollbackPolicy(ctx context.Context, rel
 	}
 
 	if len(policyList.Items) == 0 {
-		return nil, fmt.Errorf("no rollback policies found for target: %s", target)
+		return nil, ErrNoRollbackPolicyFound
 	}
 
 	if len(policyList.Items) > 1 {

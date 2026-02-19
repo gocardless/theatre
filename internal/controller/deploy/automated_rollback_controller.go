@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const RollbackPolicyIndexFieldTargetName = ".spec.targetName"
+const IndexFieldSpecTargetName = ".spec.targetName"
 
 type AutomatedRollbackReconciler struct {
 	client.Client
@@ -36,11 +36,11 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
-		&deployv1alpha1.RollbackPolicy{},
-		RollbackPolicyIndexFieldTargetName,
+		&deployv1alpha1.AutomatedRollbackPolicy{},
+		IndexFieldSpecTargetName,
 		func(rawObj client.Object) []string {
-			rollbackPolicy := rawObj.(*deployv1alpha1.RollbackPolicy)
-			return []string{rollbackPolicy.Spec.TargetName}
+			policy := rawObj.(*deployv1alpha1.AutomatedRollbackPolicy)
+			return []string{policy.Spec.TargetName}
 		},
 	)
 	if err != nil {
@@ -93,7 +93,7 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 
 	// fetch the rollback policy for that target name
 	var err error
-	var policy *deployv1alpha1.RollbackPolicy
+	var policy *deployv1alpha1.AutomatedRollbackPolicy
 	if policy, err = r.getRollbackPolicy(ctx, release); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -133,19 +133,19 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 	}
 }
 
-func rollbackAllowed(rollbackPolicy *deployv1alpha1.RollbackPolicy) bool {
+func rollbackAllowed(rollbackPolicy *deployv1alpha1.AutomatedRollbackPolicy) bool {
 	// TODO: expand this to handle the rest of the fields in the spec.automated
-	return rollbackPolicy.Spec.Automated.Enabled
+	return rollbackPolicy.Spec.Enabled
 }
 
-func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.RollbackPolicy) (*deployv1alpha1.Rollback, error) {
+func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Rollback, error) {
 	spec := deployv1alpha1.RollbackSpec{
 		Reason: "automated rollback",
 		InitiatedBy: deployv1alpha1.RollbackInitiator{
 			Principal: "system",
 			Type:      "system",
 		},
-		DeploymentOptions: policy.Spec.Automated.DeploymentOptions,
+		DeploymentOptions: policy.Spec.DeploymentOptions,
 	}
 
 	rb := &deployv1alpha1.Rollback{
@@ -173,24 +173,24 @@ func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *
 	return len(rollbackList.Items) > 0, nil
 }
 
-func (r *AutomatedRollbackReconciler) getRollbackPolicy(ctx context.Context, release *deployv1alpha1.Release) (*deployv1alpha1.RollbackPolicy, error) {
+func (r *AutomatedRollbackReconciler) getRollbackPolicy(ctx context.Context, release *deployv1alpha1.Release) (*deployv1alpha1.AutomatedRollbackPolicy, error) {
 	target := release.ReleaseConfig.TargetName
 
-	rollbackPolicyList := &deployv1alpha1.RollbackPolicyList{}
-	matchFields := client.MatchingFields(map[string]string{RollbackPolicyIndexFieldTargetName: target})
-	if err := r.List(ctx, rollbackPolicyList, client.InNamespace(release.Namespace), matchFields); err != nil {
+	policyList := &deployv1alpha1.AutomatedRollbackPolicyList{}
+	matchFields := client.MatchingFields(map[string]string{IndexFieldSpecTargetName: target})
+	if err := r.List(ctx, policyList, client.InNamespace(release.Namespace), matchFields); err != nil {
 		return nil, fmt.Errorf("failed to list rollback policies: %w", err)
 	}
 
-	if len(rollbackPolicyList.Items) == 0 {
+	if len(policyList.Items) == 0 {
 		return nil, fmt.Errorf("no rollback policies found for target: %s", target)
 	}
 
-	if len(rollbackPolicyList.Items) > 1 {
+	if len(policyList.Items) > 1 {
 		return nil, fmt.Errorf("multiple rollback policies found for target: %s", target)
 	}
 
-	return &rollbackPolicyList.Items[0], nil
+	return &policyList.Items[0], nil
 }
 
 func mustMarshal(s any) apiextv1.JSON {

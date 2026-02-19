@@ -27,12 +27,12 @@ type RollbackPolicySpec struct {
 // RollbackTrigger defines the Release condition that triggers a rollback
 type RollbackTrigger struct {
 	// ConditionType is the Release status condition type to watch.
-	// +kubebuilder:default="Healthy"
+	// +kubebuilder:default="RollbackRequired"
 	// +kubebuilder:validation:Optional
 	ConditionType string `json:"conditionType,omitempty"`
 
 	// ConditionStatus is the status value that triggers a rollback.
-	// +kubebuilder:default="False"
+	// +kubebuilder:default="True"
 	// +kubebuilder:validation:Enum=True;False
 	// +optional
 	ConditionStatus *metav1.ConditionStatus `json:"conditionStatus,omitempty"`

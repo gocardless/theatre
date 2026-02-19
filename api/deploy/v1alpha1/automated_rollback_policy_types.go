@@ -8,7 +8,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// AutomatedRollbackPolicySpec defines the desired state of RollbackPolicy
+// AutomatedRollbackPolicySpec defines the desired state
 type AutomatedRollbackPolicySpec struct {
 	// TargetName identifies which releases this policy applies to,
 	// matching Release.config.targetName.
@@ -64,8 +64,8 @@ type RollbackTrigger struct {
 	ConditionStatus metav1.ConditionStatus `json:"conditionStatus,omitempty"`
 }
 
-// RollbackPolicyStatus defines the observed state of RollbackPolicy
-type RollbackPolicyStatus struct {
+// AutomatedRollbackPolicyStatus defines the observed state
+type AutomatedRollbackPolicyStatus struct {
 	// ConsecutiveCount tracks how many automated rollbacks have
 	// been performed since the last recovery.
 	ConsecutiveCount int32 `json:"consecutiveCount,omitempty"`
@@ -97,18 +97,18 @@ type AutomatedRollbackPolicy struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of RollbackPolicy
+	// Spec defines the desired state of AutomatedRollbackPolicyList
 	// +required
 	Spec AutomatedRollbackPolicySpec `json:"spec"`
 
-	// Status defines the observed state of RollbackPolicy
+	// Status defines the observed state of AutomatedRollbackPolicyList
 	// +optional
-	Status RollbackPolicyStatus `json:"status,omitempty"`
+	Status AutomatedRollbackPolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// RollbackPolicyList contains a list of RollbackPolicy
+// AutomatedRollbackPolicyList contains a list of AutomatedRollbackPolicy
 type AutomatedRollbackPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -52,7 +52,7 @@ resources:
     controller: true
     domain: crd.gocardless.com
     group: deploy
-    kind: RollbackPolicy
+    kind: AutomatedRollbackPolicy
     path: github.com/gocardless/theatre/api/deploy/v1alpha1
     version: v1alpha1
 version: "3"

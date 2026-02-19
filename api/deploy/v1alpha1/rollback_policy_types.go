@@ -35,7 +35,7 @@ type RollbackTrigger struct {
 	// +kubebuilder:default="True"
 	// +kubebuilder:validation:Enum=True;False
 	// +optional
-	ConditionStatus *metav1.ConditionStatus `json:"conditionStatus,omitempty"`
+	ConditionStatus metav1.ConditionStatus `json:"conditionStatus,omitempty"`
 }
 
 // AutomatedRollbackPolicy configures automated rollback behavior
@@ -45,22 +45,25 @@ type AutomatedRollbackPolicy struct {
 	Enabled bool `json:"enabled"`
 
 	// Limit is the maximum number of consecutive automated
-	// rollbacks before automation is disabled. 0 means unlimited. Default is 3.
-	// +kubebuilder:default=3
-	Limit int32 `json:"limit,omitempty"`
+	// rollbacks before automation is disabled. If left empty, the limit is
+	// unlimited.
+	// +kubebuilder:validation:Optional
+	Limit *int32 `json:"limit,omitempty"`
 
-	// MinInterval is the minimum time to wait between automated rollbacks. Default is 5m.
+	// MinInterval is the minimum time to wait between automated rollbacks.
+	// +kubebuilder:validation:Optional
 	MinInterval *metav1.Duration `json:"minInterval,omitempty"`
 
 	// BreakerResetWindow is the "cooldown" period. If this duration passes
 	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
-	// Default is 1h.
+	// +kubebuilder:validation:Optional
 	BreakerWindow *metav1.Duration `json:"breakerWindow,omitempty"`
 
 	// ResetOnRecovery re-enables automation and resets the consecutive
-	// rollback counter when the trigger condition returns to normal (e.g.
-	// "True" if spec.trigger.conditionStatus is "False" and vice versa).
-	// +kubebuilder:default=false
+	// rollback counter when the trigger condition returns to normal for a
+	// following release (e.g. "True" if spec.trigger.conditionStatus is
+	// "False" and vice versa).
+	// +kubebuilder:validation:Optional
 	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
 
 	// DeploymentOptions contains additional rollback provider-specific options.
@@ -72,19 +75,15 @@ type AutomatedRollbackPolicy struct {
 type RollbackPolicyStatus struct {
 	// ConsecutiveCount tracks how many automated rollbacks have
 	// been performed since the last recovery.
-	// +optional
 	ConsecutiveCount int32 `json:"consecutiveCount,omitempty"`
 
 	// LastAutomatedRollbackTime is when the last automated rollback was created.
-	// +optional
 	LastAutomatedRollbackTime *metav1.Time `json:"lastAutomatedRollbackTime,omitempty"`
 
 	// WindowStartTime is the start time of the consecutive rollback window.
-	// +optional
 	WindowStartTime *metav1.Time `json:"windowStartTime,omitempty"`
 
 	// Conditions represent the latest observations of the policy's state.
-	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 

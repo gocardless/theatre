@@ -27,7 +27,7 @@ type AutomatedRollbackPolicySpec struct {
 	// rollbacks before automation is disabled. If left empty, the limit is
 	// unlimited.
 	// +kubebuilder:validation:Optional
-	MaxConsecutiveRollbacks *int32 `json:"limit,omitempty"`
+	MaxConsecutiveRollbacks *int32 `json:"maxConsecutiveRollbacks,omitempty"`
 
 	// MinInterval is the minimum time to wait between automated rollbacks.
 	// +kubebuilder:validation:Optional
@@ -36,7 +36,7 @@ type AutomatedRollbackPolicySpec struct {
 	// ResetPeriod is the "cooldown" period. If this duration passes
 	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
 	// +kubebuilder:validation:Optional
-	ResetPeriod *metav1.Duration `json:"breakerWindow,omitempty"`
+	ResetPeriod *metav1.Duration `json:"resetPeriod,omitempty"`
 
 	// ResetOnRecovery re-enables automation and resets the consecutive
 	// rollback counter when the trigger condition returns to normal for a

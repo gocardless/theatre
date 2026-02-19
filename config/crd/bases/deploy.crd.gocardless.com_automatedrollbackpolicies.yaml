@@ -58,11 +58,6 @@ spec:
           spec:
             description: Spec defines the desired state of RollbackPolicy
             properties:
-              breakerWindow:
-                description: |-
-                  ResetPeriod is the "cooldown" period. If this duration passes
-                  since the first rollback, the status.consecutiveRollbackCount is reset to 0.
-                type: string
               deploymentOptions:
                 additionalProperties:
                   x-kubernetes-preserve-unknown-fields: true
@@ -73,7 +68,7 @@ spec:
                 default: false
                 description: Enabled controls whether automated rollbacks are active.
                 type: boolean
-              limit:
+              maxConsecutiveRollbacks:
                 description: |-
                   MaxConsecutiveRollbacks is the maximum number of consecutive automated
                   rollbacks before automation is disabled. If left empty, the limit is
@@ -91,6 +86,11 @@ spec:
                   following release (e.g. "True" if spec.trigger.conditionStatus is
                   "False" and vice versa).
                 type: boolean
+              resetPeriod:
+                description: |-
+                  ResetPeriod is the "cooldown" period. If this duration passes
+                  since the first rollback, the status.consecutiveRollbackCount is reset to 0.
+                type: string
               targetName:
                 description: |-
                   TargetName identifies which releases this policy applies to,

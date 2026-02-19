@@ -11,6 +11,7 @@ resources:
   - bases/workloads.crd.gocardless.com_consoletemplates.yaml
   - bases/deploy.crd.gocardless.com_releases.yaml
   - bases/deploy.crd.gocardless.com_rollbacks.yaml
+  - bases/deploy.crd.gocardless.com_automatedrollbackpolicies.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # patches:

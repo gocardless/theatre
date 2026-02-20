@@ -39,8 +39,9 @@ type CreateRollbackOptions struct {
 	Namespace          string
 	Labels             map[string]string
 
-	Reason        string
-	ToReleaseName string
+	Reason          string
+	ToReleaseTarget string
+	ToReleaseName   string
 
 	InitiatedByPrincipal string
 	InitiatedByType      string
@@ -55,21 +56,24 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	if opts.Reason == "" {
 		return nil, fmt.Errorf("reason is required")
 	}
+	if opts.ToReleaseTarget == "" {
+		return nil, fmt.Errorf("toReleaseTarget is required")
+	}
 	if opts.Name != "" && opts.GenerateNamePrefix != "" {
 		return nil, fmt.Errorf("only one of name or generateNamePrefix may be set")
 	}
 
 	spec := deployv1alpha1.RollbackSpec{
+		ToReleaseRef: deployv1alpha1.ReleaseReference{
+			Target: opts.ToReleaseTarget,
+			Name:   opts.ToReleaseName,
+		},
 		Reason: opts.Reason,
 		InitiatedBy: deployv1alpha1.RollbackInitiator{
 			Principal: opts.InitiatedByPrincipal,
 			Type:      opts.InitiatedByType,
 		},
 		DeploymentOptions: opts.DeploymentOptions,
-	}
-
-	if opts.ToReleaseName != "" {
-		spec.ToReleaseRef = deployv1alpha1.ReleaseReference{Name: opts.ToReleaseName}
 	}
 
 	rb := &deployv1alpha1.Rollback{

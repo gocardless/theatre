@@ -6,6 +6,7 @@ import (
 
 	logr "github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	deploy "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/admission/v1"
@@ -34,6 +35,17 @@ var _ = Describe("RollbackTargetWebhook", func() {
 		Expect(deployv1alpha1.AddToScheme(scheme)).To(Succeed())
 	})
 
+	setupFakeClientWithIndex := func(objects ...client.Object) client.Client {
+		return fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(objects...).
+			WithIndex(&deployv1alpha1.Release{}, deploy.IndexFieldReleaseTarget, func(obj client.Object) []string {
+				release := obj.(*deployv1alpha1.Release)
+				return []string{release.ReleaseConfig.TargetName}
+			}).
+			Build()
+	}
+
 	AfterEach(func() {
 		cancel()
 	})
@@ -49,10 +61,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				nil,
 			)
 
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(release).
-				Build()
+			fakeClient = setupFakeClientWithIndex(release)
 
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
@@ -66,8 +75,11 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
-					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-release-v1"},
-					Reason:       "Testing",
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+						Name:   "my-release-v1",
+					},
+					Reason: "Testing",
 				},
 			}
 
@@ -91,7 +103,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 
 	Context("when ToReleaseRef is not set", func() {
 		It("should deny if no active release exists", func() {
-			fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
+			fakeClient = setupFakeClientWithIndex()
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
 				scheme,
@@ -104,6 +116,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -111,7 +126,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeFalse())
-			Expect(resp.Result.Message).To(ContainSubstring("no active release found"))
+			Expect(resp.Result.Message).To(ContainSubstring("no releases found for target"))
 		})
 
 		It("should deny if no healthy release exists in the chain", func() {
@@ -124,10 +139,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				[]deployv1alpha1.Revision{{Name: "app", ID: "abc123"}},
 			)
 
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(activeRelease).
-				Build()
+			fakeClient = setupFakeClientWithIndex(activeRelease)
 
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
@@ -141,6 +153,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -177,10 +192,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				[]deployv1alpha1.Revision{{Name: "app", ID: "abc333"}},
 			)
 
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(releaseV1, releaseV2, releaseV3).
-				Build()
+			fakeClient = setupFakeClientWithIndex(releaseV1, releaseV2, releaseV3)
 
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
@@ -194,6 +206,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -247,10 +262,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				[]deployv1alpha1.Revision{{Name: "app", ID: "abc333"}},
 			)
 
-			fakeClient = fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(releaseV1, releaseV2, releaseV3).
-				Build()
+			fakeClient = setupFakeClientWithIndex(releaseV1, releaseV2, releaseV3)
 
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
@@ -264,6 +276,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}

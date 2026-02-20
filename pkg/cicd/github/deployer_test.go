@@ -59,15 +59,21 @@ var _ = Describe("GitHub Deployer", func() {
 						Namespace: "default",
 					},
 					Spec: deployv1alpha1.RollbackSpec{
-						ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-service-v1"},
-						Reason:       "High error rate",
+						ToReleaseRef: deployv1alpha1.ReleaseReference{
+							Target: "my-service",
+							Name:   "my-service-v1",
+						},
+						Reason: "High error rate",
 						InitiatedBy: deployv1alpha1.RollbackInitiator{
 							Principal: "alice@example.com",
 							Type:      "user",
 						},
 					},
 					Status: deployv1alpha1.RollbackStatus{
-						FromReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-service-v2"},
+						FromReleaseRef: &deployv1alpha1.ReleaseReference{
+							Target: "my-service",
+							Name:   "my-service-v2",
+						},
 					},
 				},
 				ToRelease: &deployv1alpha1.Release{

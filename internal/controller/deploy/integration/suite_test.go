@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -30,7 +31,8 @@ import (
 var (
 	testEnv     *envtest.Environment
 	deployer    *FakeDeployer
-	mgr         ctrl.Manager
+	rollbackMgr ctrl.Manager
+	releaseMgr  ctrl.Manager
 	ctx         context.Context
 	cancel      context.CancelFunc
 	testCounter atomic.Int32
@@ -62,31 +64,50 @@ var _ = BeforeSuite(func() {
 	err = deployv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
+	// Create separate managers for rollback and release controllers
+	// to simulate production where they run in separate processes
+	rollbackMgr, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0", // Disable metrics to avoid port conflicts
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	releaseMgr, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0", // Disable metrics to avoid port conflicts
+		},
 	})
 	Expect(err).NotTo(HaveOccurred())
 
 	deployer = NewFakeDeployer()
 
 	err = (&deploy.RollbackReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client:   rollbackMgr.GetClient(),
+		Scheme:   rollbackMgr.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName("Rollback"),
 		Deployer: deployer,
-	}).SetupWithManager(ctx, mgr)
+	}).SetupWithManager(ctx, rollbackMgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&deploy.ReleaseReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client: releaseMgr.GetClient(),
+		Scheme: releaseMgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Release"),
-	}).SetupWithManager(ctx, mgr)
+	}).SetupWithManager(ctx, releaseMgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()
-		err := mgr.Start(ctx)
+		err := rollbackMgr.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+
+	go func() {
+		defer GinkgoRecover()
+		err := releaseMgr.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	}()
 
@@ -178,7 +199,7 @@ func generateNamespaceName() string {
 
 func setupTestNamespace(ctx context.Context) string {
 	ns := generateNamespaceName()
-	err := mgr.GetClient().Create(ctx, &v1.Namespace{
+	err := rollbackMgr.GetClient().Create(ctx, &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
@@ -208,7 +229,7 @@ func generateRelease(namespace string, target string) *v1alpha1.Release {
 func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *v1alpha1.Release {
 	release := generateRelease(namespace, target)
 	release.Annotations = annotations
-	err := mgr.GetClient().Create(ctx, release)
+	err := rollbackMgr.GetClient().Create(ctx, release)
 	Expect(err).NotTo(HaveOccurred())
 	return release
 }

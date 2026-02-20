@@ -111,6 +111,14 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 		return ctrl.Result{}, err
 	}
 
+	if !policy.IsStatusInitialised() {
+		logger.Info("initialising rollback policy status")
+		policy.InitialiseStatus()
+		if err := r.Status().Update(ctx, policy); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	if !rollbackAllowed(policy) {
 		logger.Info("rollback is not allowed, nothing to do")
 		// nothing to do, exit early

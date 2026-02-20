@@ -70,7 +70,7 @@ var _ = Describe("GitHub Deployer", func() {
 						},
 					},
 					Status: deployv1alpha1.RollbackStatus{
-						FromReleaseRef: deployv1alpha1.ReleaseReference{
+						FromReleaseRef: &deployv1alpha1.ReleaseReference{
 							Target: "my-service",
 							Name:   "my-service-v2",
 						},

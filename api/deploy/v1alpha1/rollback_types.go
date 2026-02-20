@@ -79,7 +79,7 @@ type RollbackStatus struct {
 
 	// FromReleaseRef is the release being rolled back from. This is a reference
 	// to the Release resource name.
-	FromReleaseRef ReleaseReference `json:"fromReleaseRef,omitempty"`
+	FromReleaseRef *ReleaseReference `json:"fromReleaseRef,omitempty"`
 
 	// Automatic indicates whether this rollback was triggered automatically
 	// (e.g., by a health check) or manually by a user.

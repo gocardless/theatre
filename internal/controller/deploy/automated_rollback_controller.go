@@ -106,7 +106,7 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	var policy *deployv1alpha1.AutomatedRollbackPolicy
 	if policy, err = r.getRollbackPolicy(ctx, release); err != nil {
 		if err == ErrNoRollbackPolicyFound {
-			logger.Info("no rollback policy found for target", "target", release.TargetName)
+			logger.Info("no rollback policy found for target, nothing to do", "target", release.TargetName)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -163,7 +163,18 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	// Update policy
 	rollbackTime := metav1.NewTime(rollback.CreationTimestamp.Time)
 	policy.Status.LastAutomatedRollbackTime = &rollbackTime
+	if policy.Status.WindowStartTime == nil || policy.Spec.ResetPeriod != nil && policy.Status.WindowStartTime.Time.Add(policy.Spec.ResetPeriod.Duration).Before(time.Now()) {
+		policy.Status.WindowStartTime = &metav1.Time{Time: time.Now()}
+		policy.Status.ConsecutiveCount = 0
+	}
 	policy.Status.ConsecutiveCount++
+	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
+		Status:  metav1.ConditionTrue,
+		Reason:  deployv1alpha1.AutomatedRollbackPolicySetByUser,
+		Message: "Enabled by user and within reset period",
+	})
+
 	if err := r.Status().Update(ctx, policy); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -173,7 +184,6 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 
 func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
-		// TODO: filter out only releases that are active and require rollback
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return e.ObjectNew.(*deployv1alpha1.Release).IsConditionActiveTrue()
 		},
@@ -191,16 +201,25 @@ func rollbackAllowed(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed bo
 		return false, "Automated rollback policy is disabled"
 	}
 
-	isUnderMaxConsecutiveRollbacks := policy.Spec.MaxConsecutiveRollbacks == nil || policy.Status.ConsecutiveCount <= *policy.Spec.MaxConsecutiveRollbacks
-	if !isUnderMaxConsecutiveRollbacks {
-		return false, fmt.Sprintf("Max consecutive rollbacks reached: %d", policy.Status.ConsecutiveCount)
+	// Check if we're within the reset period window
+	// If lastAutomatedRollbackTime + resetPeriod has passed, the counter effectively resets
+	withinResetPeriod := policy.Spec.ResetPeriod != nil &&
+		policy.Status.WindowStartTime != nil &&
+		policy.Status.WindowStartTime.Time.Add(policy.Spec.ResetPeriod.Duration).After(time.Now())
+
+	// Only enforce maxConsecutiveRollbacks if we're within the reset period
+	if withinResetPeriod {
+		isMaxConsecutiveRollbacksReached := policy.Spec.MaxConsecutiveRollbacks != nil && policy.Status.ConsecutiveCount >= *policy.Spec.MaxConsecutiveRollbacks
+		if isMaxConsecutiveRollbacksReached {
+			return false, fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period", *policy.Spec.MaxConsecutiveRollbacks)
+		}
 	}
 
-	isIntervalMet := policy.Spec.MinInterval == nil ||
-		policy.Status.LastAutomatedRollbackTime == nil ||
-		policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration).Before(time.Now())
-	if !isIntervalMet {
-		return false, "Min interval between rollbacks not met"
+	// Check minimum interval between rollbacks
+	if policy.Spec.MinInterval != nil &&
+		policy.Status.LastAutomatedRollbackTime != nil &&
+		policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration).After(time.Now()) {
+		return false, fmt.Sprintf("Min interval (%s) between rollbacks not met", policy.Spec.MinInterval.Duration)
 	}
 
 	return true, ""

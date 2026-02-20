@@ -15,6 +15,12 @@ import (
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const (
+	// Indexes
+	IndexFieldOwner      = ".metadata.controller"
+	IndexFieldTargetName = ".config.targetName"
+)
+
 // RollbackTargetWebhook is a mutating webhook that sets the ToReleaseRef field
 // if it's not already set. It finds the last healthy release by walking back
 // from the active release using the PreviousRelease field.
@@ -58,17 +64,10 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 	} else {
 		w.logger.Info("ToReleaseRef.Name not set, finding latest healthy release for target", "target", rollback.Spec.ToReleaseRef.Target)
 
-		releaseList := &deployv1alpha1.ReleaseList{}
-		if err := w.client.List(ctx, releaseList, client.InNamespace(req.Namespace)); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
-		}
-
-		// Filter releases by the specified target
 		targetReleases := &deployv1alpha1.ReleaseList{}
-		for _, release := range releaseList.Items {
-			if release.ReleaseConfig.TargetName == rollback.Spec.ToReleaseRef.Target {
-				targetReleases.Items = append(targetReleases.Items, release)
-			}
+		matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: rollback.Spec.ToReleaseRef.Target})
+		if err := w.client.List(ctx, targetReleases, client.InNamespace(req.Namespace), matchFields); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
 		}
 
 		if len(targetReleases.Items) == 0 {

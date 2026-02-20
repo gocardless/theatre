@@ -27,10 +27,6 @@ const (
 	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
 	EventNoStatusUpdate         = "NoStatusUpdate"
 	EventReleaseCulled          = "ReleasedCulled"
-
-	// Indexes
-	IndexFieldOwner      = ".metadata.controller"
-	IndexFieldTargetName = ".config.targetName"
 )
 
 var apiGVStr = deployv1alpha1.GroupVersion.String()

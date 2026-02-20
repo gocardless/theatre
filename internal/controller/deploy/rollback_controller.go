@@ -44,11 +44,25 @@ type RollbackReconciler struct {
 func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Rollback")
 
-	// Index releases by their active condition status for efficient lookups
+	// Index releases by target name for efficient filtering in webhook
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		"status.conditions.active",
+		IndexFieldTargetName,
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{release.ReleaseConfig.TargetName}
+		},
+	)
+	if err != nil && err.Error() != "indexer conflict: map[field:.config.targetName:{}]" {
+		return err
+	}
+
+	// Index releases by their active condition status for efficient lookups
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		IndexFieldActiveName,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
@@ -121,7 +135,7 @@ func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, 
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,
 		client.InNamespace(namespace),
-		client.MatchingFields{"status.conditions.active": string(metav1.ConditionTrue)},
+		client.MatchingFields{IndexFieldActiveName: string(metav1.ConditionTrue)},
 	); err != nil {
 		return nil, err
 	}

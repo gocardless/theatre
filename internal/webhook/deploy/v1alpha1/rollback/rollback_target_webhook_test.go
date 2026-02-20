@@ -66,8 +66,11 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
-					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: "my-release-v1"},
-					Reason:       "Testing",
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+						Name:   "my-release-v1",
+					},
+					Reason: "Testing",
 				},
 			}
 
@@ -104,6 +107,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -141,6 +147,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -194,6 +203,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}
@@ -264,6 +276,9 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					Namespace: namespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+					},
 					Reason: "Testing",
 				},
 			}

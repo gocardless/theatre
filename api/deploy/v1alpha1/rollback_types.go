@@ -22,14 +22,13 @@ const (
 )
 
 // RollbackSpec defines the desired state of Rollback
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.toReleaseRef) || has(self.toReleaseRef)",message="toReleaseRef cannot be removed once set"
 type RollbackSpec struct {
 	// ToReleaseRef is the target release to rollback to. This is a reference to
-	// the Release resource name. If left empty, the operator will pick the latest
-	// healthy release to roll back to.
-	// +kubebuilder:validation:Optional
+	// the Release resource. If the Name field is left empty, the operator will pick
+	// the latest healthy release for the specified Target to roll back to.
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ToReleaseRef is immutable"
-	ToReleaseRef ReleaseReference `json:"toReleaseRef,omitempty"`
+	ToReleaseRef ReleaseReference `json:"toReleaseRef"`
 
 	// Reason is a human-readable message explaining why the rollback was initiated.
 	// +kubebuilder:validation:Required
@@ -48,9 +47,16 @@ type RollbackSpec struct {
 
 // ReleaseReference is a reference to a Release resource
 type ReleaseReference struct {
-	// Name is the name of the release resource.
+	// Target is the target name of the release. This is required to identify
+	// which release target to operate on.
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Target string `json:"target"`
+
+	// Name is the name of the release resource. If left empty, the system will
+	// automatically select the appropriate release (e.g., the latest healthy release).
+	// +kubebuilder:validation:Optional
+	Name string `json:"name,omitempty"`
 }
 
 // RollbackInitiator tracks who or what initiated the rollback

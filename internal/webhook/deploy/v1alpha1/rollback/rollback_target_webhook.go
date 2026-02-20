@@ -42,8 +42,8 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 	var targetRelease *deployv1alpha1.Release
 	copy := rollback.DeepCopy()
 
-	if rollback.Spec.ToReleaseRef != (deployv1alpha1.ReleaseReference{}) {
-		// If ToReleaseRef is already set, validate that the referenced Release exists
+	// If ToReleaseRef.Name is already set, validate that the referenced Release exists
+	if rollback.Spec.ToReleaseRef.Name != "" {
 		targetRelease = &deployv1alpha1.Release{}
 		if err := w.client.Get(ctx, client.ObjectKey{Name: rollback.Spec.ToReleaseRef.Name, Namespace: req.Namespace}, targetRelease); err != nil {
 			if apierrors.IsNotFound(err) {
@@ -51,29 +51,44 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 			}
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
+		// Validate that the release belongs to the specified target
+		if targetRelease.ReleaseConfig.TargetName != rollback.Spec.ToReleaseRef.Target {
+			return admission.Denied(fmt.Sprintf("Release %q does not belong to target %q", rollback.Spec.ToReleaseRef.Name, rollback.Spec.ToReleaseRef.Target))
+		}
 	} else {
-		w.logger.Info("ToReleaseRef not set, finding latest healthy release")
+		w.logger.Info("ToReleaseRef.Name not set, finding latest healthy release for target", "target", rollback.Spec.ToReleaseRef.Target)
 
 		releaseList := &deployv1alpha1.ReleaseList{}
 		if err := w.client.List(ctx, releaseList, client.InNamespace(req.Namespace)); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
 
+		// Filter releases by the specified target
+		targetReleases := &deployv1alpha1.ReleaseList{}
+		for _, release := range releaseList.Items {
+			if release.ReleaseConfig.TargetName == rollback.Spec.ToReleaseRef.Target {
+				targetReleases.Items = append(targetReleases.Items, release)
+			}
+		}
+
+		if len(targetReleases.Items) == 0 {
+			return admission.Denied(fmt.Sprintf("no releases found for target %q", rollback.Spec.ToReleaseRef.Target))
+		}
+
 		// Ensure there is an active release to roll back from
-		activeRelease := deployv1alpha1.FindActiveRelease(releaseList)
+		activeRelease := deployv1alpha1.FindActiveRelease(targetReleases)
 		if activeRelease == nil {
-			return admission.Denied("no active release found to rollback from")
+			return admission.Denied(fmt.Sprintf("no active release found for target %q to rollback from", rollback.Spec.ToReleaseRef.Target))
 		}
 
 		// Walk back from the active release to find the last healthy release
-		targetRelease = deployv1alpha1.FindLastHealthyRelease(releaseList)
+		targetRelease = deployv1alpha1.FindLastHealthyRelease(targetReleases)
 		if targetRelease == nil {
-			return admission.Denied("no healthy release found to rollback to")
+			return admission.Denied(fmt.Sprintf("no healthy release found for target %q to rollback to", rollback.Spec.ToReleaseRef.Target))
 		}
 
-		// Mutate the rollback to set the target release
 		w.logger.Info("auto-setting rollback target", "targetRelease", targetRelease.Name)
-		copy.Spec.ToReleaseRef = deployv1alpha1.ReleaseReference{Name: targetRelease.Name}
+		copy.Spec.ToReleaseRef.Name = targetRelease.Name
 	}
 
 	// Set owner ref on the target release

@@ -103,7 +103,10 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 		if err != nil {
 			logger.Info("failed to find active release, continuing without fromRelease", "error", err)
 		} else if fromRelease != nil {
-			rollback.Status.FromReleaseRef = deployv1alpha1.ReleaseReference{Name: fromRelease.Name}
+			rollback.Status.FromReleaseRef = deployv1alpha1.ReleaseReference{
+				Target: fromRelease.ReleaseConfig.TargetName,
+				Name:   fromRelease.Name,
+			}
 		}
 	}
 

@@ -92,24 +92,30 @@ spec:
               toReleaseRef:
                 description: |-
                   ToReleaseRef is the target release to rollback to. This is a reference to
-                  the Release resource name. If left empty, the operator will pick the latest
-                  healthy release to roll back to.
+                  the Release resource. If the Name field is left empty, the operator will pick
+                  the latest healthy release for the specified Target to roll back to.
                 properties:
                   name:
-                    description: Name is the name of the release resource.
+                    description: |-
+                      Name is the name of the release resource. If left empty, the system will
+                      automatically select the appropriate release (e.g., the latest healthy release).
+                    type: string
+                  target:
+                    description: |-
+                      Target is the target name of the release. This is required to identify
+                      which release target to operate on.
+                    minLength: 1
                     type: string
                 required:
-                - name
+                - target
                 type: object
                 x-kubernetes-validations:
                 - message: ToReleaseRef is immutable
                   rule: self == oldSelf
             required:
             - reason
+            - toReleaseRef
             type: object
-            x-kubernetes-validations:
-            - message: toReleaseRef cannot be removed once set
-              rule: '!has(oldSelf.toReleaseRef) || has(self.toReleaseRef)'
           status:
             description: Status defines the observed state of Rollback
             properties:
@@ -203,10 +209,18 @@ spec:
                   to the Release resource name.
                 properties:
                   name:
-                    description: Name is the name of the release resource.
+                    description: |-
+                      Name is the name of the release resource. If left empty, the system will
+                      automatically select the appropriate release (e.g., the latest healthy release).
+                    type: string
+                  target:
+                    description: |-
+                      Target is the target name of the release. This is required to identify
+                      which release target to operate on.
+                    minLength: 1
                     type: string
                 required:
-                - name
+                - target
                 type: object
               message:
                 description: Message is a human-readable message indicating the state

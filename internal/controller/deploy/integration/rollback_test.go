@@ -26,7 +26,7 @@ var _ = Describe("RollbackReconciler", func() {
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
 		release = createRelease(ctx, testNamespace, "default-target", nil)
-		k8sClient = mgr.GetClient()
+		k8sClient = rollbackMgr.GetClient()
 	})
 
 	Describe("Basic rollback flow", func() {
@@ -177,8 +177,11 @@ var _ = Describe("RollbackReconciler", func() {
 					Namespace: testNamespace,
 				},
 				Spec: deployv1alpha1.RollbackSpec{
-					ToReleaseRef: deployv1alpha1.ReleaseReference{Name: release.Name},
-					Reason:       "Testing options",
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: release.ReleaseConfig.TargetName,
+						Name:   release.Name,
+					},
+					Reason: "Testing options",
 					DeploymentOptions: map[string]apiextv1.JSON{
 						"skip_canary": {Raw: []byte("true")},
 						"timeout":     {Raw: []byte("300")},
@@ -231,8 +234,11 @@ func newRollback(namespace, name, toRelease, reason string) *deployv1alpha1.Roll
 			Namespace: namespace,
 		},
 		Spec: deployv1alpha1.RollbackSpec{
-			ToReleaseRef: deployv1alpha1.ReleaseReference{Name: toRelease},
-			Reason:       reason,
+			ToReleaseRef: deployv1alpha1.ReleaseReference{
+				Target: "default-target",
+				Name:   toRelease,
+			},
+			Reason: reason,
 		},
 	}
 }

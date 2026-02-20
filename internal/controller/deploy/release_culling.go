@@ -54,7 +54,7 @@ func (r *ReleaseReconciler) cullReleases(ctx context.Context, logger logr.Logger
 	logger = logger.WithValues("release_count_limit", limit)
 
 	releaseList := &deployv1alpha1.ReleaseList{}
-	matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: target})
+	matchFields := client.MatchingFields(map[string]string{IndexFieldReleaseTarget: target})
 	if err := r.List(ctx, releaseList, client.InNamespace(namespace), matchFields); err != nil {
 		return fmt.Errorf("failed to list releases: %w", err)
 	}

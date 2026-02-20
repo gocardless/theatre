@@ -44,11 +44,25 @@ type RollbackReconciler struct {
 func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logger := r.Log.WithValues("component", "Rollback")
 
-	// Index releases by their active condition status for efficient lookups
+	// Index releases by target name for efficient filtering in webhook
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		"status.conditions.active",
+		IndexFieldReleaseTarget,
+		func(rawObj client.Object) []string {
+			release := rawObj.(*deployv1alpha1.Release)
+			return []string{release.ReleaseConfig.TargetName}
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Index releases by their active condition status for efficient lookups
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Release{},
+		IndexFieldReleaseActive,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
@@ -98,12 +112,15 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 	}
 
 	// Determine the current release (fromRelease) if not already set
-	if rollback.Status.FromReleaseRef == (deployv1alpha1.ReleaseReference{}) {
+	if rollback.Status.FromReleaseRef == nil {
 		fromRelease, err := r.findActiveRelease(ctx, toRelease.ReleaseConfig.TargetName, rollback.Namespace)
 		if err != nil {
 			logger.Info("failed to find active release, continuing without fromRelease", "error", err)
 		} else if fromRelease != nil {
-			rollback.Status.FromReleaseRef = deployv1alpha1.ReleaseReference{Name: fromRelease.Name}
+			rollback.Status.FromReleaseRef = &deployv1alpha1.ReleaseReference{
+				Target: fromRelease.ReleaseConfig.TargetName,
+				Name:   fromRelease.Name,
+			}
 		}
 	}
 
@@ -118,7 +135,7 @@ func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, 
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,
 		client.InNamespace(namespace),
-		client.MatchingFields{"status.conditions.active": string(metav1.ConditionTrue)},
+		client.MatchingFields{IndexFieldReleaseActive: string(metav1.ConditionTrue)},
 	); err != nil {
 		return nil, err
 	}

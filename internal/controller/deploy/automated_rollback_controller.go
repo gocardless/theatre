@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -119,8 +120,22 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 		}
 	}
 
-	if !rollbackAllowed(policy) {
-		logger.Info("rollback is not allowed, nothing to do")
+	allowed, reason := rollbackAllowed(policy)
+	if !allowed {
+		logger.Info("rollback is not allowed, nothing to do", "reason", reason)
+
+		changed := meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+			Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
+			Status:  metav1.ConditionFalse,
+			Reason:  deployv1alpha1.AutomatedRollbackPolicyDisabledByController,
+			Message: reason,
+		})
+
+		if changed {
+			if err := r.Status().Update(ctx, policy); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		// nothing to do, exit early
 		return ctrl.Result{}, nil
 	}
@@ -171,17 +186,24 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 	}
 }
 
-func rollbackAllowed(policy *deployv1alpha1.AutomatedRollbackPolicy) bool {
-	return policy.Spec.Enabled
-	// if !policy.Spec.Enabled {
-	// 	return false
-	// }
+func rollbackAllowed(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed bool, reason string) {
+	if !policy.Spec.Enabled {
+		return false, "Automated rollback policy is disabled"
+	}
 
-	// if policy.Spec.MaxConsecutiveRollbacks != nil && policy.Status.ConsecutiveCount >= *policy.Spec.MaxConsecutiveRollbacks {
-	// 	return false
-	// }
+	isUnderMaxConsecutiveRollbacks := policy.Spec.MaxConsecutiveRollbacks == nil || policy.Status.ConsecutiveCount <= *policy.Spec.MaxConsecutiveRollbacks
+	if !isUnderMaxConsecutiveRollbacks {
+		return false, fmt.Sprintf("Max consecutive rollbacks reached: %d", policy.Status.ConsecutiveCount)
+	}
 
-	// return true
+	isIntervalMet := policy.Spec.MinInterval == nil ||
+		policy.Status.LastAutomatedRollbackTime == nil ||
+		policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration).Before(time.Now())
+	if !isIntervalMet {
+		return false, "Min interval between rollbacks not met"
+	}
+
+	return true, ""
 }
 
 func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Rollback, error) {

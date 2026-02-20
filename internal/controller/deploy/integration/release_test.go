@@ -29,7 +29,7 @@ var _ = Describe("ReleaseController", func() {
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
 		defaultRelease = createRelease(ctx, testNamespace, "default-target", nil)
-		k8sClient = mgr.GetClient()
+		k8sClient = releaseMgr.GetClient()
 	})
 
 	Context("handleAnnotations", func() {

@@ -26,7 +26,7 @@ var _ = Describe("RollbackReconciler", func() {
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
 		release = createRelease(ctx, testNamespace, "default-target", nil)
-		k8sClient = mgr.GetClient()
+		k8sClient = rollbackMgr.GetClient()
 	})
 
 	Describe("Basic rollback flow", func() {

@@ -54,7 +54,7 @@ func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 			return []string{release.ReleaseConfig.TargetName}
 		},
 	)
-	if err != nil && err.Error() != "indexer conflict: map[field:.config.targetName:{}]" {
+	if err != nil {
 		return err
 	}
 

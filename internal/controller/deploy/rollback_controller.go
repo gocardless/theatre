@@ -48,7 +48,7 @@ func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		IndexFieldTargetName,
+		IndexFieldReleaseTarget,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			return []string{release.ReleaseConfig.TargetName}
@@ -62,7 +62,7 @@ func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 	err = mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		IndexFieldActiveName,
+		IndexFieldReleaseActive,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionActive)
@@ -135,7 +135,7 @@ func (r *RollbackReconciler) findActiveRelease(ctx context.Context, targetName, 
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,
 		client.InNamespace(namespace),
-		client.MatchingFields{IndexFieldActiveName: string(metav1.ConditionTrue)},
+		client.MatchingFields{IndexFieldReleaseActive: string(metav1.ConditionTrue)},
 	); err != nil {
 		return nil, err
 	}

@@ -71,7 +71,7 @@ func (r *ReleaseReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&deployv1alpha1.Release{},
-		IndexFieldTargetName,
+		IndexFieldReleaseTarget,
 		func(rawObj client.Object) []string {
 			release := rawObj.(*deployv1alpha1.Release)
 			return []string{release.TargetName}

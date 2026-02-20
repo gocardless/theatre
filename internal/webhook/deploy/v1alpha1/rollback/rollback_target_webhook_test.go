@@ -6,6 +6,7 @@ import (
 
 	logr "github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	deploy "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/admission/v1"
@@ -38,7 +39,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 		return fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(objects...).
-			WithIndex(&deployv1alpha1.Release{}, ".config.targetName", func(obj client.Object) []string {
+			WithIndex(&deployv1alpha1.Release{}, deploy.IndexFieldReleaseTarget, func(obj client.Object) []string {
 				release := obj.(*deployv1alpha1.Release)
 				return []string{release.ReleaseConfig.TargetName}
 			}).

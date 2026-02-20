@@ -8,17 +8,12 @@ import (
 
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
+	deploy "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-)
-
-const (
-	// Indexes
-	IndexFieldOwner      = ".metadata.controller"
-	IndexFieldTargetName = ".config.targetName"
 )
 
 // RollbackTargetWebhook is a mutating webhook that sets the ToReleaseRef field
@@ -65,7 +60,7 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 		w.logger.Info("ToReleaseRef.Name not set, finding latest healthy release for target", "target", rollback.Spec.ToReleaseRef.Target)
 
 		targetReleases := &deployv1alpha1.ReleaseList{}
-		matchFields := client.MatchingFields(map[string]string{IndexFieldTargetName: rollback.Spec.ToReleaseRef.Target})
+		matchFields := client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: rollback.Spec.ToReleaseRef.Target})
 		if err := w.client.List(ctx, targetReleases, client.InNamespace(req.Namespace), matchFields); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}

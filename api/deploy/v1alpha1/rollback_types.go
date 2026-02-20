@@ -27,7 +27,6 @@ type RollbackSpec struct {
 	// the Release resource. If the Name field is left empty, the operator will pick
 	// the latest healthy release for the specified Target to roll back to.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ToReleaseRef is immutable"
 	ToReleaseRef ReleaseReference `json:"toReleaseRef"`
 
 	// Reason is a human-readable message explaining why the rollback was initiated.
@@ -51,11 +50,13 @@ type ReleaseReference struct {
 	// which release target to operate on.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Target is immutable"
 	Target string `json:"target"`
 
 	// Name is the name of the release resource. If left empty, the system will
 	// automatically select the appropriate release (e.g., the latest healthy release).
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="Name is immutable once set"
 	Name string `json:"name,omitempty"`
 }
 

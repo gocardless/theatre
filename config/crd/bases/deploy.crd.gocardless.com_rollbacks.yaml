@@ -100,18 +100,21 @@ spec:
                       Name is the name of the release resource. If left empty, the system will
                       automatically select the appropriate release (e.g., the latest healthy release).
                     type: string
+                    x-kubernetes-validations:
+                    - message: Name is immutable once set
+                      rule: oldSelf == '' || self == oldSelf
                   target:
                     description: |-
                       Target is the target name of the release. This is required to identify
                       which release target to operate on.
                     minLength: 1
                     type: string
+                    x-kubernetes-validations:
+                    - message: Target is immutable
+                      rule: self == oldSelf
                 required:
                 - target
                 type: object
-                x-kubernetes-validations:
-                - message: ToReleaseRef is immutable
-                  rule: self == oldSelf
             required:
             - reason
             - toReleaseRef
@@ -213,12 +216,18 @@ spec:
                       Name is the name of the release resource. If left empty, the system will
                       automatically select the appropriate release (e.g., the latest healthy release).
                     type: string
+                    x-kubernetes-validations:
+                    - message: Name is immutable once set
+                      rule: oldSelf == '' || self == oldSelf
                   target:
                     description: |-
                       Target is the target name of the release. This is required to identify
                       which release target to operate on.
                     minLength: 1
                     type: string
+                    x-kubernetes-validations:
+                    - message: Target is immutable
+                      rule: self == oldSelf
                 required:
                 - target
                 type: object

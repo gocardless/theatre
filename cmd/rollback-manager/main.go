@@ -104,6 +104,11 @@ func main() {
 		Handler: rollbackwebhook.NewRollbackTargetWebhook(logger, manager.GetScheme(), manager.GetClient()),
 	})
 
+	// Register validating webhook to prevent multiple rollbacks for the same target at the same time
+	manager.GetWebhookServer().Register("/validate-rollbacks", &admission.Webhook{
+		Handler: rollbackwebhook.NewRollbackValidateWebhook(logger, manager.GetScheme(), manager.GetClient()),
+	})
+
 	if err := manager.Start(ctx); err != nil {
 		app.Fatalf("failed to start manager: %v", err)
 	}

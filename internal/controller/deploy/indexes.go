@@ -9,4 +9,7 @@ const (
 
 	// IndexFieldReleaseActive indexes releases by their active condition status
 	IndexFieldReleaseActive = "status.conditions.active"
+
+	// IndexFieldRollbackTarget indexes rollbacks by their target name
+	IndexFieldRollbackTarget = ".spec.toReleaseRef.target"
 )

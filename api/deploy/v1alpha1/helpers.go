@@ -184,3 +184,12 @@ func (r *Release) GetEffectiveTime() time.Time {
 	}
 	return r.Status.DeploymentEndTime.Time
 }
+
+func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
+	for _, rollback := range rollbackList.Items {
+		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
+			return &rollback
+		}
+	}
+	return nil
+}

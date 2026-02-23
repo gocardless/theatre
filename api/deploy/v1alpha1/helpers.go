@@ -193,21 +193,3 @@ func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
 	}
 	return nil
 }
-
-func (policy *AutomatedRollbackPolicy) IsStatusInitialised() bool {
-	return meta.FindStatusCondition(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive) != nil
-}
-
-func (policy *AutomatedRollbackPolicy) InitialiseStatus() {
-	condition := metav1.ConditionFalse
-	if policy.Spec.Enabled {
-		condition = metav1.ConditionTrue
-	}
-
-	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
-		Type:    AutomatedRollbackPolicyConditionActive,
-		Status:  condition,
-		Reason:  AutomatedRollbackPolicySetByUser,
-		Message: "Automated rollback policy initialised successfully",
-	})
-}

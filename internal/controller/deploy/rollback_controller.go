@@ -26,11 +26,6 @@ const (
 
 	// Maximum number of times to retry triggering a deployment
 	MaxRetryAttempts = 3
-
-	// Deployment events
-	EventDeploymentTriggered = "DeploymentTriggered"
-	EventDeploymentFailed    = "DeploymentFailed"
-	EventDeploymentSucceeded = "DeploymentSucceeded"
 )
 
 type RollbackReconciler struct {

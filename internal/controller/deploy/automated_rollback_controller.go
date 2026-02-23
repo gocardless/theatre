@@ -25,6 +25,7 @@ var (
 const (
 	// Events
 	EventErrorGettingRollbackPolicy = "ErrorGettingRollbackPolicy"
+	EventAutomatedRollbackTriggered = "AutomatedRollbackTriggered"
 
 	// Indexes
 	IndexFieldSpecTargetName = ".spec.targetName"
@@ -152,11 +153,12 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("trigger condition is met, creating rollback")
 	var rollback *deployv1alpha1.Rollback
 	if rollback, err = r.createRollback(ctx, release, policy); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	logger.Info("trigger condition is met, automated rollback created", "rollback", rollback.Name, "event", EventAutomatedRollbackTriggered)
 
 	// TODO: temporary adding label to indicate this release has been rolled back from
 	release.Labels["rollback"] = rollback.Name

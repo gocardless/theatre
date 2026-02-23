@@ -47,8 +47,9 @@ var _ = Describe("RollbackValidateWebhook", func() {
 
 	Context("Handle requests with create operation", func() {
 		It("should allow create requests if there aren't any in progress", func() {
-			rollback1 := newRollback("my-service-rollback-1", "my-service", false)
-			fakeClient = setupFakeClientWithIndex(rollback1)
+			rollback := newRollback("my-service-rollback-1", "my-service", false)
+
+			fakeClient = setupFakeClientWithIndex(rollback)
 			webhook = NewRollbackValidateWebhook(logr.New(logr.Discard().GetSink()), scheme, fakeClient)
 
 			newRollback := newRollback("my-service-rollback-2", "my-service", true)
@@ -56,11 +57,26 @@ var _ = Describe("RollbackValidateWebhook", func() {
 			req := reqWithObj(newRollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeTrue())
-			Expect(resp.Result.Message).To(Equal("allowed"))
+			Expect(resp.Result.Message).To(Equal("no in-progress rollbacks found"))
+		})
+
+		It("should allow create requests if there are in-progress rollbacks from another target", func() {
+			otherRollback := newRollback("other-service-rollback-1", "other", true)
+
+			fakeClient = setupFakeClientWithIndex(otherRollback)
+			webhook = NewRollbackValidateWebhook(logr.New(logr.Discard().GetSink()), scheme, fakeClient)
+
+			newRollback := newRollback("my-service-rollback-1", "my-service", true)
+
+			req := reqWithObj(newRollback)
+			resp := webhook.Handle(ctx, req)
+			Expect(resp.Allowed).To(BeTrue())
+			Expect(resp.Result.Message).To(Equal("no in-progress rollbacks found"))
 		})
 
 		It("should deny create requests if there is an in progress rollback for the target", func() {
 			rollback := newRollback("my-service-rollback-1", "my-service", true)
+
 			fakeClient = setupFakeClientWithIndex(rollback)
 			webhook = NewRollbackValidateWebhook(logr.New(logr.Discard().GetSink()), scheme, fakeClient)
 
@@ -69,7 +85,7 @@ var _ = Describe("RollbackValidateWebhook", func() {
 			req := reqWithObj(newRollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeFalse())
-			Expect(resp.Result.Message).To(Equal("another rollback in progress for target \"my-service\""))
+			Expect(resp.Result.Message).To(Equal("another rollback in-progress for target \"my-service\""))
 		})
 	})
 })

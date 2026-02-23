@@ -164,6 +164,13 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 		return Create, nil
 	}
 
+	// Save the fetched state before diffFunc modifies it, to use as the
+	// base for merge patches on status updates. A merge patch does not
+	// include the resourceVersion (since base and existing share it), so
+	// the API server applies it to the latest version of the object,
+	// avoiding conflicts caused by stale cached reads.
+	base := existing.(runtime.Object).DeepCopyObject().(client.Object)
+
 	// existing contains the state we just fetched from Kubernetes.
 	// expected contains the state we're trying to reconcile towards.
 	// If an update is required, DiffFunc will set the relevant fields on existing such that we
@@ -176,7 +183,7 @@ func CreateOrUpdate(ctx context.Context, c client.Client, existing ObjWithMeta, 
 		}
 		return Update, nil
 	case StatusUpdate:
-		if err := c.Status().Update(ctx, existing); err != nil {
+		if err := c.Status().Patch(ctx, existing, client.MergeFrom(base)); err != nil {
 			return Error, err
 		}
 		return StatusUpdate, nil

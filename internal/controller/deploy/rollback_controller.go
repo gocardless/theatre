@@ -58,6 +58,20 @@ func (r *RollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 		return err
 	}
 
+	// Index rollbacks by target name for efficient filtering in webhook
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&deployv1alpha1.Rollback{},
+		IndexFieldRollbackTarget,
+		func(rawObj client.Object) []string {
+			rollback := rawObj.(*deployv1alpha1.Rollback)
+			return []string{rollback.Spec.ToReleaseRef.Target}
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	// Index releases by their active condition status for efficient lookups
 	err = mgr.GetFieldIndexer().IndexField(
 		ctx,

@@ -14,7 +14,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	automatedrollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
 )
@@ -37,17 +36,13 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	webhookOpts := webhook.Options{Port: 9443}
-	webhookServer := webhook.NewServer(webhookOpts)
-
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
-		LeaderElectionID: "rollbackpolicy.deploy.crd.gocardless.com",
+		LeaderElectionID: "automated-rollback-policy.deploy.crd.gocardless.com",
 		Scheme:           scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),
 		},
-		WebhookServer: webhookServer,
 	})
 
 	if err != nil {
@@ -55,10 +50,9 @@ func main() {
 	}
 
 	if err = (&automatedrollbackcontroller.AutomatedRollbackReconciler{
-		Client:             manager.GetClient(),
-		Scheme:             scheme,
-		Log:                logger,
-		ServiceAccountName: getServiceAccountName(),
+		Client: manager.GetClient(),
+		Scheme: scheme,
+		Log:    logger,
 	}).SetupWithManager(ctx, manager); err != nil {
 		app.Fatalf("failed to create controller: %v", err)
 	}
@@ -66,11 +60,4 @@ func main() {
 	if err := manager.Start(ctx); err != nil {
 		app.Fatalf("failed to start manager: %v", err)
 	}
-}
-
-func getServiceAccountName() string {
-	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/service-account-name"); err == nil {
-		return string(data)
-	}
-	return "automated-rollback-manager" // fallback
 }

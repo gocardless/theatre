@@ -287,7 +287,10 @@ func canPerformRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed
 	if withinResetPeriod {
 		isMaxConsecutiveRollbacksReached := policy.Spec.MaxConsecutiveRollbacks != nil && policy.Status.ConsecutiveCount >= *policy.Spec.MaxConsecutiveRollbacks
 		if isMaxConsecutiveRollbacksReached {
-			return false, deployv1alpha1.AutomatedRollbackPolicyDisabledByController, fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period", *policy.Spec.MaxConsecutiveRollbacks)
+			resetEndTime := policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration)
+			resetAtMessage := fmt.Sprintf("Will be enabled again at %s", resetEndTime.Format(time.RFC3339))
+
+			return false, deployv1alpha1.AutomatedRollbackPolicyDisabledByController, fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period. %s", *policy.Spec.MaxConsecutiveRollbacks, resetAtMessage)
 		}
 	} else {
 		policy.Status.ConsecutiveCount = 0
@@ -298,7 +301,9 @@ func canPerformRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed
 	if policy.Spec.MinInterval != nil &&
 		policy.Status.LastAutomatedRollbackTime != nil &&
 		policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration).After(time.Now()) {
-		return false, deployv1alpha1.AutomatedRollbackPolicyDisabledByController, fmt.Sprintf("Min interval (%s) between rollbacks not met", policy.Spec.MinInterval.Duration)
+		minIntervalEndTime := policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration)
+		minIntervalMessage := fmt.Sprintf("Will be enabled again at %s", minIntervalEndTime.Format(time.RFC3339))
+		return false, deployv1alpha1.AutomatedRollbackPolicyDisabledByController, fmt.Sprintf("Min interval (%s) between rollbacks not met. %s", policy.Spec.MinInterval.Duration, minIntervalMessage)
 	}
 
 	return true, deployv1alpha1.AutomatedRollbackPolicySetByUser, "Automated rollback is enabled"

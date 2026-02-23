@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -42,8 +43,11 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 	logger := r.Log.WithValues("component", "AutomatedRollback")
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
-		Named("automated_rollback").
-		For(&deployv1alpha1.Release{}).
+		// Named("automated_rollback").
+		For(&deployv1alpha1.AutomatedRollbackPolicy{}).
+		Watches(&deployv1alpha1.Release{},
+			&handler.EnqueueRequestForObject{}).
+		// For(&deployv1alpha1.Release{}).
 		// Owns(&deployv1alpha1.Rollback{}).
 		WithEventFilter(r.onReleaseConditionsChangedPredicate())
 

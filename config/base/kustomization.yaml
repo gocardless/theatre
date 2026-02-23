@@ -20,6 +20,7 @@ resources:
   - webhooks/release-mutating.yaml
   - webhooks/release-validating.yaml
   - webhooks/rollback-mutating.yaml
+  - webhooks/rollback-validating.yaml
   - rbac/leader-election.yaml
   - cert-manager/certificate.yaml
 

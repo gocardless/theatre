@@ -8,7 +8,6 @@ import (
 	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	deploy "github.com/gocardless/theatre/v5/internal/controller/deploy"
-	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	admission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -32,10 +31,6 @@ func NewRollbackValidateWebhook(logger logr.Logger, scheme *runtime.Scheme, clie
 }
 
 func (w *RollbackValidateWebhook) Handle(ctx context.Context, req admission.Request) admission.Response {
-	if req.Operation != admissionv1.Create {
-		return admission.Allowed("only create operations are validated")
-	}
-
 	rollback := &deployv1alpha1.Rollback{}
 	if err := w.decoder.Decode(req, rollback); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)

@@ -83,7 +83,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				},
 			}
 
-			req := reqWithObj(rollback, v1.Create)
+			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeTrue())
 			Expect(len(resp.Patches)).To(BeNumerically(">=", 1), "expected patches for owner reference")
@@ -123,7 +123,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				},
 			}
 
-			req := reqWithObj(rollback, v1.Create)
+			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeFalse())
 			Expect(resp.Result.Message).To(ContainSubstring("no releases found for target"))
@@ -160,7 +160,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				},
 			}
 
-			req := reqWithObj(rollback, v1.Create)
+			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeFalse())
 			Expect(resp.Result.Message).To(ContainSubstring("no healthy release found"))
@@ -213,7 +213,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				},
 			}
 
-			req := reqWithObj(rollback, v1.Create)
+			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeTrue(), "response: %+v", resp)
 			Expect(len(resp.Patches)).To(BeNumerically(">=", 1), "patches: %+v", resp.Patches)
@@ -283,7 +283,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				},
 			}
 
-			req := reqWithObj(rollback, v1.Create)
+			req := reqWithObj(rollback)
 			resp := webhook.Handle(ctx, req)
 			Expect(resp.Allowed).To(BeTrue())
 
@@ -306,11 +306,10 @@ var _ = Describe("RollbackTargetWebhook", func() {
 	})
 })
 
-func reqWithObj(obj runtime.Object, operation v1.Operation) admission.Request {
+func reqWithObj(obj runtime.Object) admission.Request {
 	return admission.Request{AdmissionRequest: v1.AdmissionRequest{
 		Namespace: namespace,
 		Object:    objectToRaw(obj),
-		Operation: operation,
 	}}
 }
 

@@ -60,8 +60,8 @@ var _ = Describe("RollbackValidateWebhook", func() {
 		})
 
 		It("should deny create requests if there is an in progress rollback for the target", func() {
-			rollback1 := newRollback("my-service-rollback-1", "my-service", true)
-			fakeClient = setupFakeClientWithIndex(rollback1)
+			rollback := newRollback("my-service-rollback-1", "my-service", true)
+			fakeClient = setupFakeClientWithIndex(rollback)
 			webhook = NewRollbackValidateWebhook(logr.New(logr.Discard().GetSink()), scheme, fakeClient)
 
 			newRollback := newRollback("my-service-rollback-2", "my-service", true)

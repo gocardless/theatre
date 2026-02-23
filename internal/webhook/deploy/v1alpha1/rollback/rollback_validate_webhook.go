@@ -47,8 +47,8 @@ func (w *RollbackValidateWebhook) Handle(ctx context.Context, req admission.Requ
 
 	inProgressRollback := deployv1alpha1.FindInProgressRollback(targetRollbacks)
 	if inProgressRollback != nil {
-		return admission.Denied(fmt.Sprintf("another rollback in progress for target %q", target))
+		return admission.Denied(fmt.Sprintf("another rollback in-progress for target %q", target))
 	}
 
-	return admission.Allowed("allowed")
+	return admission.Allowed("no in-progress rollbacks found")
 }

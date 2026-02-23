@@ -51,9 +51,17 @@ var _ = Describe("RollbackTargetWebhook", func() {
 	})
 
 	Context("when ToReleaseRef is already set", func() {
-		It("should set owner reference to the target release", func() {
+		It("should set owner reference to the active release", func() {
 			// Seed a release matching the ToReleaseRef so validation passes
-			release := newRelease(
+			activeRelease := newRelease(
+				"my-release-v2",
+				true, // active
+				true, // healthy
+				"",
+				nil,
+			)
+
+			targetRelease := newRelease(
 				"my-release-v1",
 				false, // active
 				true,  // healthy
@@ -61,7 +69,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 				nil,
 			)
 
-			fakeClient = setupFakeClientWithIndex(release)
+			fakeClient = setupFakeClientWithIndex(activeRelease, targetRelease)
 
 			webhook = NewRollbackTargetWebhook(
 				logr.New(logr.Discard().GetSink()),
@@ -95,6 +103,7 @@ var _ = Describe("RollbackTargetWebhook", func() {
 					foundOwnerRef = true
 					// Verify it's an array with at least one owner reference
 					Expect(patch.Value).ToNot(BeNil())
+					Expect(patch.Value).To(ContainElement(HaveKeyWithValue("name", activeRelease.Name)))
 				}
 			}
 			Expect(foundOwnerRef).To(BeTrue(), "expected patch for /metadata/ownerReferences, got patches: %+v", resp.Patches)

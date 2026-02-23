@@ -43,6 +43,22 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 	var targetRelease *deployv1alpha1.Release
 	copy := rollback.DeepCopy()
 
+	targetReleases := &deployv1alpha1.ReleaseList{}
+	matchFields := client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: rollback.Spec.ToReleaseRef.Target})
+	if err := w.client.List(ctx, targetReleases, client.InNamespace(req.Namespace), matchFields); err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	if len(targetReleases.Items) == 0 {
+		return admission.Denied(fmt.Sprintf("no releases found for target %q", rollback.Spec.ToReleaseRef.Target))
+	}
+
+	// Ensure there is an active release to roll back from
+	activeRelease := deployv1alpha1.FindActiveRelease(targetReleases)
+	if activeRelease == nil {
+		return admission.Denied(fmt.Sprintf("no active release found for target %q to rollback from", rollback.Spec.ToReleaseRef.Target))
+	}
+
 	// If ToReleaseRef.Name is already set, validate that the referenced Release exists
 	if rollback.Spec.ToReleaseRef.Name != "" {
 		targetRelease = &deployv1alpha1.Release{}
@@ -58,23 +74,6 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 		}
 	} else {
 		w.logger.Info("ToReleaseRef.Name not set, finding latest healthy release for target", "target", rollback.Spec.ToReleaseRef.Target)
-
-		targetReleases := &deployv1alpha1.ReleaseList{}
-		matchFields := client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: rollback.Spec.ToReleaseRef.Target})
-		if err := w.client.List(ctx, targetReleases, client.InNamespace(req.Namespace), matchFields); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
-		}
-
-		if len(targetReleases.Items) == 0 {
-			return admission.Denied(fmt.Sprintf("no releases found for target %q", rollback.Spec.ToReleaseRef.Target))
-		}
-
-		// Ensure there is an active release to roll back from
-		activeRelease := deployv1alpha1.FindActiveRelease(targetReleases)
-		if activeRelease == nil {
-			return admission.Denied(fmt.Sprintf("no active release found for target %q to rollback from", rollback.Spec.ToReleaseRef.Target))
-		}
-
 		// Walk back from the active release to find the last healthy release
 		targetRelease = deployv1alpha1.FindLastHealthyRelease(targetReleases)
 		if targetRelease == nil {
@@ -87,7 +86,7 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 
 	// Set owner ref on the target release
 	w.logger.Info("setting release owner reference on rollback")
-	controllerutil.SetControllerReference(targetRelease, copy, w.client.Scheme())
+	controllerutil.SetControllerReference(activeRelease, copy, w.client.Scheme())
 	copyBytes, err := json.Marshal(copy)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)

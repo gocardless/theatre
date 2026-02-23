@@ -23,6 +23,10 @@ var (
 )
 
 const (
+	// Events
+	EventErrorGettingRollbackPolicy = "ErrorGettingRollbackPolicy"
+
+	// Indexes
 	IndexFieldSpecTargetName = ".spec.targetName"
 )
 
@@ -105,8 +109,8 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	var err error
 	var policy *deployv1alpha1.AutomatedRollbackPolicy
 	if policy, err = r.getRollbackPolicy(ctx, release); err != nil {
+		logger.Error(err, "failed to get rollback policy for target", "target", release.TargetName, "event", EventErrorGettingRollbackPolicy)
 		if err == ErrNoRollbackPolicyFound {
-			logger.Info("no rollback policy found for target, nothing to do", "target", release.TargetName)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err

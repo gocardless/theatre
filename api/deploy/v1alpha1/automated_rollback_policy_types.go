@@ -14,12 +14,12 @@ const (
 	// Status=False means the automated rollback policy is disabled.
 	AutomatedRollbackPolicyConditionActive = "Automated"
 
-	// AutomatedRollbackPolicySetByUser indicates that the automated rollback policy is set by the user.
-	AutomatedRollbackPolicySetByUser = "SetByUser"
+	// AutomatedRollbackPolicyReasonSetByUser indicates that the automated rollback policy is set by the user.
+	AutomatedRollbackPolicyReasonSetByUser = "SetByUser"
 
-	// AutomatedRollbackPolicyDisabledByController indicates that the automated rollback policy is disabled
+	// AutomatedRollbackPolicyReasonDisabledByController indicates that the automated rollback policy is disabled
 	// because the maximum number of consecutive rollbacks has been reached.
-	AutomatedRollbackPolicyDisabledByController = "DisabledByController"
+	AutomatedRollbackPolicyReasonDisabledByController = "DisabledByController"
 
 	// AutomatedRollbackPolicyReasonRecoveryDetected indicates that the automated rollback policy is disabled
 	// because the minimum interval between rollbacks has not been met.

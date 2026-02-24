@@ -272,7 +272,7 @@ func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) p
 	if !policy.Spec.Enabled {
 		return policyEvaluation{
 			allowed: false,
-			reason:  deployv1alpha1.AutomatedRollbackPolicySetByUser,
+			reason:  deployv1alpha1.AutomatedRollbackPolicyReasonSetByUser,
 			message: "Automated rollback policy is disabled",
 		}
 	}
@@ -291,7 +291,7 @@ func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) p
 			resetAtMessage := fmt.Sprintf("Will be enabled again at %s", resetEndTime.Format(time.RFC3339))
 			message := fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period. %s", *policy.Spec.MaxConsecutiveRollbacks, resetAtMessage)
 			requeueAfter := time.Until(resetEndTime)
-			reason := deployv1alpha1.AutomatedRollbackPolicyDisabledByController
+			reason := deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController
 
 			return policyEvaluation{
 				allowed:      false,
@@ -309,7 +309,7 @@ func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) p
 		minIntervalEndTime := policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration)
 		minIntervalMessage := fmt.Sprintf("Will be enabled again at %s", minIntervalEndTime.Format(time.RFC3339))
 
-		reason := deployv1alpha1.AutomatedRollbackPolicyDisabledByController
+		reason := deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController
 		message := fmt.Sprintf("Min interval (%s) between rollbacks not met. %s", policy.Spec.MinInterval.Duration, minIntervalMessage)
 		requeueAfter := time.Until(minIntervalEndTime)
 
@@ -323,7 +323,7 @@ func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) p
 
 	return policyEvaluation{
 		allowed:       true,
-		reason:        deployv1alpha1.AutomatedRollbackPolicySetByUser,
+		reason:        deployv1alpha1.AutomatedRollbackPolicyReasonSetByUser,
 		message:       "Automated rollback is enabled",
 		windowExpired: !withinResetPeriod && policy.Status.WindowStartTime != nil,
 	}

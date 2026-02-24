@@ -185,7 +185,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 			}
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
-				return isRelease && release.IsConditionActiveTrue()
+				return release.IsConditionActiveTrue()
 			}
 
 			return false
@@ -196,7 +196,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 			}
 
 			if release, isRelease := e.Object.(*deployv1alpha1.Release); isRelease {
-				return isRelease && release.IsConditionActiveTrue()
+				return release.IsConditionActiveTrue()
 			}
 
 			return false

@@ -115,27 +115,12 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.requeueAfter)
 	}
 
-	release, err := r.getActiveReleaseForTarget(ctx, policy)
+	// Check if rollback should be triggered
+	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
 	if err != nil {
-		if errors.Is(err, ErrNoActiveReleaseFound) {
-			logger.Info("no active release found, exiting...")
-			// if there is not active release, we can't perform a rollback, exiting early
-			return r.updatePolicyAndReturn(ctx, logger, policy, nil)
-		}
 		return ctrl.Result{}, err
 	}
-
-	if hasRollback, err := r.hasRollback(ctx, release); err != nil {
-		return ctrl.Result{}, err
-	} else if hasRollback {
-		logger.Info("release already has a rollback, nothing to do")
-		return r.updatePolicyAndReturn(ctx, logger, policy, nil)
-	}
-
-	triggerConditionType := policy.Spec.Trigger.ConditionType
-	triggerConditionStatus := policy.Spec.Trigger.ConditionStatus
-	if !meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, triggerConditionType, triggerConditionStatus) {
-		logger.Info("trigger condition is not met, nothing to do")
+	if !shouldTrigger {
 		return r.updatePolicyAndReturn(ctx, logger, policy, nil)
 	}
 
@@ -353,6 +338,39 @@ func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) p
 		message:       "Automated rollback is enabled",
 		windowExpired: !withinResetPeriod && policy.Status.WindowStartTime != nil,
 	}
+}
+
+func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (bool, *deployv1alpha1.Release, error) {
+	// Find active release
+	release, err := r.getActiveReleaseForTarget(ctx, policy)
+	if err != nil {
+		if errors.Is(err, ErrNoActiveReleaseFound) {
+			logger.Info("no active release found, exiting...")
+			return false, nil, nil
+		}
+		return false, nil, err
+	}
+
+	// Check if release already has a rollback
+	hasRollback, err := r.hasRollback(ctx, release)
+	if err != nil {
+		return false, nil, err
+	}
+
+	if hasRollback {
+		logger.Info("release already has a rollback, nothing to do", "release", release.Name)
+		return false, nil, nil
+	}
+
+	// Check trigger condition
+	triggerConditionType := policy.Spec.Trigger.ConditionType
+	triggerConditionStatus := policy.Spec.Trigger.ConditionStatus
+	if !meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, triggerConditionType, triggerConditionStatus) {
+		logger.Info("trigger condition not met, nothing to do", "release", release.Name)
+		return false, nil, nil
+	}
+
+	return true, release, nil
 }
 
 func createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy, principal string) *deployv1alpha1.Rollback {

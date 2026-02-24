@@ -108,7 +108,7 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
 	logger.Info("Reconcile")
 
-	// TODO: Feed in the resetOnRecovery logic here
+	// TODO: resetOnRecovery logic will be added here
 	evaluation := r.evaluatePolicyStatus(policy)
 	if !evaluation.allowed {
 		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.reason)
@@ -124,21 +124,10 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 		return r.updatePolicyAndReturn(ctx, logger, policy, nil)
 	}
 
-	rollback := createRollback(ctx, release, policy, r.ServiceAccountName)
-	if err := r.createOrUpdate(ctx, logger, rollback, "rollback"); err != nil {
-		logger.Error(err, "failed to create rollback")
+	// Create rollback and update policy
+	if err := r.performRollback(ctx, logger, policy, release); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	// Update policy
-	rollbackTime := metav1.NewTime(time.Now())
-	policy.Status.LastAutomatedRollbackTime = &rollbackTime
-
-	if policy.Status.WindowStartTime == nil || policy.Spec.ResetPeriod != nil && policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration).Before(time.Now()) {
-		policy.Status.WindowStartTime = &rollbackTime
-		policy.Status.ConsecutiveCount = 0
-	}
-	policy.Status.ConsecutiveCount++
 
 	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
 }
@@ -371,6 +360,33 @@ func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context,
 	}
 
 	return true, release, nil
+}
+
+func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) error {
+	// Create rollback
+	rollback := createRollback(ctx, release, policy, r.ServiceAccountName)
+	if err := r.createOrUpdate(ctx, logger, rollback, "rollback"); err != nil {
+		logger.Error(err, "failed to create rollback")
+		return err
+	}
+
+	updatePolicyStatus(policy)
+	return nil
+}
+
+func updatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) {
+	now := metav1.NewTime(time.Now())
+	policy.Status.LastAutomatedRollbackTime = &now
+
+	windowExpired := policy.Status.WindowStartTime == nil ||
+		(policy.Spec.ResetPeriod != nil &&
+			policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration).Before(time.Now()))
+
+	if windowExpired {
+		policy.Status.WindowStartTime = &now
+		policy.Status.ConsecutiveCount = 0
+	}
+	policy.Status.ConsecutiveCount++
 }
 
 func createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy, principal string) *deployv1alpha1.Rollback {

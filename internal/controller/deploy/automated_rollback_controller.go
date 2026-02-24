@@ -106,28 +106,13 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 
 func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, request ctrl.Request, policy *deployv1alpha1.AutomatedRollbackPolicy) (ctrl.Result, error) {
 	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
-
 	logger.Info("Reconcile")
 
 	// TODO: Feed in the resetOnRecovery logic here
-
-	allowed, reason, message, requeueAfter := canPerformRollback(policy)
-	logger.Info("canPerformRollback", "allowed", allowed, "reason", reason, "message", message, "requeueAfter", requeueAfter)
-	condition := metav1.ConditionFalse
-	if allowed {
-		condition = metav1.ConditionTrue
-	}
-
-	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
-		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
-		Status:  condition,
-		Reason:  reason,
-		Message: message,
-	})
-
-	if !allowed {
-		logger.Info("rollback is not allowed, nothing to do", "reason", reason)
-		return r.updatePolicyAndReturn(ctx, logger, policy, requeueAfter)
+	evaluation := r.evaluatePolicyStatus(policy)
+	if !evaluation.allowed {
+		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.reason)
+		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.requeueAfter)
 	}
 
 	release, err := r.getActiveReleaseForTarget(ctx, policy)
@@ -279,10 +264,43 @@ func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(ctx context.Context, mg
 	}
 }
 
-// TODO: add logic to requeue policy for reconciliation
-func canPerformRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed bool, reason string, message string, requeueAfter *time.Duration) {
+type policyEvaluation struct {
+	allowed       bool
+	reason        string
+	message       string
+	requeueAfter  *time.Duration
+	windowExpired bool
+}
+
+func (r *AutomatedRollbackReconciler) evaluatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) policyEvaluation {
+	result := evaluatePolicyConstraints(policy)
+
+	if result.windowExpired {
+		policy.Status.WindowStartTime = nil
+		policy.Status.ConsecutiveCount = 0
+	}
+
+	status := metav1.ConditionFalse
+	if result.allowed {
+		status = metav1.ConditionTrue
+	}
+	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
+		Status:  status,
+		Reason:  result.reason,
+		Message: result.message,
+	})
+
+	return result
+}
+
+func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) policyEvaluation {
 	if !policy.Spec.Enabled {
-		return false, deployv1alpha1.AutomatedRollbackPolicySetByUser, "Automated rollback policy is disabled", nil
+		return policyEvaluation{
+			allowed: false,
+			reason:  deployv1alpha1.AutomatedRollbackPolicySetByUser,
+			message: "Automated rollback policy is disabled",
+		}
 	}
 
 	// Check if we're within the reset period window
@@ -301,11 +319,13 @@ func canPerformRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed
 			requeueAfter := time.Until(resetEndTime)
 			reason := deployv1alpha1.AutomatedRollbackPolicyDisabledByController
 
-			return false, reason, message, &requeueAfter
+			return policyEvaluation{
+				allowed:      false,
+				reason:       reason,
+				message:      message,
+				requeueAfter: &requeueAfter,
+			}
 		}
-	} else {
-		policy.Status.WindowStartTime = nil
-		policy.Status.ConsecutiveCount = 0
 	}
 
 	// Check minimum interval between rollbacks
@@ -319,10 +339,20 @@ func canPerformRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) (allowed
 		message := fmt.Sprintf("Min interval (%s) between rollbacks not met. %s", policy.Spec.MinInterval.Duration, minIntervalMessage)
 		requeueAfter := time.Until(minIntervalEndTime)
 
-		return false, reason, message, &requeueAfter
+		return policyEvaluation{
+			allowed:      false,
+			reason:       reason,
+			message:      message,
+			requeueAfter: &requeueAfter,
+		}
 	}
 
-	return true, deployv1alpha1.AutomatedRollbackPolicySetByUser, "Automated rollback is enabled", nil
+	return policyEvaluation{
+		allowed:       true,
+		reason:        deployv1alpha1.AutomatedRollbackPolicySetByUser,
+		message:       "Automated rollback is enabled",
+		windowExpired: !withinResetPeriod && policy.Status.WindowStartTime != nil,
+	}
 }
 
 func createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy, principal string) *deployv1alpha1.Rollback {

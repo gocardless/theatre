@@ -28,9 +28,8 @@ var (
 
 type AutomatedRollbackReconciler struct {
 	client.Client
-	Log                logr.Logger
-	Scheme             *runtime.Scheme
-	ServiceAccountName string
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 }
 
 func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -358,7 +357,7 @@ func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context,
 
 func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) error {
 	// Create rollback
-	rollback := createRollback(ctx, release, policy, r.ServiceAccountName)
+	rollback := createRollback(release, policy)
 	if err := r.createOrUpdate(ctx, logger, rollback, "rollback"); err != nil {
 		logger.Error(err, "failed to create rollback")
 		return err
@@ -383,7 +382,7 @@ func updatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) {
 	policy.Status.ConsecutiveCount++
 }
 
-func createRollback(ctx context.Context, release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy, principal string) *deployv1alpha1.Rollback {
+func createRollback(release *deployv1alpha1.Release, policy *deployv1alpha1.AutomatedRollbackPolicy) *deployv1alpha1.Rollback {
 	reason := fmt.Sprintf("Release %s status condition %s is %s", release.Name, policy.Spec.Trigger.ConditionType, policy.Spec.Trigger.ConditionStatus)
 
 	rb := &deployv1alpha1.Rollback{
@@ -395,7 +394,7 @@ func createRollback(ctx context.Context, release *deployv1alpha1.Release, policy
 		Spec: deployv1alpha1.RollbackSpec{
 			Reason: reason,
 			InitiatedBy: deployv1alpha1.RollbackInitiator{
-				Principal: principal,
+				Principal: "automated-rollback-controller",
 				Type:      "system",
 			},
 			ToReleaseRef: deployv1alpha1.ReleaseReference{

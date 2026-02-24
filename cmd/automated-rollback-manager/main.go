@@ -14,7 +14,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	automatedrollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
 )
@@ -37,9 +36,6 @@ func main() {
 	ctx, cancel := signals.SetupSignalHandler()
 	defer cancel()
 
-	webhookOpts := webhook.Options{Port: 9443}
-	webhookServer := webhook.NewServer(webhookOpts)
-
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
 		LeaderElectionID: "rollbackpolicy.deploy.crd.gocardless.com",
@@ -47,7 +43,6 @@ func main() {
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),
 		},
-		WebhookServer: webhookServer,
 	})
 
 	if err != nil {

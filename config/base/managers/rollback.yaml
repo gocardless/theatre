@@ -95,15 +95,18 @@ metadata:
   name: rollback-manager
   labels:
     group: deploy.crd.gocardless.com
+    controller: rollback-manager
 spec:
   replicas: 1
   selector:
     matchLabels:
       group: deploy.crd.gocardless.com
+      controller: rollback-manager
   template:
     metadata:
       labels:
         group: deploy.crd.gocardless.com
+        controller: rollback-manager
     spec:
       serviceAccountName: rollback-manager
       terminationGracePeriodSeconds: 10
@@ -140,7 +143,7 @@ metadata:
   name: rollback-manager
 spec:
   selector:
-    app: theatre
+    controller: rollback-manager
     group: deploy.crd.gocardless.com
   ports:
     - port: 443

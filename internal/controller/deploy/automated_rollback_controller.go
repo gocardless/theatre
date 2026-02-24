@@ -113,13 +113,12 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !shouldTrigger {
-		return r.updatePolicyAndReturn(ctx, logger, policy, nil)
-	}
 
-	// Create rollback and update policy
-	if err := r.performRollback(ctx, logger, policy, release); err != nil {
-		return ctrl.Result{}, err
+	if shouldTrigger {
+		// Create rollback and update policy
+		if err := r.performRollback(ctx, logger, policy, release); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return r.updatePolicyAndReturn(ctx, logger, policy, nil)

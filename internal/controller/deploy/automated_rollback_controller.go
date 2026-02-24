@@ -26,12 +26,6 @@ var (
 	ErrNoActiveReleaseFound  = errors.New("no active release found for target")
 )
 
-const (
-	// Events
-	EventErrorGettingRollbackPolicy = "ErrorGettingRollbackPolicy"
-	EventAutomatedRollbackTriggered = "AutomatedRollbackTriggered"
-)
-
 type AutomatedRollbackReconciler struct {
 	client.Client
 	Log                logr.Logger

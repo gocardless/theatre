@@ -105,15 +105,18 @@ kind: Deployment
 metadata:
   name: release-manager
   labels:
+    controller: release-manager
     group: deploy.crd.gocardless.com
 spec:
   replicas: 1
   selector:
     matchLabels:
+      controller: release-manager
       group: deploy.crd.gocardless.com
   template:
     metadata:
       labels:
+        controller: release-manager
         group: deploy.crd.gocardless.com
     spec:
       serviceAccountName: release-manager
@@ -151,7 +154,7 @@ metadata:
   name: release-manager
 spec:
   selector:
-    app: theatre
+    controller: release-manager
     group: deploy.crd.gocardless.com
   ports:
     - port: 443

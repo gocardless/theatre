@@ -185,6 +185,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 			}
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
+				// TODO: add filters to only trigger when release went from Healthy Unknown/True -> False, or Trigger False -> True
 				return release.IsConditionActiveTrue()
 			}
 

@@ -75,6 +75,9 @@ spec:
                   When true, the controller will only validate the configuration and report
                   what would be rolled back without making any changes.
                 type: boolean
+                x-kubernetes-validations:
+                - message: dryRun cannot be enabled after creation
+                  rule: oldSelf || !self
               initiatedBy:
                 description: InitiatedBy tracks who or what triggered the rollback
                   for audit purposes.

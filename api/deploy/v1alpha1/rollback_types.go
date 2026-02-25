@@ -42,6 +42,12 @@ type RollbackSpec struct {
 	// DeploymentOptions contains additional provider-specific options.
 	// +kubebuilder:validation:Optional
 	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
+
+	// DryRun indicates whether the rollback should be executed in dry-run mode.
+	// When true, the controller will only validate the configuration and report
+	// what would be rolled back without making any changes.
+	// +kubebuilder:validation:Optional
+	DryRun bool `json:"dryRun,omitempty"`
 }
 
 // ReleaseReference is a reference to a Release resource

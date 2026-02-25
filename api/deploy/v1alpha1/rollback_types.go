@@ -46,7 +46,7 @@ type RollbackSpec struct {
 	// DryRun indicates whether the rollback should be executed in dry-run mode.
 	// When true, the controller will only validate the configuration and report
 	// what would be rolled back without making any changes.
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:XValidation:rule="oldSelf || !self",message="dryRun cannot be enabled after creation"
 	DryRun bool `json:"dryRun,omitempty"`
 }
 

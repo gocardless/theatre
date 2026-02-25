@@ -69,6 +69,12 @@ spec:
                 description: DeploymentOptions contains additional provider-specific
                   options.
                 type: object
+              dryRun:
+                description: |-
+                  DryRun indicates whether the rollback should be executed in dry-run mode.
+                  When true, the controller will only validate the configuration and report
+                  what would be rolled back without making any changes.
+                type: boolean
               initiatedBy:
                 description: InitiatedBy tracks who or what triggered the rollback
                   for audit purposes.

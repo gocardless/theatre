@@ -102,7 +102,7 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	logger.Info("Reconcile")
 
 	// TODO: resetOnRecovery logic will be added here
-	evaluation := r.evaluatePolicyStatus(policy)
+	evaluation := evaluatePolicyStatus(policy)
 	if !evaluation.allowed {
 		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.reason)
 		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.requeueAfter)
@@ -233,36 +233,6 @@ func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(ctx context.Context, mg
 	}
 }
 
-type policyEvaluation struct {
-	allowed       bool
-	reason        string
-	message       string
-	requeueAfter  *time.Duration
-	windowExpired bool
-}
-
-func (r *AutomatedRollbackReconciler) evaluatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) policyEvaluation {
-	result := evaluatePolicyConstraints(policy)
-
-	if result.windowExpired {
-		policy.Status.WindowStartTime = nil
-		policy.Status.ConsecutiveCount = 0
-	}
-
-	status := metav1.ConditionFalse
-	if result.allowed {
-		status = metav1.ConditionTrue
-	}
-	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
-		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
-		Status:  status,
-		Reason:  result.reason,
-		Message: result.message,
-	})
-
-	return result
-}
-
 func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (bool, *deployv1alpha1.Release, error) {
 	// Find active release
 	release, err := r.getActiveReleaseForTarget(ctx, policy)
@@ -317,6 +287,40 @@ func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *
 	return len(rollbackList.Items) > 0, nil
 }
 
+type policyEvaluation struct {
+	allowed       bool
+	reason        string
+	message       string
+	requeueAfter  *time.Duration
+	windowExpired bool
+}
+
+// evaluatePolicyStatus evaluates the status of the automated rollback policy
+// and updates the policy status conditions accordingly
+func evaluatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) policyEvaluation {
+	result := evaluatePolicyConstraints(policy)
+
+	if result.windowExpired {
+		policy.Status.WindowStartTime = nil
+		policy.Status.ConsecutiveCount = 0
+	}
+
+	status := metav1.ConditionFalse
+	if result.allowed {
+		status = metav1.ConditionTrue
+	}
+	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
+		Status:  status,
+		Reason:  result.reason,
+		Message: result.message,
+	})
+
+	return result
+}
+
+// evaluatePolicyConstraints evaluates the constraints of the automated rollback policy
+// and returns whether the policy is allowed to trigger a rollback and related metadata
 func evaluatePolicyConstraints(policy *deployv1alpha1.AutomatedRollbackPolicy) policyEvaluation {
 	if !policy.Spec.Enabled {
 		return policyEvaluation{

@@ -6,6 +6,7 @@ import (
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -179,6 +180,85 @@ var _ = Describe("AutomatedRollbackController", func() {
 						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
 					})
 				})
+			})
+		})
+	})
+
+	Context("evaluatePolicyStatus", func() {
+		Context("when evaluatePolicyConstraints returns allowed=true with windowExpired=true", func() {
+			BeforeEach(func() {
+				policy.Spec.Enabled = true
+				// Set up state so window is expired: windowStartTime + resetPeriod is in the past
+				policy.Spec.ResetPeriod = &metav1.Duration{Duration: 5 * time.Minute}
+				policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
+				policy.Status.ConsecutiveCount = 3
+			})
+
+			It("should reset windowStartTime and consecutiveCount", func() {
+				result := evaluatePolicyStatus(&policy)
+
+				Expect(result.allowed).To(BeTrue())
+				Expect(policy.Status.WindowStartTime).To(BeNil())
+				Expect(policy.Status.ConsecutiveCount).To(Equal(int32(0)))
+			})
+
+			It("should set Active condition to True", func() {
+				evaluatePolicyStatus(&policy)
+
+				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
+				Expect(condition).ToNot(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			})
+		})
+
+		Context("when evaluatePolicyConstraints returns allowed=true with windowExpired=false", func() {
+			BeforeEach(func() {
+				policy.Spec.Enabled = true
+				// Set up state so window is NOT expired: windowStartTime + resetPeriod is in the future
+				policy.Spec.ResetPeriod = &metav1.Duration{Duration: 10 * time.Minute}
+				policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
+				policy.Status.ConsecutiveCount = 2
+			})
+
+			It("should not reset windowStartTime and consecutiveCount", func() {
+				originalWindowStartTime := policy.Status.WindowStartTime
+
+				result := evaluatePolicyStatus(&policy)
+
+				Expect(result.allowed).To(BeTrue())
+				Expect(policy.Status.WindowStartTime).To(Equal(originalWindowStartTime))
+				Expect(policy.Status.ConsecutiveCount).To(Equal(int32(2)))
+			})
+
+			It("should set Active condition to True", func() {
+				evaluatePolicyStatus(&policy)
+
+				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
+				Expect(condition).ToNot(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			})
+		})
+
+		Context("when evaluatePolicyConstraints returns allowed=false", func() {
+			BeforeEach(func() {
+				policy.Spec.Enabled = false
+			})
+
+			It("should set Active condition to False", func() {
+				evaluatePolicyStatus(&policy)
+
+				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
+				Expect(condition).ToNot(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(condition.Reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
+			})
+
+			It("should propagate the reason and message from evaluation", func() {
+				result := evaluatePolicyStatus(&policy)
+
+				Expect(result.allowed).To(BeFalse())
+				Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
+				Expect(result.message).To(Equal("Automated rollback policy is disabled"))
 			})
 		})
 	})

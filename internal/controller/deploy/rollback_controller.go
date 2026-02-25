@@ -138,6 +138,11 @@ func (r *RollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, 
 		}
 	}
 
+	// Detect if dry-run mode, update rollback and exit early
+	if rollback.Spec.DryRun {
+		return r.markRollbackDryRun(ctx, logger, rollback)
+	}
+
 	if !meta.IsStatusConditionTrue(rollback.Status.Conditions, deployv1alpha1.RollbackConditionInProgress) {
 		return r.triggerDeployment(ctx, logger, rollback, toRelease)
 	}
@@ -336,5 +341,30 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 		return ctrl.Result{}, err
 	}
 	logger.Info("rollback failed", "message", message)
+	return ctrl.Result{}, nil
+}
+
+func (r *RollbackReconciler) markRollbackDryRun(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback) (ctrl.Result, error) {
+	// Update status to reflect dry-run
+	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.RollbackConditionInProgress,
+		Status:  metav1.ConditionFalse,
+		Reason:  "DryRun",
+		Message: "Dry-run mode enabled, no deployment will be performed. Unset spec.dryRun to deploy.",
+	})
+
+	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.RollbackConditionSucceeded,
+		Status:  metav1.ConditionFalse,
+		Reason:  "DryRun",
+		Message: "Dry-run mode enabled, no deployment will be performed. Unset spec.dryRun to deploy.",
+	})
+
+	err := r.statusUpdate(ctx, logger, rollback)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("dry-run mode enabled, skipping deployment")
 	return ctrl.Result{}, nil
 }

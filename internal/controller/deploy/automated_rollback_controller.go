@@ -124,6 +124,7 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
 }
 
+// TODO: make this generic function that can be reused when culling, rollbacks and here
 func (r *AutomatedRollbackReconciler) getActiveReleaseForTarget(ctx context.Context, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Release, error) {
 	releaseList := &deployv1alpha1.ReleaseList{}
 	if err := r.List(ctx, releaseList,
@@ -185,6 +186,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 			}
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
+				// Enum the possible condition states that should trigger a check if fetching the policy is not possible
 				// TODO: add filters to only trigger when release went from Healthy Unknown/True -> False, or Trigger False -> True
 				return release.IsConditionActiveTrue()
 			}

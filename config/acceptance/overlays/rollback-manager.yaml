@@ -6,10 +6,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
+      controller: rollback-manager
       group: deploy.crd.gocardless.com
   template:
     metadata:
       labels:
+        controller: rollback-manager
         group: deploy.crd.gocardless.com
     spec:
       containers:

@@ -100,15 +100,18 @@ kind: Deployment
 metadata:
   name: automated-rollback-manager
   labels:
+    controller: automated-rollback-manager
     group: deploy.crd.gocardless.com
 spec:
   replicas: 1
   selector:
     matchLabels:
+      controller: automated-rollback-manager
       group: deploy.crd.gocardless.com
   template:
     metadata:
       labels:
+        controller: automated-rollback-manager
         group: deploy.crd.gocardless.com
     spec:
       serviceAccountName: automated-rollback-manager
@@ -146,7 +149,7 @@ metadata:
   name: automated-rollback-manager
 spec:
   selector:
-    app: theatre
+    controller: automated-rollback-manager
     group: deploy.crd.gocardless.com
   ports:
     - port: 443

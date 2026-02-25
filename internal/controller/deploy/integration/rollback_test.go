@@ -224,6 +224,28 @@ var _ = Describe("RollbackReconciler", func() {
 					rb.Status.CompletionTime != nil && strings.Contains(rb.Status.Message, "not found")
 			}, "1s", "100ms").Should(BeTrue())
 		})
+
+		It("exits early when dryRun is enabled", func() {
+			rollback = newRollback(testNamespace, "dry-run-test", release.Name, "Testing dry run")
+			rollback.Spec.DryRun = true
+
+			By("Creating rollback with dryRun enabled")
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
+
+			By("Verifying rollback completes immediately with dryRun message")
+			Eventually(func() bool {
+				rb := &deployv1alpha1.Rollback{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+					return false
+				}
+				succeededCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
+				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
+
+				return succeededCond != nil && succeededCond.Status == metav1.ConditionFalse &&
+					inProgressCond != nil && inProgressCond.Status == metav1.ConditionFalse &&
+					rb.Status.CompletionTime != nil && strings.Contains(rb.Status.Message, "Dry-run mode enabled")
+			}, "1s", "100ms").Should(BeTrue())
+		})
 	})
 })
 

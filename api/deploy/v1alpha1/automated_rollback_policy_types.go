@@ -83,11 +83,13 @@ type AutomatedRollbackPolicyStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=rbp
-// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetName`
-// +kubebuilder:printcolumn:name="TriggerCondition",type=string,JSONPath=`.spec.trigger.conditionType`
-// +kubebuilder:printcolumn:name="TriggerWhen",type=string,JSONPath=`.spec.trigger.conditionStatus`
-// +kubebuilder:printcolumn:name="Automated",type=boolean,JSONPath=`.spec.automated.enabled`
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=".spec.targetName"
+// +kubebuilder:printcolumn:name="Trigger_Condition",type=string,JSONPath=".spec.trigger.conditionType"
+// +kubebuilder:printcolumn:name="Trigger_When",type=string,JSONPath=".spec.trigger.conditionStatus"
+// +kubebuilder:printcolumn:name="Automated",type=string,JSONPath=".status.conditions[?(@.type==\"Automated\")].status"
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=".status.conditions[?(@.type==\"Automated\")].reason"
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=".status.conditions[?(@.type==\"Automated\")].message",priority=10
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 
 // AutomatedRollbackPolicy is the Schema for the automatedrollbackpolicies API.
 type AutomatedRollbackPolicy struct {

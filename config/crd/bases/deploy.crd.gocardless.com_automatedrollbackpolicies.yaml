@@ -21,14 +21,21 @@ spec:
       name: Target
       type: string
     - jsonPath: .spec.trigger.conditionType
-      name: TriggerCondition
+      name: Trigger_Condition
       type: string
     - jsonPath: .spec.trigger.conditionStatus
-      name: TriggerWhen
+      name: Trigger_When
       type: string
-    - jsonPath: .spec.automated.enabled
+    - jsonPath: .status.conditions[?(@.type=="Automated")].status
       name: Automated
-      type: boolean
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Automated")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Automated")].message
+      name: Message
+      priority: 10
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

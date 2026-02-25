@@ -346,18 +346,22 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 
 func (r *RollbackReconciler) markRollbackDryRun(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback) (ctrl.Result, error) {
 	// Update status to reflect dry-run
+	now := metav1.Now()
+	rollback.Status.CompletionTime = &now
+	rollback.Status.Message = "Dry-run mode enabled, no deployment will be performed. Unset spec.dryRun to deploy"
+
 	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
 		Type:    deployv1alpha1.RollbackConditionInProgress,
 		Status:  metav1.ConditionFalse,
 		Reason:  "DryRun",
-		Message: "Dry-run mode enabled, no deployment will be performed. Unset spec.dryRun to deploy.",
+		Message: "Dry-run mode enabled, no deployment will be performed",
 	})
 
 	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
 		Type:    deployv1alpha1.RollbackConditionSucceeded,
 		Status:  metav1.ConditionFalse,
 		Reason:  "DryRun",
-		Message: "Dry-run mode enabled, no deployment will be performed. Unset spec.dryRun to deploy.",
+		Message: "Dry-run mode enabled, no deployment will be performed",
 	})
 
 	err := r.statusUpdate(ctx, logger, rollback)

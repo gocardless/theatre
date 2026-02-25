@@ -296,7 +296,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 	})
 
 	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
-		Type:               deployv1alpha1.RollbackConditionSucceded,
+		Type:               deployv1alpha1.RollbackConditionSucceeded,
 		Status:             metav1.ConditionTrue,
 		Reason:             "DeploymentSucceeded",
 		Message:            message,
@@ -325,7 +325,7 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 	})
 
 	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
-		Type:               deployv1alpha1.RollbackConditionSucceded,
+		Type:               deployv1alpha1.RollbackConditionSucceeded,
 		Status:             metav1.ConditionFalse,
 		Reason:             "DeploymentFailed",
 		Message:            message,

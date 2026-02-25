@@ -21,6 +21,10 @@ const (
 // Rollback helpers
 
 func (rollback *Rollback) IsCompleted() bool {
+	if rollback.Spec.DryRun {
+		return meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionDryRun)
+	}
+
 	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceeded})
 }
 

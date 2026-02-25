@@ -19,6 +19,11 @@ const (
 	// Status=True means the rollback has succeeded.
 	// Status=False means the rollback has not failed.
 	RollbackConditionSucceeded = "Succeeded"
+
+	// RollbackConditionDryRun indicates whether the rollback is in dry-run mode.
+	// Status=True means the rollback is in dry-run mode.
+	// Status=False means the rollback is not in dry-run mode.
+	RollbackConditionDryRun = "DryRun"
 )
 
 // RollbackSpec defines the desired state of Rollback

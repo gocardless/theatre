@@ -238,12 +238,47 @@ var _ = Describe("RollbackReconciler", func() {
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
-				succeededCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
+				dryRunCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionDryRun)
+				successCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
 
-				return succeededCond != nil && succeededCond.Status == metav1.ConditionFalse &&
+				return dryRunCond != nil && dryRunCond.Status == metav1.ConditionTrue &&
+					successCond == nil && inProgressCond == nil &&
+					strings.Contains(rb.Status.Message, "Dry-run mode enabled")
+			}, "1s", "100ms").Should(BeTrue())
+		})
+
+		It("should run rollback as normal when dryRun transition from true to false", func() {
+			rollback = newRollback(testNamespace, "dry-run-transition-test", release.Name, "Testing dry run transition")
+			rollback.Spec.DryRun = true
+
+			By("Creating rollback with dryRun enabled")
+			Expect(k8sClient.Create(ctx, rollback)).NotTo(HaveOccurred())
+
+			By("Updating rollback to disable dryRun")
+			Eventually(func() error {
+				rb := &deployv1alpha1.Rollback{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+					return err
+				}
+				rb.Spec.DryRun = false
+				return k8sClient.Update(ctx, rb)
+			}, "1s", "100ms").Should(Succeed())
+
+			By("Verifying rollback completes with success")
+			Eventually(func() bool {
+				rb := &deployv1alpha1.Rollback{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
+					return false
+				}
+				successCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
+				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
+				dryRunCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionDryRun)
+
+				return successCond != nil && successCond.Status == metav1.ConditionTrue &&
 					inProgressCond != nil && inProgressCond.Status == metav1.ConditionFalse &&
-					rb.Status.CompletionTime != nil && strings.Contains(rb.Status.Message, "Dry-run mode enabled")
+					dryRunCond == nil &&
+					rb.Status.CompletionTime != nil
 			}, "1s", "100ms").Should(BeTrue())
 		})
 	})

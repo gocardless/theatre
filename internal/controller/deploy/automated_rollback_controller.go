@@ -38,8 +38,8 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&deployv1alpha1.AutomatedRollbackPolicy{}).
 		Watches(&deployv1alpha1.Release{},
-			handler.EnqueueRequestsFromMapFunc(r.mapReleaseToPolicy(ctx, mgr))).
-		WithEventFilter(r.onReleaseConditionsChangedPredicate())
+			handler.EnqueueRequestsFromMapFunc(r.mapReleaseToPolicy(mgr))).
+		WithEventFilter(r.onReleaseConditionsChangedPredicate(ctx))
 
 	err := mgr.GetFieldIndexer().IndexField(
 		ctx,
@@ -178,7 +178,7 @@ func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
-func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() predicate.Predicate {
+func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx context.Context) predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if _, isPolicy := e.ObjectNew.(*deployv1alpha1.AutomatedRollbackPolicy); isPolicy {
@@ -186,9 +186,30 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 			}
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
-				// Enum the possible condition states that should trigger a check if fetching the policy is not possible
-				// TODO: add filters to only trigger when release went from Healthy Unknown/True -> False, or Trigger False -> True
-				return release.IsConditionActiveTrue()
+				if release.TargetName == "" {
+					return false
+				}
+
+				policyList := &deployv1alpha1.AutomatedRollbackPolicyList{}
+				if err := r.List(ctx, policyList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{IndexFieldPolicyTargetName: release.TargetName})); err != nil {
+					return false
+				}
+
+				if len(policyList.Items) != 1 {
+					return false
+				}
+
+				policy := policyList.Items[0]
+
+				oldRelease := e.ObjectOld.(*deployv1alpha1.Release)
+				oldHealthCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
+				newHealthCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
+				healthTransitioned := oldHealthCond != nil && newHealthCond != nil && oldHealthCond.Status != newHealthCond.Status
+
+				triggerCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
+				triggerMet := triggerCond != nil && triggerCond.Status == policy.Spec.Trigger.ConditionStatus
+
+				return release.IsConditionActiveTrue() && (healthTransitioned || triggerMet)
 			}
 
 			return false
@@ -211,7 +232,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate() pred
 	}
 }
 
-func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(ctx context.Context, mgr ctrl.Manager) handler.MapFunc {
+func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(mgr ctrl.Manager) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		release := obj.(*deployv1alpha1.Release)
 

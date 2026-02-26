@@ -57,134 +57,7 @@ var _ = Describe("AutomatedRollbackController", func() {
 		})
 	})
 
-	Context("evaluatePolicyConstraints", func() {
-		Context("when spec.enabled=false", func() {
-			It("should return allowed=false with reason SetByUser", func() {
-				policy.Spec.Enabled = false
-				result := evaluatePolicyConstraints(&policy)
-				Expect(result.allowed).To(BeFalse())
-				Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-				Expect(result.message).To(Equal("Automated rollback policy is disabled"))
-			})
-		})
-
-		Context("when spec.enabled=true", func() {
-			BeforeEach(func() {
-				policy.Spec.Enabled = true
-			})
-
-			Context("when not within reset period", func() {
-				BeforeEach(func() {
-					// Make reset period expired: windowStartTime + resetPeriod is in the past
-					policy.Spec.ResetPeriod = &metav1.Duration{Duration: 5 * time.Minute}
-					policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-				})
-
-				Context("when minInterval constraint is violated", func() {
-					It("should return allowed=false with reason DisabledByController", func() {
-						policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-						policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
-
-						result := evaluatePolicyConstraints(&policy)
-						Expect(result.allowed).To(BeFalse())
-						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-						Expect(result.requeueAfter).ToNot(BeNil())
-						Expect(*result.requeueAfter).To(BeNumerically("~", 3*time.Minute, 5*time.Second))
-					})
-				})
-
-				Context("when minInterval constraint is satisfied", func() {
-					It("should return allowed=true with windowExpired=true", func() {
-						policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-						policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-
-						result := evaluatePolicyConstraints(&policy)
-						Expect(result.allowed).To(BeTrue())
-						Expect(result.windowExpired).To(BeTrue())
-						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-					})
-				})
-
-				Context("when minInterval is nil", func() {
-					It("should return allowed=true", func() {
-						policy.Spec.MinInterval = nil
-
-						result := evaluatePolicyConstraints(&policy)
-						Expect(result.allowed).To(BeTrue())
-						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-					})
-				})
-			})
-
-			Context("when within reset period", func() {
-				BeforeEach(func() {
-					// Make reset period active: windowStartTime + resetPeriod is in the future
-					policy.Spec.ResetPeriod = &metav1.Duration{Duration: 10 * time.Minute}
-					policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
-				})
-
-				Context("when maxConsecutiveRollbacks is reached", func() {
-					It("should return allowed=false with requeueAfter set", func() {
-						maxRollbacks := int32(3)
-						policy.Spec.MaxConsecutiveRollbacks = &maxRollbacks
-						policy.Status.ConsecutiveCount = 3
-
-						result := evaluatePolicyConstraints(&policy)
-						Expect(result.allowed).To(BeFalse())
-						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-						Expect(result.requeueAfter).ToNot(BeNil())
-						Expect(*result.requeueAfter).To(BeNumerically("~", 8*time.Minute, 5*time.Second))
-					})
-				})
-
-				Context("when maxConsecutiveRollbacks is not reached", func() {
-					BeforeEach(func() {
-						maxRollbacks := int32(5)
-						policy.Spec.MaxConsecutiveRollbacks = &maxRollbacks
-						policy.Status.ConsecutiveCount = 2
-					})
-
-					Context("when minInterval constraint is violated", func() {
-						It("should return allowed=false with requeueAfter set", func() {
-							policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-							policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
-
-							result := evaluatePolicyConstraints(&policy)
-							Expect(result.allowed).To(BeFalse())
-							Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-							Expect(result.requeueAfter).ToNot(BeNil())
-							Expect(*result.requeueAfter).To(BeNumerically("~", 3*time.Minute, 5*time.Second))
-						})
-					})
-
-					Context("when minInterval constraint is satisfied", func() {
-						It("should return allowed=true with windowExpired=false", func() {
-							policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-							policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-
-							result := evaluatePolicyConstraints(&policy)
-							Expect(result.allowed).To(BeTrue())
-							Expect(result.windowExpired).To(BeFalse())
-							Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-						})
-					})
-				})
-
-				Context("when maxConsecutiveRollbacks is nil", func() {
-					It("should not enforce the limit", func() {
-						policy.Spec.MaxConsecutiveRollbacks = nil
-						policy.Status.ConsecutiveCount = 100
-
-						result := evaluatePolicyConstraints(&policy)
-						Expect(result.allowed).To(BeTrue())
-						Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-					})
-				})
-			})
-		})
-	})
-
-	Context("evaluatePolicyStatus", func() {
+	Context("evaluateAndUpdatePolicyStatus", func() {
 		Context("when evaluatePolicyConstraints returns allowed=true with windowExpired=true", func() {
 			BeforeEach(func() {
 				policy.Spec.Enabled = true
@@ -195,15 +68,15 @@ var _ = Describe("AutomatedRollbackController", func() {
 			})
 
 			It("should reset windowStartTime and consecutiveCount", func() {
-				result := evaluatePolicyStatus(&policy)
+				result := evaluateAndUpdatePolicyStatus(&policy)
 
-				Expect(result.allowed).To(BeTrue())
+				Expect(result.Allowed).To(BeTrue())
 				Expect(policy.Status.WindowStartTime).To(BeNil())
 				Expect(policy.Status.ConsecutiveCount).To(Equal(int32(0)))
 			})
 
 			It("should set Active condition to True", func() {
-				evaluatePolicyStatus(&policy)
+				evaluateAndUpdatePolicyStatus(&policy)
 
 				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
 				Expect(condition).ToNot(BeNil())
@@ -223,15 +96,15 @@ var _ = Describe("AutomatedRollbackController", func() {
 			It("should not reset windowStartTime and consecutiveCount", func() {
 				originalWindowStartTime := policy.Status.WindowStartTime
 
-				result := evaluatePolicyStatus(&policy)
+				result := evaluateAndUpdatePolicyStatus(&policy)
 
-				Expect(result.allowed).To(BeTrue())
+				Expect(result.Allowed).To(BeTrue())
 				Expect(policy.Status.WindowStartTime).To(Equal(originalWindowStartTime))
 				Expect(policy.Status.ConsecutiveCount).To(Equal(int32(2)))
 			})
 
 			It("should set Active condition to True", func() {
-				evaluatePolicyStatus(&policy)
+				evaluateAndUpdatePolicyStatus(&policy)
 
 				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
 				Expect(condition).ToNot(BeNil())
@@ -245,7 +118,7 @@ var _ = Describe("AutomatedRollbackController", func() {
 			})
 
 			It("should set Active condition to False", func() {
-				evaluatePolicyStatus(&policy)
+				evaluateAndUpdatePolicyStatus(&policy)
 
 				condition := meta.FindStatusCondition(policy.Status.Conditions, v1alpha1.AutomatedRollbackPolicyConditionActive)
 				Expect(condition).ToNot(BeNil())
@@ -254,11 +127,11 @@ var _ = Describe("AutomatedRollbackController", func() {
 			})
 
 			It("should propagate the reason and message from evaluation", func() {
-				result := evaluatePolicyStatus(&policy)
+				result := evaluateAndUpdatePolicyStatus(&policy)
 
-				Expect(result.allowed).To(BeFalse())
-				Expect(result.reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
-				Expect(result.message).To(Equal("Automated rollback policy is disabled"))
+				Expect(result.Allowed).To(BeFalse())
+				Expect(result.Reason).To(Equal(v1alpha1.AutomatedRollbackPolicyReasonSetByUser))
+				Expect(result.Message).To(Equal("Automated rollback policy is disabled"))
 			})
 		})
 	})

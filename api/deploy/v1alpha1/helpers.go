@@ -24,6 +24,15 @@ func (rollback *Rollback) IsCompleted() bool {
 	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceded})
 }
 
+func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
+	for _, rollback := range rollbackList.Items {
+		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
+			return &rollback
+		}
+	}
+	return nil
+}
+
 // Release helpers
 
 func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {
@@ -185,11 +194,85 @@ func (r *Release) GetEffectiveTime() time.Time {
 	return r.Status.DeploymentEndTime.Time
 }
 
-func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
-	for _, rollback := range rollbackList.Items {
-		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
-			return &rollback
+// AutomatedRollbackPolicy helpers
+
+// PolicyEvaluation is used to determine
+type PolicyEvaluation struct {
+	Allowed       bool
+	Reason        string
+	Message       string
+	RequeueAfter  *time.Duration
+	WindowExpired bool
+}
+
+// EvaluatePolicyConstraints evaluates the constraints of the automated rollback policy
+// and returns whether the policy is allowed to trigger a rollback and related metadata
+func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints() PolicyEvaluation {
+	if !policy.Spec.Enabled {
+		return PolicyEvaluation{
+			Allowed: false,
+			Reason:  AutomatedRollbackPolicyReasonSetByUser,
+			Message: "Automated rollback policy is disabled",
 		}
 	}
-	return nil
+
+	// If lastAutomatedRollbackTime + resetPeriod has passed, the counter effectively resets
+	withinResetPeriod := policy.isWithinResetPeriod()
+
+	// Only enforce maxConsecutiveRollbacks if we're within the reset period
+	if withinResetPeriod && policy.isMaxConsecutiveRollbacksReached() {
+		resetEndTime := policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration)
+		resetAtMessage := fmt.Sprintf("Will be enabled again at %s", resetEndTime.Format(time.RFC3339))
+		message := fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period. %s", *policy.Spec.MaxConsecutiveRollbacks, resetAtMessage)
+		requeueAfter := time.Until(resetEndTime)
+		reason := AutomatedRollbackPolicyReasonDisabledByController
+
+		return PolicyEvaluation{
+			Allowed:      false,
+			Reason:       reason,
+			Message:      message,
+			RequeueAfter: &requeueAfter,
+		}
+	}
+
+	// Check minimum interval between rollbacks
+	if policy.isMinIntervalMet() {
+		minIntervalEndTime := policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration)
+		minIntervalMessage := fmt.Sprintf("Will be enabled again at %s", minIntervalEndTime.Format(time.RFC3339))
+
+		reason := AutomatedRollbackPolicyReasonDisabledByController
+		message := fmt.Sprintf("Min interval (%s) between rollbacks not met. %s", policy.Spec.MinInterval.Duration, minIntervalMessage)
+		requeueAfter := time.Until(minIntervalEndTime)
+
+		return PolicyEvaluation{
+			Allowed:      false,
+			Reason:       reason,
+			Message:      message,
+			RequeueAfter: &requeueAfter,
+		}
+	}
+
+	return PolicyEvaluation{
+		Allowed:       true,
+		Reason:        AutomatedRollbackPolicyReasonSetByUser,
+		Message:       "Automated rollback is enabled",
+		WindowExpired: !withinResetPeriod && policy.Status.WindowStartTime != nil,
+	}
+}
+
+func (policy *AutomatedRollbackPolicy) isWithinResetPeriod() bool {
+	return policy.Spec.ResetPeriod != nil &&
+		policy.Status.WindowStartTime != nil &&
+		policy.Status.WindowStartTime.Time.Add(policy.Spec.ResetPeriod.Duration).After(time.Now())
+}
+
+func (policy *AutomatedRollbackPolicy) isMaxConsecutiveRollbacksReached() bool {
+	return policy.Spec.MaxConsecutiveRollbacks != nil &&
+		policy.Status.ConsecutiveCount >= *policy.Spec.MaxConsecutiveRollbacks
+}
+
+func (policy *AutomatedRollbackPolicy) isMinIntervalMet() bool {
+	return policy.Spec.MinInterval != nil &&
+		policy.Status.LastAutomatedRollbackTime != nil &&
+		policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration).After(time.Now())
 }

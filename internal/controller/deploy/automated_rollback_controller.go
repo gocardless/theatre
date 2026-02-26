@@ -317,7 +317,9 @@ func (r *AutomatedRollbackReconciler) getActiveReleaseForPolicy(ctx context.Cont
 
 func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *deployv1alpha1.Release) (bool, error) {
 	rollbackList := &deployv1alpha1.RollbackList{}
-	if err := r.List(ctx, rollbackList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{IndexFieldOwner: release.Name})); err != nil {
+	if err := r.List(ctx, rollbackList,
+		client.InNamespace(release.Namespace),
+		client.MatchingFields(map[string]string{IndexFieldOwner: release.Name})); err != nil {
 		return false, fmt.Errorf("failed to list rollbacks: %w", err)
 	}
 

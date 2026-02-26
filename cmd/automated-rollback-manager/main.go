@@ -38,7 +38,7 @@ func main() {
 
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		LeaderElection:   commonOptions.ManagerLeaderElection,
-		LeaderElectionID: "rollbackpolicy.deploy.crd.gocardless.com",
+		LeaderElectionID: "automated-rollback-policy.deploy.crd.gocardless.com",
 		Scheme:           scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: fmt.Sprintf("%s:%d", commonOptions.MetricAddress, commonOptions.MetricPort),

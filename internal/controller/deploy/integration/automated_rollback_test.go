@@ -29,10 +29,6 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 		policy = createPolicy(testNamespace, targetName, nil)
 	})
 
-	AfterEach(func() {
-		// Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
-	})
-
 	Describe("Policy evaluation", func() {
 		Context("when policy is disabled", func() {
 			BeforeEach(func() {

@@ -178,7 +178,7 @@ func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
-func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx context.Context) predicate.Predicate {
+func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx context.Context, logger logr.Logger) predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if _, isPolicy := e.ObjectNew.(*deployv1alpha1.AutomatedRollbackPolicy); isPolicy {
@@ -187,6 +187,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx co
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
 				if release.TargetName == "" {
+					logger.("Release has no target name, skipping", "release", release.Name)
 					return false
 				}
 
@@ -204,12 +205,15 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx co
 				oldRelease := e.ObjectOld.(*deployv1alpha1.Release)
 				oldHealthCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
 				newHealthCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				healthTransitioned := oldHealthCond != nil && newHealthCond != nil && oldHealthCond.Status != newHealthCond.Status
+				healthTransitioned := oldHealthCond == nil && newHealthCond != nil ||
+					(oldHealthCond != nil && newHealthCond != nil && oldHealthCond.Status != newHealthCond.Status)
 
-				triggerCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				triggerMet := triggerCond != nil && triggerCond.Status == policy.Spec.Trigger.ConditionStatus
+				oldTriggerCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
+				newTriggerCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
+				triggerTransitioned := oldTriggerCond == nil && newTriggerCond != nil ||
+					(oldTriggerCond != nil && newTriggerCond != nil && oldTriggerCond.Status != newTriggerCond.Status)
 
-				return release.IsConditionActiveTrue() && (healthTransitioned || triggerMet)
+				return release.IsConditionActiveTrue() && (healthTransitioned || triggerTransitioned)
 			}
 
 			return false

@@ -97,68 +97,6 @@ func (r *AutomatedRollbackReconciler) SetupWithManager(ctx context.Context, mgr 
 	)
 }
 
-func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, request ctrl.Request, policy *deployv1alpha1.AutomatedRollbackPolicy) (ctrl.Result, error) {
-	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
-	logger.Info("Reconcile")
-
-	// TODO: resetOnRecovery logic will be added here
-	evaluation := evaluateAndUpdatePolicyStatus(policy)
-	if !evaluation.Allowed {
-		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.Reason)
-		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.RequeueAfter)
-	}
-
-	// Check if rollback should be triggered
-	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if shouldTrigger {
-		// Create rollback and update policy
-		if err := r.performRollback(ctx, logger, policy, release); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
-}
-
-func (r *AutomatedRollbackReconciler) createOrUpdate(ctx context.Context, logger logr.Logger, object client.Object, objectType string) error {
-	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, object, recutil.StatusDiff)
-	if err != nil {
-		logger.Error(err, fmt.Sprintf("failed to update %s status", objectType))
-		return err
-	}
-
-	switch outcome {
-	case recutil.Create:
-		logger.Info("created", objectType, object.GetName(), "event", EventCreated)
-	case recutil.StatusUpdate:
-		logger.Info("status updated", objectType, object.GetName(), "event", EventSuccessfulStatusUpdate)
-	case recutil.Update:
-		logger.Info("updated", objectType, object.GetName(), "event", EventSuccessfulUpdate)
-	case recutil.None:
-		logging.WithNoRecord(logger).Info("No status update needed", "event", EventNoStatusUpdate)
-	default:
-		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
-	}
-
-	return nil
-}
-
-func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, requeueAfter *time.Duration) (ctrl.Result, error) {
-	if err := r.createOrUpdate(ctx, logger, policy, "policy"); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if requeueAfter != nil {
-		return ctrl.Result{RequeueAfter: *requeueAfter}, nil
-	}
-
-	return ctrl.Result{}, nil
-}
-
 func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx context.Context, logger logr.Logger) predicate.Predicate {
 	return predicate.Funcs{
 		// All logs are at V(1) level, so we need to enable debug logging to see them
@@ -238,6 +176,75 @@ func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(mgr ctrl.Manager) handl
 	}
 }
 
+func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr.Logger, request ctrl.Request, policy *deployv1alpha1.AutomatedRollbackPolicy) (ctrl.Result, error) {
+	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
+	logger.Info("Reconcile")
+
+	// TODO: resetOnRecovery logic will be added here
+	evaluation := evaluateAndUpdatePolicyStatus(policy)
+	if !evaluation.Allowed {
+		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.Reason)
+		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.RequeueAfter)
+	}
+
+	// Check if rollback should be triggered
+	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if shouldTrigger {
+		// Create rollback and update policy
+		if err := r.performRollback(ctx, logger, policy, release); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		updatePolicyStatus(policy)
+	}
+
+	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
+}
+
+// createOrUpdate creates or updates (spec or status) the given object, logging the outcome.
+func (r *AutomatedRollbackReconciler) createOrUpdate(ctx context.Context, logger logr.Logger, object client.Object, objectType string) error {
+	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, object, recutil.StatusDiff)
+	if err != nil {
+		logger.Error(err, fmt.Sprintf("failed to update %s status", objectType))
+		return err
+	}
+
+	switch outcome {
+	case recutil.Create:
+		logger.Info("created", objectType, object.GetName(), "event", EventCreated)
+	case recutil.StatusUpdate:
+		logger.Info("status updated", objectType, object.GetName(), "event", EventSuccessfulStatusUpdate)
+	case recutil.Update:
+		logger.Info("updated", objectType, object.GetName(), "event", EventSuccessfulUpdate)
+	case recutil.None:
+		logging.WithNoRecord(logger).Info("No status update needed", "event", EventNoStatusUpdate)
+	default:
+		logger.Info("Unexpected outcome from CreateOrUpdate", "outcome", outcome)
+	}
+
+	return nil
+}
+
+// updatePolicyAndReturn updates the policy and returns the result. Requeues if requeueAfter is not nil.
+func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, requeueAfter *time.Duration) (ctrl.Result, error) {
+	if err := r.createOrUpdate(ctx, logger, policy, "policy"); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if requeueAfter != nil {
+		return ctrl.Result{RequeueAfter: *requeueAfter}, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// shouldTriggerRollback checks if a rollback should be triggered for the given policy.
+// Rollback is triggered when the release is active, there isn't a prior rollback and
+// the trigger condition is met.
 func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (bool, *deployv1alpha1.Release, error) {
 	// Find active release
 	release, err := r.getActiveReleaseForPolicy(ctx, policy)
@@ -279,7 +286,6 @@ func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logge
 		return err
 	}
 
-	updatePolicyStatus(policy)
 	return nil
 }
 

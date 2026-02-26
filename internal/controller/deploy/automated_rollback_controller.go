@@ -168,13 +168,11 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx co
 			}
 
 			if release, isRelease := e.ObjectNew.(*deployv1alpha1.Release); isRelease {
-				if release.TargetName == "" {
-					logger.V(1).Info("Release has no target name, skipping", "release", release.Name)
-					return false
-				}
-
 				policyList := &deployv1alpha1.AutomatedRollbackPolicyList{}
-				if err := r.List(ctx, policyList, client.InNamespace(release.Namespace), client.MatchingFields(map[string]string{IndexFieldPolicyTargetName: release.TargetName})); err != nil {
+				if err := r.List(ctx, policyList,
+					client.InNamespace(release.Namespace),
+					client.MatchingFields(map[string]string{IndexFieldPolicyTargetName: release.TargetName}),
+				); err != nil {
 					logger.V(1).Info("Failed to list policies for target, skipping", "target", release.TargetName, "error", err)
 					return false
 				}
@@ -183,22 +181,13 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx co
 					logger.V(1).Info("Expected exactly one policy for target, skipping", "target", release.TargetName)
 					return false
 				}
-
 				policy := policyList.Items[0]
 
-				// TODO: move to recuitl
 				oldRelease := e.ObjectOld.(*deployv1alpha1.Release)
-				oldHealthCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				newHealthCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				healthTransitioned := oldHealthCond == nil && newHealthCond != nil ||
-					(oldHealthCond != nil && newHealthCond != nil && oldHealthCond.Status != newHealthCond.Status)
+				healthTransitioned := recutil.HasConditionTransitioned(oldRelease.Status.Conditions, release.Status.Conditions, deployv1alpha1.ReleaseConditionHealthy)
+				triggerTransitioned := recutil.HasConditionTransitioned(oldRelease.Status.Conditions, release.Status.Conditions, policy.Spec.Trigger.ConditionType)
 
-				oldTriggerCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				newTriggerCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
-				triggerTransitioned := oldTriggerCond == nil && newTriggerCond != nil ||
-					(oldTriggerCond != nil && newTriggerCond != nil && oldTriggerCond.Status != newTriggerCond.Status)
-
-				logger.V(1).Info("Release conditions changed, checking if rollback should be triggered",
+				logger.V(1).Info("Release conditions changed, checking if reconciliation should be triggered",
 					"release", release.Name,
 					"healthTransitioned", healthTransitioned,
 					"triggerTransitioned", triggerTransitioned,

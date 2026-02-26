@@ -11,6 +11,7 @@ import (
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
 	pkgerrors "github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +19,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const (
@@ -32,6 +34,10 @@ const (
 	EventDeploymentFailed    = "DeploymentFailed"
 	EventDeploymentSucceeded = "DeploymentSucceeded"
 )
+
+func init() {
+	metrics.Registry.MustRegister(rollbackTerminalTotal)
+}
 
 type RollbackReconciler struct {
 	client.Client
@@ -306,6 +312,12 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	rollbackTerminalTotal.With(prometheus.Labels{
+		"namespace": rollback.Namespace,
+		"status":    "succeeded",
+	}).Inc()
+
 	logger.Info("rollback succeeded")
 	return ctrl.Result{}, nil
 }
@@ -335,6 +347,12 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	rollbackTerminalTotal.With(prometheus.Labels{
+		"namespace": rollback.Namespace,
+		"status":    "failed",
+	}).Inc()
+
 	logger.Info("rollback failed", "message", message)
 	return ctrl.Result{}, nil
 }

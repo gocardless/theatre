@@ -222,10 +222,13 @@ func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints() PolicyEvaluat
 	// Only enforce maxConsecutiveRollbacks if we're within the reset period
 	if withinResetPeriod && policy.isMaxConsecutiveRollbacksReached() {
 		resetEndTime := policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration)
-		resetAtMessage := fmt.Sprintf("Will be enabled again at %s", resetEndTime.Format(time.RFC3339))
-		message := fmt.Sprintf("Max consecutive rollbacks (%d) reached within reset period. %s", *policy.Spec.MaxConsecutiveRollbacks, resetAtMessage)
-		requeueAfter := time.Until(resetEndTime)
+		message := fmt.Sprintf(
+			"Max consecutive rollbacks (%d) reached within reset period. Will be enabled again at %s.",
+			*policy.Spec.MaxConsecutiveRollbacks,
+			resetEndTime.Format(time.RFC3339),
+		)
 		reason := AutomatedRollbackPolicyReasonDisabledByController
+		requeueAfter := time.Until(resetEndTime)
 
 		return PolicyEvaluation{
 			Allowed:      false,
@@ -238,10 +241,12 @@ func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints() PolicyEvaluat
 	// Check minimum interval between rollbacks
 	if policy.isMinIntervalMet() {
 		minIntervalEndTime := policy.Status.LastAutomatedRollbackTime.Add(policy.Spec.MinInterval.Duration)
-		minIntervalMessage := fmt.Sprintf("Will be enabled again at %s", minIntervalEndTime.Format(time.RFC3339))
-
+		message := fmt.Sprintf(
+			"Min interval (%s) between rollbacks not met. Will be enabled again at %s.",
+			policy.Spec.MinInterval.Duration,
+			minIntervalEndTime.Format(time.RFC3339),
+		)
 		reason := AutomatedRollbackPolicyReasonDisabledByController
-		message := fmt.Sprintf("Min interval (%s) between rollbacks not met. %s", policy.Spec.MinInterval.Duration, minIntervalMessage)
 		requeueAfter := time.Until(minIntervalEndTime)
 
 		return PolicyEvaluation{

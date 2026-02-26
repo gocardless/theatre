@@ -124,25 +124,6 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
 }
 
-// TODO: make this generic function that can be reused when culling, rollbacks and here
-func (r *AutomatedRollbackReconciler) getActiveReleaseForTarget(ctx context.Context, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Release, error) {
-	releaseList := &deployv1alpha1.ReleaseList{}
-	if err := r.List(ctx, releaseList,
-		client.InNamespace(policy.Namespace),
-		client.MatchingFields{IndexFieldReleaseTarget: policy.Spec.TargetName},
-	); err != nil {
-		return nil, fmt.Errorf("failed to list releases: %w", err)
-	}
-
-	activeRelease := deployv1alpha1.FindActiveRelease(releaseList)
-
-	if activeRelease != nil {
-		return activeRelease, nil
-	}
-
-	return nil, ErrNoActiveReleaseFound
-}
-
 func (r *AutomatedRollbackReconciler) createOrUpdate(ctx context.Context, logger logr.Logger, object client.Object, objectType string) error {
 	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, object, recutil.StatusDiff)
 	if err != nil {
@@ -205,6 +186,7 @@ func (r *AutomatedRollbackReconciler) onReleaseConditionsChangedPredicate(ctx co
 
 				policy := policyList.Items[0]
 
+				// TODO: move to recuitl
 				oldRelease := e.ObjectOld.(*deployv1alpha1.Release)
 				oldHealthCond := meta.FindStatusCondition(oldRelease.Status.Conditions, policy.Spec.Trigger.ConditionType)
 				newHealthCond := meta.FindStatusCondition(release.Status.Conditions, policy.Spec.Trigger.ConditionType)
@@ -269,7 +251,7 @@ func (r *AutomatedRollbackReconciler) mapReleaseToPolicy(mgr ctrl.Manager) handl
 
 func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (bool, *deployv1alpha1.Release, error) {
 	// Find active release
-	release, err := r.getActiveReleaseForTarget(ctx, policy)
+	release, err := r.getActiveReleaseForPolicy(ctx, policy)
 	if err != nil {
 		if errors.Is(err, ErrNoActiveReleaseFound) {
 			logger.Info("no active release found, exiting...")
@@ -312,20 +294,36 @@ func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logge
 	return nil
 }
 
+// updatePolicyStatus updates the policy status lastAutomatedRollbackTime
+// with the current time and increments the consecutive count if window
+// is not expired or is not set
 func updatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) {
 	now := metav1.NewTime(time.Now())
 	policy.Status.LastAutomatedRollbackTime = &now
 
-	// TODO: Move to a helper
-	windowExpired := policy.Status.WindowStartTime == nil ||
+	windowExpiredOrNotSet := policy.Status.WindowStartTime == nil ||
 		(policy.Spec.ResetPeriod != nil &&
 			policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration).Before(time.Now()))
 
-	if windowExpired {
+	if windowExpiredOrNotSet {
 		policy.Status.WindowStartTime = &now
 		policy.Status.ConsecutiveCount = 0
 	}
 	policy.Status.ConsecutiveCount++
+}
+
+func (r *AutomatedRollbackReconciler) getActiveReleaseForPolicy(ctx context.Context, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Release, error) {
+	releaseList, err := GetReleasesForTarget(ctx, r.Client, policy.Namespace, policy.Spec.TargetName)
+	if err != nil {
+		return nil, err
+	}
+
+	activeRelease := deployv1alpha1.FindActiveRelease(releaseList)
+	if activeRelease == nil {
+		return nil, ErrNoActiveReleaseFound
+	}
+
+	return activeRelease, nil
 }
 
 func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *deployv1alpha1.Release) (bool, error) {
@@ -337,7 +335,7 @@ func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *
 	return len(rollbackList.Items) > 0, nil
 }
 
-// evaluateAndUpdatePolicyStatus evaluates the status of the automated rollback policy
+// evaluateAndUpdatePolicyStatus evaluates the policy constraints
 // and updates the policy status conditions accordingly
 func evaluateAndUpdatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) deployv1alpha1.PolicyEvaluation {
 	result := policy.EvaluatePolicyConstraints()

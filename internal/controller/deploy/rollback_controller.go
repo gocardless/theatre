@@ -11,7 +11,6 @@ import (
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
 	pkgerrors "github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -313,10 +312,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(prometheus.Labels{
-		"namespace": rollback.Namespace,
-		"status":    "succeeded",
-	}).Inc()
+	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "succeeded")).Inc()
 
 	logger.Info("rollback succeeded")
 	return ctrl.Result{}, nil
@@ -348,10 +344,7 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(prometheus.Labels{
-		"namespace": rollback.Namespace,
-		"status":    "failed",
-	}).Inc()
+	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "failed")).Inc()
 
 	logger.Info("rollback failed", "message", message)
 	return ctrl.Result{}, nil

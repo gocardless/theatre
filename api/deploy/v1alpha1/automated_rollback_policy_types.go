@@ -27,6 +27,8 @@ type AutomatedRollbackPolicySpec struct {
 	// TargetName identifies which releases this policy applies to,
 	// matching Release.config.targetName.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="TargetName is immutable"
 	TargetName string `json:"targetName"`
 
 	// Trigger defines the Release condition that triggers a rollback.

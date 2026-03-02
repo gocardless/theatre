@@ -160,3 +160,55 @@ func HasRevision(release deployv1alpha1.Release, revisionName string) bool {
 	}
 	return false
 }
+
+type GetAutomatedRollbackPolicyOptions struct {
+	Namespace  string
+	TargetName string
+}
+
+// GetAutomatedRollbackPolicyByTarget retrieves an automated rollback policy by target name
+func (r *Runner) GetAutomatedRollbackPolicyByTarget(ctx context.Context, opts GetAutomatedRollbackPolicyOptions) (*deployv1alpha1.AutomatedRollbackPolicy, error) {
+	if opts.Namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+
+	if opts.TargetName == "" {
+		return nil, fmt.Errorf("targetName is required")
+	}
+
+	// If targetName is provided but name is not, find the policy by targetName
+	var policyList deployv1alpha1.AutomatedRollbackPolicyList
+
+	listOpts := []client.ListOption{
+		client.InNamespace(opts.Namespace),
+	}
+
+	if err := r.client.List(ctx, &policyList, listOpts...); err != nil {
+		return nil, err
+	}
+	for _, policy := range policyList.Items {
+		if policy.Spec.TargetName == opts.TargetName {
+			return &policy, nil
+		}
+	}
+	return nil, fmt.Errorf("automated rollback policy not found for target: %s", opts.TargetName)
+}
+
+type UpdateAutomatedRollbackPolicyOptions struct {
+	Namespace  string
+	TargetName string
+	Enabled    bool
+}
+
+// UpdateAutomatedRollbackPolicy updates the enabled status of an automated rollback policy
+func (r *Runner) UpdateAutomatedRollbackPolicy(ctx context.Context, opts UpdateAutomatedRollbackPolicyOptions) error {
+	policy, err := r.GetAutomatedRollbackPolicyByTarget(ctx, GetAutomatedRollbackPolicyOptions{
+		Namespace:  opts.Namespace,
+		TargetName: opts.TargetName,
+	})
+	if err != nil {
+		return err
+	}
+	policy.Spec.Enabled = opts.Enabled
+	return r.client.Update(ctx, policy)
+}

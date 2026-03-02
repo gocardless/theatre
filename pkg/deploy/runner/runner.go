@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -161,6 +162,8 @@ func HasRevision(release deployv1alpha1.Release, revisionName string) bool {
 	return false
 }
 
+var ErrAutomatedRollbackPolicyNotFound = errors.New("automated rollback policy not found")
+
 type GetAutomatedRollbackPolicyOptions struct {
 	Namespace  string
 	TargetName string
@@ -191,7 +194,7 @@ func (r *Runner) GetAutomatedRollbackPolicyByTarget(ctx context.Context, opts Ge
 			return &policy, nil
 		}
 	}
-	return nil, fmt.Errorf("automated rollback policy not found for target: %s", opts.TargetName)
+	return nil, ErrAutomatedRollbackPolicyNotFound
 }
 
 type UpdateAutomatedRollbackPolicyOptions struct {

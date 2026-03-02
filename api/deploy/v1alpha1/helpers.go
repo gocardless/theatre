@@ -207,13 +207,29 @@ type PolicyEvaluation struct {
 
 // EvaluatePolicyConstraints evaluates the constraints of the automated rollback policy
 // and returns whether the policy is allowed to trigger a rollback and related metadata
-func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints() PolicyEvaluation {
+func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints(release *Release) PolicyEvaluation {
 	if !policy.Spec.Enabled {
 		return PolicyEvaluation{
 			Allowed: false,
 			Reason:  AutomatedRollbackPolicyReasonSetByUser,
 			Message: "Automated rollback policy is disabled",
 		}
+	}
+
+	if policy.Spec.ResetOnRecovery &&
+		release != nil &&
+		meta.IsStatusConditionFalse(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive) {
+		recoveryCondition := metav1.ConditionTrue
+		if policy.Spec.Trigger.ConditionStatus == metav1.ConditionTrue {
+			recoveryCondition = metav1.ConditionFalse
+		}
+
+		isTriggerConditionOpposite := meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, policy.Spec.Trigger.ConditionType, recoveryCondition)
+
+		if isTriggerConditionOpposite {
+			policy.Status.ConsecutiveCount = 0
+		}
+
 	}
 
 	// If lastAutomatedRollbackTime + resetPeriod has passed, the counter effectively resets

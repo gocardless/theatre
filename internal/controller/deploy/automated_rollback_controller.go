@@ -180,15 +180,15 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
 	logger.Info("Reconcile")
 
+	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
 	// TODO: resetOnRecovery logic will be added here
-	evaluation := evaluateAndUpdatePolicyStatus(policy)
+	evaluation := evaluateAndUpdatePolicyStatus(policy, release)
 	if !evaluation.Allowed {
 		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.Reason)
 		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.RequeueAfter)
 	}
 
 	// Check if rollback should be triggered
-	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -334,8 +334,8 @@ func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *
 
 // evaluateAndUpdatePolicyStatus evaluates the policy constraints
 // and updates the policy status conditions accordingly
-func evaluateAndUpdatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) deployv1alpha1.PolicyEvaluation {
-	result := policy.EvaluatePolicyConstraints()
+func evaluateAndUpdatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) deployv1alpha1.PolicyEvaluation {
+	result := policy.EvaluatePolicyConstraints(release)
 
 	if result.WindowExpired {
 		policy.Status.WindowStartTime = nil

@@ -18,6 +18,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const (
@@ -32,6 +33,10 @@ const (
 	EventDeploymentFailed    = "DeploymentFailed"
 	EventDeploymentSucceeded = "DeploymentSucceeded"
 )
+
+func init() {
+	metrics.Registry.MustRegister(rollbackTerminalTotal)
+}
 
 type RollbackReconciler struct {
 	client.Client
@@ -306,6 +311,9 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "succeeded")).Inc()
+
 	logger.Info("rollback succeeded")
 	return ctrl.Result{}, nil
 }
@@ -335,6 +343,9 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "failed")).Inc()
+
 	logger.Info("rollback failed", "message", message)
 	return ctrl.Result{}, nil
 }

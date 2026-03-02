@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -82,6 +83,14 @@ func (w *RollbackTargetWebhook) Handle(ctx context.Context, req admission.Reques
 
 		w.logger.Info("auto-setting rollback target", "targetRelease", targetRelease.Name)
 		copy.Spec.ToReleaseRef.Name = targetRelease.Name
+	}
+
+	// Copy labels from the target release to the rollback
+	if len(targetRelease.Labels) > 0 {
+		if copy.Labels == nil {
+			copy.Labels = make(map[string]string)
+		}
+		maps.Copy(copy.Labels, targetRelease.Labels)
 	}
 
 	// Set owner ref on the target release

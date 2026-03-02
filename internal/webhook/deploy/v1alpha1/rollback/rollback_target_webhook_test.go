@@ -313,6 +313,71 @@ var _ = Describe("RollbackTargetWebhook", func() {
 			Expect(foundOwnerRef).To(BeTrue(), "expected patch for /metadata/ownerReferences, got patches: %+v", resp.Patches)
 		})
 	})
+
+	Context("label copying", func() {
+		It("should merge labels from target release with existing rollback labels", func() {
+			activeRelease := newRelease(
+				"my-release-v2",
+				true,
+				true,
+				"",
+				nil,
+			)
+
+			targetRelease := newRelease(
+				"my-release-v1",
+				false,
+				true,
+				"",
+				nil,
+			)
+			targetRelease.Labels = map[string]string{
+				"env":     "production",
+				"version": "1.2.3",
+			}
+
+			fakeClient = setupFakeClientWithIndex(activeRelease, targetRelease)
+			webhook = NewRollbackTargetWebhook(
+				logr.New(logr.Discard().GetSink()),
+				scheme,
+				fakeClient,
+			)
+
+			rollback := &deployv1alpha1.Rollback{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rollback",
+					Namespace: namespace,
+					Labels: map[string]string{
+						"team":      "platform",
+						"triggered": "manual",
+					},
+				},
+				Spec: deployv1alpha1.RollbackSpec{
+					ToReleaseRef: deployv1alpha1.ReleaseReference{
+						Target: "my-service",
+						Name:   "my-release-v1",
+					},
+					Reason: "Testing",
+				},
+			}
+
+			req := reqWithObj(rollback)
+			resp := webhook.Handle(ctx, req)
+			Expect(resp.Allowed).To(BeTrue())
+
+			var foundLabels bool
+			for _, patch := range resp.Patches {
+				if patch.Path == "/metadata/labels/env" {
+					foundLabels = true
+					Expect(patch.Value).To(Equal("production"))
+				}
+				if patch.Path == "/metadata/labels/version" {
+					Expect(patch.Value).To(Equal("1.2.3"))
+				}
+			}
+			Expect(foundLabels).To(BeTrue(), "expected patches for labels, got patches: %+v", resp.Patches)
+		})
+	})
 })
 
 func reqWithObj(obj runtime.Object) admission.Request {

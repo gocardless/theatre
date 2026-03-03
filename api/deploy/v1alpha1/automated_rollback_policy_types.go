@@ -23,28 +23,6 @@ type AutomatedRollbackPolicySpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
 
-	// MaxConsecutiveRollbacks is the maximum number of consecutive automated
-	// rollbacks before automation is disabled. If left empty, the limit is
-	// unlimited.
-	// +kubebuilder:validation:Optional
-	MaxConsecutiveRollbacks *int32 `json:"maxConsecutiveRollbacks,omitempty"`
-
-	// MinInterval is the minimum time to wait between automated rollbacks.
-	// +kubebuilder:validation:Optional
-	MinInterval *metav1.Duration `json:"minInterval,omitempty"`
-
-	// ResetPeriod is the "cooldown" period. If this duration passes
-	// since the first rollback, the status.consecutiveRollbackCount is reset to 0.
-	// +kubebuilder:validation:Optional
-	ResetPeriod *metav1.Duration `json:"resetPeriod,omitempty"`
-
-	// ResetOnRecovery re-enables automation and resets the consecutive
-	// rollback counter when the trigger condition returns to normal for a
-	// following release (e.g. "True" if spec.trigger.conditionStatus is
-	// "False" and vice versa).
-	// +kubebuilder:validation:Optional
-	ResetOnRecovery bool `json:"resetOnRecovery,omitempty"`
-
 	// DeploymentOptions contains additional rollback provider-specific options.
 	// +kubebuilder:validation:Optional
 	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
@@ -66,15 +44,8 @@ type RollbackTrigger struct {
 
 // AutomatedRollbackPolicyStatus defines the observed state
 type AutomatedRollbackPolicyStatus struct {
-	// ConsecutiveCount tracks how many automated rollbacks have
-	// been performed since the last recovery.
-	ConsecutiveCount int32 `json:"consecutiveCount,omitempty"`
-
 	// LastAutomatedRollbackTime is when the last automated rollback was created.
 	LastAutomatedRollbackTime *metav1.Time `json:"lastAutomatedRollbackTime,omitempty"`
-
-	// WindowStartTime is the start time of the consecutive rollback window.
-	WindowStartTime *metav1.Time `json:"windowStartTime,omitempty"`
 
 	// Conditions represent the latest observations of the policy's state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

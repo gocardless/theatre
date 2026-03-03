@@ -179,14 +179,12 @@ func (r *Runner) GetAutomatedRollbackPolicyByTarget(ctx context.Context, opts Ge
 		return nil, fmt.Errorf("targetName is required")
 	}
 
-	// If targetName is provided but name is not, find the policy by targetName
 	var policyList deployv1alpha1.AutomatedRollbackPolicyList
 
-	listOpts := []client.ListOption{
+	if err := r.client.List(ctx, &policyList,
 		client.InNamespace(opts.Namespace),
-	}
-
-	if err := r.client.List(ctx, &policyList, listOpts...); err != nil {
+		client.MatchingFields{"spec.targetName": opts.TargetName},
+	); err != nil {
 		return nil, err
 	}
 	for _, policy := range policyList.Items {

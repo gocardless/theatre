@@ -5,8 +5,8 @@
 package v1alpha1
 
 import (
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -73,24 +73,9 @@ func (in *AutomatedRollbackPolicyList) DeepCopyObject() runtime.Object {
 func (in *AutomatedRollbackPolicySpec) DeepCopyInto(out *AutomatedRollbackPolicySpec) {
 	*out = *in
 	out.Trigger = in.Trigger
-	if in.MaxConsecutiveRollbacks != nil {
-		in, out := &in.MaxConsecutiveRollbacks, &out.MaxConsecutiveRollbacks
-		*out = new(int32)
-		**out = **in
-	}
-	if in.MinInterval != nil {
-		in, out := &in.MinInterval, &out.MinInterval
-		*out = new(v1.Duration)
-		**out = **in
-	}
-	if in.ResetPeriod != nil {
-		in, out := &in.ResetPeriod, &out.ResetPeriod
-		*out = new(v1.Duration)
-		**out = **in
-	}
 	if in.DeploymentOptions != nil {
 		in, out := &in.DeploymentOptions, &out.DeploymentOptions
-		*out = make(map[string]apiextensionsv1.JSON, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -114,13 +99,9 @@ func (in *AutomatedRollbackPolicyStatus) DeepCopyInto(out *AutomatedRollbackPoli
 		in, out := &in.LastAutomatedRollbackTime, &out.LastAutomatedRollbackTime
 		*out = (*in).DeepCopy()
 	}
-	if in.WindowStartTime != nil {
-		in, out := &in.WindowStartTime, &out.WindowStartTime
-		*out = (*in).DeepCopy()
-	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -236,7 +217,7 @@ func (in *ReleaseStatus) DeepCopyInto(out *ReleaseStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -384,7 +365,7 @@ func (in *RollbackSpec) DeepCopyInto(out *RollbackSpec) {
 	out.InitiatedBy = in.InitiatedBy
 	if in.DeploymentOptions != nil {
 		in, out := &in.DeploymentOptions, &out.DeploymentOptions
-		*out = make(map[string]apiextensionsv1.JSON, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -419,7 +400,7 @@ func (in *RollbackStatus) DeepCopyInto(out *RollbackStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

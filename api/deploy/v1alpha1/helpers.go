@@ -207,11 +207,9 @@ func (r *Release) GetEffectiveTime() time.Time {
 
 // PolicyEvaluation is used to determine
 type PolicyEvaluation struct {
-	Allowed       bool
-	Reason        string
-	Message       string
-	RequeueAfter  *time.Duration
-	WindowExpired bool
+	Allowed bool
+	Reason  string
+	Message string
 }
 
 // EvaluatePolicyConstraints evaluates the constraints of the automated rollback policy

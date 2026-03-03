@@ -1,10 +1,9 @@
 package v1alpha1
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -200,25 +199,23 @@ var _ = Describe("Helpers", func() {
 
 	Context("AutomatedRollbackPolicy", func() {
 		var (
-			policy    AutomatedRollbackPolicy
-			fixedTime time.Time
+			policy AutomatedRollbackPolicy
 		)
 
 		BeforeEach(func() {
-			fixedTime = time.Date(2026, 2, 24, 12, 0, 0, 0, time.UTC)
 			policy = AutomatedRollbackPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-policy",
 					Namespace: "default",
 				},
 				Spec: AutomatedRollbackPolicySpec{
-					TargetName:  "test-target",
-					ResetPeriod: &metav1.Duration{Duration: time.Duration(5 * time.Minute)},
+					TargetName: "test-target",
+					Trigger: RollbackTrigger{
+						ConditionType:   ReleaseConditionRollbackRequired,
+						ConditionStatus: metav1.ConditionTrue,
+					},
 				},
-				Status: AutomatedRollbackPolicyStatus{
-					WindowStartTime:  &metav1.Time{Time: fixedTime},
-					ConsecutiveCount: 1,
-				},
+				Status: AutomatedRollbackPolicyStatus{},
 			}
 		})
 
@@ -226,7 +223,7 @@ var _ = Describe("Helpers", func() {
 			Context("when spec.enabled=false", func() {
 				It("should return allowed=false with reason SetByUser", func() {
 					policy.Spec.Enabled = false
-					result := policy.EvaluatePolicyConstraints()
+					result := policy.EvaluatePolicyConstraints(nil)
 					Expect(result.Allowed).To(BeFalse())
 					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
 					Expect(result.Message).To(Equal("Automated rollback policy is disabled"))
@@ -238,113 +235,34 @@ var _ = Describe("Helpers", func() {
 					policy.Spec.Enabled = true
 				})
 
-				Context("when not within reset period", func() {
-					BeforeEach(func() {
-						// Make reset period expired: windowStartTime + resetPeriod is in the past
-						policy.Spec.ResetPeriod = &metav1.Duration{Duration: 5 * time.Minute}
-						policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-					})
-
-					Context("when minInterval constraint is violated", func() {
-						It("should return allowed=false with reason DisabledByController", func() {
-							policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-							policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
-
-							result := policy.EvaluatePolicyConstraints()
-							Expect(result.Allowed).To(BeFalse())
-							Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
-							Expect(result.RequeueAfter).ToNot(BeNil())
-							Expect(*result.RequeueAfter).To(BeNumerically("~", 3*time.Minute, 5*time.Second))
-						})
-					})
-
-					Context("when minInterval constraint is satisfied", func() {
-						It("should return allowed=true with windowExpired=true", func() {
-							policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-							policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-
-							result := policy.EvaluatePolicyConstraints()
-							Expect(result.Allowed).To(BeTrue())
-							Expect(result.WindowExpired).To(BeTrue())
-							Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
-						})
-					})
-
-					Context("when minInterval is nil", func() {
-						It("should return allowed=true", func() {
-							policy.Spec.MinInterval = nil
-
-							result := policy.EvaluatePolicyConstraints()
-							Expect(result.Allowed).To(BeTrue())
-							Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
-						})
-					})
+				It("should return allowed=true", func() {
+					result := policy.EvaluatePolicyConstraints(nil)
+					Expect(result.Allowed).To(BeTrue())
+					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
 				})
 
-				Context("when within reset period", func() {
-					BeforeEach(func() {
-						// Make reset period active: windowStartTime + resetPeriod is in the future
-						policy.Spec.ResetPeriod = &metav1.Duration{Duration: 10 * time.Minute}
-						policy.Status.WindowStartTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
+				It("should return allowed=true when policy is disabled by the controller, but release has recovered from failure", func() {
+					// Set the policy as disabled by controller (simulating it was disabled due to too many rollbacks)
+					meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+						Type:   AutomatedRollbackPolicyConditionActive,
+						Status: metav1.ConditionFalse,
+						Reason: AutomatedRollbackPolicyReasonDisabledByController,
 					})
 
-					Context("when maxConsecutiveRollbacks is reached", func() {
-						It("should return allowed=false with requeueAfter set", func() {
-							maxRollbacks := int32(3)
-							policy.Spec.MaxConsecutiveRollbacks = &maxRollbacks
-							policy.Status.ConsecutiveCount = 3
+					// Create a mock release that shows recovery
+					release := &Release{
+						Status: ReleaseStatus{},
+					}
 
-							result := policy.EvaluatePolicyConstraints()
-							Expect(result.Allowed).To(BeFalse())
-							Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
-							Expect(result.RequeueAfter).ToNot(BeNil())
-							Expect(*result.RequeueAfter).To(BeNumerically("~", 8*time.Minute, 5*time.Second))
-						})
+					meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
+						Type:   ReleaseConditionRollbackRequired,
+						Status: metav1.ConditionFalse,
+						Reason: "AnalysisSucceeded",
 					})
 
-					Context("when maxConsecutiveRollbacks is not reached", func() {
-						BeforeEach(func() {
-							maxRollbacks := int32(5)
-							policy.Spec.MaxConsecutiveRollbacks = &maxRollbacks
-							policy.Status.ConsecutiveCount = 2
-						})
-
-						Context("when minInterval constraint is violated", func() {
-							It("should return allowed=false with requeueAfter set", func() {
-								policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-								policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
-
-								result := policy.EvaluatePolicyConstraints()
-								Expect(result.Allowed).To(BeFalse())
-								Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
-								Expect(result.RequeueAfter).ToNot(BeNil())
-								Expect(*result.RequeueAfter).To(BeNumerically("~", 3*time.Minute, 5*time.Second))
-							})
-						})
-
-						Context("when minInterval constraint is satisfied", func() {
-							It("should return allowed=true with windowExpired=false", func() {
-								policy.Spec.MinInterval = &metav1.Duration{Duration: 5 * time.Minute}
-								policy.Status.LastAutomatedRollbackTime = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
-
-								result := policy.EvaluatePolicyConstraints()
-								Expect(result.Allowed).To(BeTrue())
-								Expect(result.WindowExpired).To(BeFalse())
-								Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
-							})
-						})
-					})
-
-					Context("when maxConsecutiveRollbacks is nil", func() {
-						It("should not enforce the limit", func() {
-							policy.Spec.MaxConsecutiveRollbacks = nil
-							policy.Status.ConsecutiveCount = 100
-
-							result := policy.EvaluatePolicyConstraints()
-							Expect(result.Allowed).To(BeTrue())
-							Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
-						})
-					})
+					result := policy.EvaluatePolicyConstraints(release)
+					Expect(result.Allowed).To(BeTrue())
+					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
 				})
 			})
 		})

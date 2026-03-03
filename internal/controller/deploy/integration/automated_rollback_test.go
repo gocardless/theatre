@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -70,113 +68,6 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 					g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 				}).Should(Succeed())
 			})
-
-			Context("when maxConsecutiveRollbacks is reached", func() {
-				BeforeEach(func() {
-					By("Waiting for policy to be reconciled")
-					Eventually(func() error {
-						return k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), &deployv1alpha1.AutomatedRollbackPolicy{})
-					}).Should(Succeed())
-
-					By("Updating policy spec and status to simulate max consecutive rollbacks reached")
-					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), policy)).To(Succeed())
-					maxRollbacks := int32(2)
-					policy.Spec.MaxConsecutiveRollbacks = &maxRollbacks
-					policy.Spec.ResetPeriod = &metav1.Duration{Duration: 10 * time.Minute}
-					Expect(k8sClient.Update(ctx, policy)).To(Succeed())
-
-					now := metav1.Now()
-					policy.Status.ConsecutiveCount = 2
-					policy.Status.WindowStartTime = &now
-					Expect(k8sClient.Status().Update(ctx, policy)).To(Succeed())
-				})
-
-				It("should set Active condition to False with reason DisabledByController", func() {
-					By("Verifying policy status has Active=False with reason DisabledByController")
-					Eventually(func(g Gomega) {
-						p := &deployv1alpha1.AutomatedRollbackPolicy{}
-						g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p)).To(Succeed())
-						cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
-						g.Expect(cond).NotTo(BeNil())
-						g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-						g.Expect(cond.Reason).To(Equal(deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-					}).Should(Succeed())
-				})
-
-				It("should not trigger rollback even if release meets trigger condition", func() {
-					createActiveReleaseWithTriggerCondition(k8sClient, testNamespace, targetName)
-					expectNoRollbackCreated(k8sClient, testNamespace)
-				})
-			})
-
-			Context("when minInterval has not elapsed", func() {
-				BeforeEach(func() {
-					By("Waiting for policy to be reconciled")
-					Eventually(func() error {
-						return k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), &deployv1alpha1.AutomatedRollbackPolicy{})
-					}).Should(Succeed())
-
-					By("Updating policy spec and status to simulate minInterval not elapsed")
-					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), policy)).To(Succeed())
-					policy.Spec.MinInterval = &metav1.Duration{Duration: 10 * time.Minute}
-					Expect(k8sClient.Update(ctx, policy)).To(Succeed())
-
-					fiveMinutesAgo := metav1.NewTime(time.Now().Add(-5 * time.Minute))
-					policy.Status.LastAutomatedRollbackTime = &fiveMinutesAgo
-					Expect(k8sClient.Status().Update(ctx, policy)).To(Succeed())
-				})
-
-				It("should not trigger rollback", func() {
-					createActiveReleaseWithTriggerCondition(k8sClient, testNamespace, targetName)
-					expectNoRollbackCreated(k8sClient, testNamespace)
-				})
-
-				It("should set Active condition to False with reason DisabledByController", func() {
-					By("Verifying policy status indicates minInterval constraint and requeue time")
-					Eventually(func(g Gomega) {
-						p := &deployv1alpha1.AutomatedRollbackPolicy{}
-						g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p)).To(Succeed())
-						cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
-						g.Expect(cond).NotTo(BeNil())
-						g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-						g.Expect(cond.Reason).To(Equal(deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-						g.Expect(cond.Message).To(ContainSubstring("Min interval"))
-						g.Expect(cond.Message).To(ContainSubstring("Will be enabled again at"))
-					}).Should(Succeed())
-				})
-			})
-
-			Context("when resetPeriod has elapsed", func() {
-				BeforeEach(func() {
-					By("Waiting for policy to be reconciled")
-					Eventually(func() error {
-						return k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), &deployv1alpha1.AutomatedRollbackPolicy{})
-					}).Should(Succeed())
-
-					By("Updating policy spec and status to simulate resetPeriod elapsed")
-					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), policy)).To(Succeed())
-					policy.Spec.ResetPeriod = &metav1.Duration{Duration: 5 * time.Minute}
-					Expect(k8sClient.Update(ctx, policy)).To(Succeed())
-
-					tenMinutesAgo := metav1.NewTime(time.Now().Add(-10 * time.Minute))
-					policy.Status.WindowStartTime = &tenMinutesAgo
-					policy.Status.ConsecutiveCount = 3
-					Expect(k8sClient.Status().Update(ctx, policy)).To(Succeed())
-				})
-
-				It("should reset windowStartTime and consecutiveCount and become active", func() {
-					By("Verifying status is reset and policy becomes active after reconciliation")
-					Eventually(func(g Gomega) {
-						p := &deployv1alpha1.AutomatedRollbackPolicy{}
-						g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p)).To(Succeed())
-						g.Expect(p.Status.WindowStartTime).To(BeNil())
-						g.Expect(p.Status.ConsecutiveCount).To(Equal(int32(0)))
-						cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
-						g.Expect(cond).NotTo(BeNil())
-						g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
-					}).Should(Succeed())
-				})
-			})
 		})
 	})
 
@@ -217,10 +108,75 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				Eventually(func(g Gomega) {
 					p := &deployv1alpha1.AutomatedRollbackPolicy{}
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p)).To(Succeed())
-					g.Expect(p.Status.ConsecutiveCount).To(Equal(int32(1)))
 					g.Expect(p.Status.LastAutomatedRollbackTime).NotTo(BeNil())
-					g.Expect(p.Status.WindowStartTime).NotTo(BeNil())
+					g.Expect(p.Status.Conditions).NotTo(BeEmpty())
+					cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
+					g.Expect(cond).NotTo(BeNil())
+					g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(cond.Reason).To(Equal(deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
 				}).Should(Succeed())
+			})
+
+			It("should re-enable automation, if a new release recovers from rollback", func() {
+				By("Waiting for policy to be disabled")
+				Eventually(func() bool {
+					p := &deployv1alpha1.AutomatedRollbackPolicy{}
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p); err != nil {
+						return false
+					}
+					cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
+					return cond != nil && cond.Status == metav1.ConditionFalse
+				}).Should(BeTrue())
+
+				By("Deactivating the old release")
+				oldRelease := &deployv1alpha1.Release{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), oldRelease)).To(Succeed())
+				oldRelease.Annotations[deployv1alpha1.AnnotationKeyReleaseActivate] = "false"
+				Expect(k8sClient.Update(ctx, oldRelease)).To(Succeed())
+
+				By("Waiting for old release to be deactivated")
+				Eventually(func() bool {
+					r := &deployv1alpha1.Release{}
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(oldRelease), r); err != nil {
+						return false
+					}
+					return !r.IsConditionActiveTrue()
+				}).Should(BeTrue())
+
+				By("Creating a new active release")
+				newRelease := createRelease(ctx, testNamespace, targetName, map[string]string{
+					deployv1alpha1.AnnotationKeyReleaseActivate: "true",
+				})
+				By("Waiting for new release to be active")
+				Eventually(func() bool {
+					r := &deployv1alpha1.Release{}
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(newRelease), r); err != nil {
+						return false
+					}
+
+					return r.IsConditionActiveTrue()
+				}).Should(BeTrue())
+
+				By("Setting the RollbackRequired=false")
+				// refetch the release
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(newRelease), newRelease)).To(Succeed())
+				meta.SetStatusCondition(&newRelease.Status.Conditions, metav1.Condition{
+					Type:    deployv1alpha1.ReleaseConditionRollbackRequired,
+					Status:  metav1.ConditionFalse,
+					Reason:  "AnalysisSucceeded",
+					Message: "Analysis completed successfully",
+				})
+				Expect(k8sClient.Status().Update(ctx, newRelease)).To(Succeed())
+
+				By("Verifying policy is re-enabled")
+				Eventually(func() bool {
+					p := &deployv1alpha1.AutomatedRollbackPolicy{}
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), p); err != nil {
+						return false
+					}
+					cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
+					return cond != nil && cond.Status == metav1.ConditionTrue
+				}, "2s", "100ms").Should(BeTrue())
 			})
 		})
 

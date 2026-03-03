@@ -180,15 +180,20 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 	logger = logger.WithValues("namespace", request.Namespace, "target", policy.Spec.TargetName, "policy", policy.Name)
 	logger.Info("Reconcile")
 
-	// TODO: resetOnRecovery logic will be added here
-	evaluation := evaluateAndUpdatePolicyStatus(policy)
+	// Find active release
+	release, err := r.getActiveReleaseForPolicy(ctx, policy)
+	if err != nil && !errors.Is(err, ErrNoActiveReleaseFound) {
+		return ctrl.Result{}, err
+	}
+
+	evaluation := evaluateAndUpdatePolicyStatus(policy, release)
 	if !evaluation.Allowed {
 		logger.Info("rollback is not allowed, nothing to do", "reason", evaluation.Reason)
-		return r.updatePolicyAndReturn(ctx, logger, policy, evaluation.RequeueAfter)
+		return r.updatePolicyAndReturn(ctx, logger, policy)
 	}
 
 	// Check if rollback should be triggered
-	shouldTrigger, release, err := r.shouldTriggerRollback(ctx, logger, policy)
+	shouldTrigger, err := r.shouldTriggerRollback(ctx, logger, policy, release)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -199,10 +204,10 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 			return ctrl.Result{}, err
 		}
 
-		updatePolicyStatus(policy)
+		disableAutomationAfterRollback(policy)
 	}
 
-	return r.updatePolicyAndReturn(ctx, logger, policy, nil)
+	return r.updatePolicyAndReturn(ctx, logger, policy)
 }
 
 // createOrUpdate creates or updates (spec or status) the given object, logging the outcome.
@@ -230,13 +235,9 @@ func (r *AutomatedRollbackReconciler) createOrUpdate(ctx context.Context, logger
 }
 
 // updatePolicyAndReturn updates the policy and returns the result. Requeues if requeueAfter is not nil.
-func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, requeueAfter *time.Duration) (ctrl.Result, error) {
+func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (ctrl.Result, error) {
 	if err := r.createOrUpdate(ctx, logger, policy, "policy"); err != nil {
 		return ctrl.Result{}, err
-	}
-
-	if requeueAfter != nil {
-		return ctrl.Result{RequeueAfter: *requeueAfter}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -245,26 +246,21 @@ func (r *AutomatedRollbackReconciler) updatePolicyAndReturn(ctx context.Context,
 // shouldTriggerRollback checks if a rollback should be triggered for the given policy.
 // Rollback is triggered when the release is active, there isn't a prior rollback and
 // the trigger condition is met.
-func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy) (bool, *deployv1alpha1.Release, error) {
-	// Find active release
-	release, err := r.getActiveReleaseForPolicy(ctx, policy)
-	if err != nil {
-		if errors.Is(err, ErrNoActiveReleaseFound) {
-			logger.Info("no active release found, exiting...")
-			return false, nil, nil
-		}
-		return false, nil, err
+func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) (bool, error) {
+	if release == nil {
+		logger.Info("no active release found, nothing to do")
+		return false, nil
 	}
 
 	// Check if release already has a rollback
 	hasRollback, err := r.hasRollback(ctx, release)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 
 	if hasRollback {
 		logger.Info("release already has a rollback, nothing to do", "release", release.Name)
-		return false, nil, nil
+		return false, nil
 	}
 
 	// Check trigger condition
@@ -272,10 +268,10 @@ func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context,
 	triggerConditionStatus := policy.Spec.Trigger.ConditionStatus
 	if !meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, triggerConditionType, triggerConditionStatus) {
 		logger.Info("trigger condition not met, nothing to do", "release", release.Name)
-		return false, nil, nil
+		return false, nil
 	}
 
-	return true, release, nil
+	return true, nil
 }
 
 func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) error {
@@ -289,22 +285,18 @@ func (r *AutomatedRollbackReconciler) performRollback(ctx context.Context, logge
 	return nil
 }
 
-// updatePolicyStatus updates the policy status lastAutomatedRollbackTime
-// with the current time and increments the consecutive count if window
-// is not expired or is not set
-func updatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) {
+// disableAutomationAfterRollback disables the automated rollback policy after a rollback has been performed
+// by setting the LastAutomatedRollbackTime and updating the condition
+func disableAutomationAfterRollback(policy *deployv1alpha1.AutomatedRollbackPolicy) {
 	now := metav1.NewTime(time.Now())
 	policy.Status.LastAutomatedRollbackTime = &now
 
-	windowExpiredOrNotSet := policy.Status.WindowStartTime == nil ||
-		(policy.Spec.ResetPeriod != nil &&
-			policy.Status.WindowStartTime.Add(policy.Spec.ResetPeriod.Duration).Before(time.Now()))
-
-	if windowExpiredOrNotSet {
-		policy.Status.WindowStartTime = &now
-		policy.Status.ConsecutiveCount = 0
-	}
-	policy.Status.ConsecutiveCount++
+	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+		Type:    deployv1alpha1.AutomatedRollbackPolicyConditionActive,
+		Status:  metav1.ConditionFalse,
+		Reason:  deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController,
+		Message: "Automation disabled after performing a rollback. Will be enabled after the next healthy release.",
+	})
 }
 
 func (r *AutomatedRollbackReconciler) getActiveReleaseForPolicy(ctx context.Context, policy *deployv1alpha1.AutomatedRollbackPolicy) (*deployv1alpha1.Release, error) {
@@ -334,13 +326,8 @@ func (r *AutomatedRollbackReconciler) hasRollback(ctx context.Context, release *
 
 // evaluateAndUpdatePolicyStatus evaluates the policy constraints
 // and updates the policy status conditions accordingly
-func evaluateAndUpdatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy) deployv1alpha1.PolicyEvaluation {
-	result := policy.EvaluatePolicyConstraints()
-
-	if result.WindowExpired {
-		policy.Status.WindowStartTime = nil
-		policy.Status.ConsecutiveCount = 0
-	}
+func evaluateAndUpdatePolicyStatus(policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) deployv1alpha1.PolicyEvaluation {
+	result := policy.EvaluatePolicyConstraints(release)
 
 	status := metav1.ConditionFalse
 	if result.Allowed {

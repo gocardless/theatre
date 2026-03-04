@@ -183,7 +183,7 @@ func (r *Runner) GetAutomatedRollbackPolicyByTarget(ctx context.Context, opts Ge
 
 	if err := r.client.List(ctx, &policyList,
 		client.InNamespace(opts.Namespace),
-		client.MatchingFields{".spec.targetName": opts.TargetName},
+		client.MatchingFields(map[string]string{".spec.targetName": opts.TargetName}),
 	); err != nil {
 		return nil, err
 	}

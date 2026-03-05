@@ -24,7 +24,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 		testNamespace = setupTestNamespace(ctx)
 		k8sClient = releaseMgr.GetClient()
 		targetName = generateTargetName()
-		policy = createPolicy(testNamespace, targetName, nil)
+		policy = generatePolicy(testNamespace, targetName, nil)
 	})
 
 	Describe("Policy evaluation", func() {
@@ -35,7 +35,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not trigger rollback even if release meets trigger condition", func() {
-				createActiveReleaseWithTriggerCondition(k8sClient, testNamespace, targetName)
+				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
 				expectNoRollbackCreated(k8sClient, testNamespace)
 			})
 
@@ -85,7 +85,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				release = createActiveReleaseWithTriggerCondition(k8sClient, testNamespace, targetName)
+				release = createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
 			})
 
 			It("should create a Rollback with correct spec and initiatedBy", func() {
@@ -100,7 +100,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				Expect(rollback.Spec.InitiatedBy.Type).To(Equal("system"))
 			})
 
-			It("should update policy status with consecutiveCount, lastAutomatedRollbackTime, and windowStartTime", func() {
+			It("should update policy status with lastAutomatedRollbackTime", func() {
 				By("Waiting for Rollback to be created")
 				expectRollbackCreated(k8sClient, testNamespace)
 
@@ -195,7 +195,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				createActiveReleaseWithTriggerCondition(k8sClient, testNamespace, targetName)
+				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
 			})
 
 			It("should pass deploymentOptions from policy to rollback", func() {
@@ -320,9 +320,9 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 
 // Helper functions
 
-// createActiveReleaseWithTriggerCondition creates an active release and sets the RollbackRequired=True condition.
+// createActiveReleaseWithRollbackRequired creates an active release and sets the RollbackRequired=True condition.
 // It waits for the release to be active and for the condition to be set before returning.
-func createActiveReleaseWithTriggerCondition(k8sClient client.Client, namespace, targetName string) *deployv1alpha1.Release {
+func createActiveReleaseWithRollbackRequired(k8sClient client.Client, namespace, targetName string) *deployv1alpha1.Release {
 	By("Creating an active release")
 	release := createRelease(ctx, namespace, targetName, map[string]string{
 		deployv1alpha1.AnnotationKeyReleaseActivate: deployv1alpha1.AnnotationValueReleaseActivateTrue,
@@ -386,7 +386,7 @@ func expectNoRollbackCreated(k8sClient client.Client, namespace string) {
 	}, "2s", "200ms").Should(Equal(0))
 }
 
-func createPolicy(namespace, targetName string, opts map[string]apiextv1.JSON) *deployv1alpha1.AutomatedRollbackPolicy {
+func generatePolicy(namespace, targetName string, opts map[string]apiextv1.JSON) *deployv1alpha1.AutomatedRollbackPolicy {
 	policy := &deployv1alpha1.AutomatedRollbackPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      targetName,

@@ -18,12 +18,8 @@ const (
 	AutomatedRollbackPolicyReasonSetByUser = "SetByUser"
 
 	// AutomatedRollbackPolicyReasonDisabledByController indicates that the automated rollback policy is disabled
-	// because the maximum number of consecutive rollbacks has been reached.
+	// because the controller has disabled it after an automated rollback has been performed.
 	AutomatedRollbackPolicyReasonDisabledByController = "DisabledByController"
-
-	// AutomatedRollbackPolicyReasonRecoveryDetected indicates that the automated rollback policy is disabled
-	// because the minimum interval between rollbacks has not been met.
-	AutomatedRollbackPolicyReasonRecoveryDetected = "RecoveryDetected"
 )
 
 // AutomatedRollbackPolicySpec defines the desired state

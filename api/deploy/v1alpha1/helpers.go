@@ -205,7 +205,8 @@ func (r *Release) GetEffectiveTime() time.Time {
 
 // AutomatedRollbackPolicy helpers
 
-// PolicyEvaluation is used to determine
+// PolicyEvaluation is used as a result of evaluating the constraints of an automated rollback policy.
+// It indicates whether the policy is allowed to trigger with the relevant reason and message.
 type PolicyEvaluation struct {
 	Allowed bool
 	Reason  string

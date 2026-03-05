@@ -36,7 +36,7 @@ rules:
       - list
       - watch
       - create
-  # Need to get/list existing rollbacks
+  # Need to get/list existing releases
   - apiGroups:
       - deploy.crd.gocardless.com
     resources:

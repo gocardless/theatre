@@ -166,7 +166,7 @@ func (r *Runner) ListReleases(ctx context.Context, opts ListReleasesOptions) ([]
 		releases = filtered
 	}
 
-	sortReleasesByEndTime(releases)
+	sortReleasesByEffectiveTime(releases)
 
 	if opts.Limit > 0 && len(releases) > opts.Limit {
 		releases = releases[:opts.Limit]
@@ -175,10 +175,10 @@ func (r *Runner) ListReleases(ctx context.Context, opts ListReleasesOptions) ([]
 	return releases, nil
 }
 
-// Sorts releases by DeploymentEndTime in descending order (most recent first)
-func sortReleasesByEndTime(releases []deployv1alpha1.Release) {
+// Sorts releases by effective time (most recent first)
+func sortReleasesByEffectiveTime(releases []deployv1alpha1.Release) {
 	sort.Slice(releases, func(i, j int) bool {
-		return releases[i].Status.DeploymentEndTime.After(releases[j].Status.DeploymentEndTime.Time)
+		return releases[i].GetEffectiveTime().After(releases[j].GetEffectiveTime())
 	})
 }
 

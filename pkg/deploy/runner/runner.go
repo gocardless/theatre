@@ -98,6 +98,48 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	return rb, nil
 }
 
+// ListRollbacksOptions defines parameters for listing rollbacks
+type ListRollbacksOptions struct {
+	Namespace string
+	Target    string
+	Limit     int
+}
+
+// ListRollbacks fetches rollbacks for a specific target in a namespace, sorted by completion time (most recent first)
+func (r *Runner) ListRollbacks(ctx context.Context, opts ListRollbacksOptions) ([]deployv1alpha1.Rollback, error) {
+	var rollbackList deployv1alpha1.RollbackList
+	if err := r.client.List(ctx, &rollbackList, client.InNamespace(opts.Namespace)); err != nil {
+		return nil, err
+	}
+
+	rollbacks := rollbackList.Items
+
+	if opts.Target != "" {
+		var filtered []deployv1alpha1.Rollback
+		for _, rollback := range rollbacks {
+			if rollback.Spec.ToReleaseRef.Target == opts.Target {
+				filtered = append(filtered, rollback)
+			}
+		}
+		rollbacks = filtered
+	}
+
+	sortRollbacksByEffectiveTime(rollbacks)
+
+	if opts.Limit > 0 && len(rollbacks) > opts.Limit {
+		rollbacks = rollbacks[:opts.Limit]
+	}
+
+	return rollbacks, nil
+}
+
+// Sorts rollbacks by effective time (most recent first)
+func sortRollbacksByEffectiveTime(rollbacks []deployv1alpha1.Rollback) {
+	sort.Slice(rollbacks, func(i, j int) bool {
+		return rollbacks[i].GetEffectiveTime().After(rollbacks[j].GetEffectiveTime())
+	})
+}
+
 // ListReleasesOptions defines parameters for listing releases
 type ListReleasesOptions struct {
 	Namespace string
@@ -124,7 +166,7 @@ func (r *Runner) ListReleases(ctx context.Context, opts ListReleasesOptions) ([]
 		releases = filtered
 	}
 
-	sortReleasesByEndTime(releases)
+	sortReleasesByEffectiveTime(releases)
 
 	if opts.Limit > 0 && len(releases) > opts.Limit {
 		releases = releases[:opts.Limit]
@@ -133,10 +175,10 @@ func (r *Runner) ListReleases(ctx context.Context, opts ListReleasesOptions) ([]
 	return releases, nil
 }
 
-// Sorts releases by DeploymentEndTime in descending order (most recent first)
-func sortReleasesByEndTime(releases []deployv1alpha1.Release) {
+// Sorts releases by effective time (most recent first)
+func sortReleasesByEffectiveTime(releases []deployv1alpha1.Release) {
 	sort.Slice(releases, func(i, j int) bool {
-		return releases[i].Status.DeploymentEndTime.After(releases[j].Status.DeploymentEndTime.Time)
+		return releases[i].GetEffectiveTime().After(releases[j].GetEffectiveTime())
 	})
 }
 

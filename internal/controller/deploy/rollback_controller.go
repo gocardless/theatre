@@ -238,7 +238,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 		return ctrl.Result{}, err
 	}
-	logger.Info("deployment triggered successfully", "deploymentID", resp.ID, "url", resp.URL, "event", EventDeploymentTriggered)
+	logger.Info(fmt.Sprintf("deployment triggered successfully: %s", resp.URL), "deploymentID", resp.ID, "url", resp.URL, "event", EventDeploymentTriggered)
 	return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 }
 

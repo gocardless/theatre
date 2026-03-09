@@ -112,13 +112,14 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 			fmt.Errorf("failed to create deployment: %w", err))
 	}
 
-	deploymentURL := fmt.Sprintf("https://github.com/%s/%s/deployments/%d",
+	deploymentID := fmt.Sprintf("https://github.com/%s/%s/deployments/%d",
 		owner, repo, deployment.GetID())
+	deploymentURL := fmt.Sprintf("https://github.com/%s/%s/deployments", owner, repo)
 
 	return &cicd.DeploymentResult{
 		// Here we use the deployment URL as the ID since the deployments API additionally
 		// requires the owner and repo when querying status, which are encoded in the URL.
-		ID:      deploymentURL,
+		ID:      deploymentID,
 		URL:     deploymentURL,
 		Status:  cicd.DeploymentStatusPending,
 		Message: "Deployment created",

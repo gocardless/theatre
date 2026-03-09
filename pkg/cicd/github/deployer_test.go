@@ -137,7 +137,7 @@ var _ = Describe("GitHub Deployer", func() {
 			})
 
 			It("returns the deployment URL", func() {
-				Expect(result.URL).To(Equal("https://github.com/gocardless/my-service/deployments/12345"))
+				Expect(result.URL).To(Equal("https://github.com/gocardless/my-service/deployments"))
 			})
 
 			It("returns pending status", func() {

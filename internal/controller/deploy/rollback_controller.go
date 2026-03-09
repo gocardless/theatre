@@ -29,9 +29,11 @@ const (
 	MaxRetryAttempts = 3
 
 	// Deployment events
-	EventDeploymentTriggered = "DeploymentTriggered"
-	EventDeploymentFailed    = "DeploymentFailed"
-	EventDeploymentSucceeded = "DeploymentSucceeded"
+	EventDeploymentTriggered     = "DeploymentTriggered"
+	EventDeploymentTriggerFailed = "DeploymentTriggerFailed"
+	EventDeploymentFailed        = "DeploymentFailed"
+	EventRollbackSucceeded       = "RollbackSucceeded"
+	EventRollbackFailed          = "RollbackFailed"
 )
 
 func init() {
@@ -211,7 +213,9 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		// Check if error is retryable
 		var deployerErr *cicd.DeployerError
 		if errors.As(err, &deployerErr) && deployerErr.Retryable {
-			rollback.Status.Message = fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRetryAttempts, err)
+			message := fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRetryAttempts, err)
+			rollback.Status.Message = message
+			logger.Info(message, "event", EventDeploymentTriggerFailed, "attempt", rollback.Status.AttemptCount)
 			if updateErr := r.statusUpdate(ctx, logger, rollback); updateErr != nil {
 				return ctrl.Result{}, updateErr
 			}
@@ -257,7 +261,6 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
-		logger.Info("deployment succeeded", "event", EventDeploymentSucceeded)
 		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusFailed:
@@ -314,7 +317,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 
 	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "succeeded")).Inc()
 
-	logger.Info("rollback succeeded")
+	logger.Info("rollback succeeded", "event", EventRollbackSucceeded)
 	return ctrl.Result{}, nil
 }
 
@@ -346,6 +349,6 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 
 	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "failed")).Inc()
 
-	logger.Info("rollback failed", "message", message)
+	logger.Info(fmt.Sprintf("rollback failed: %s", message), "event", EventRollbackFailed)
 	return ctrl.Result{}, nil
 }

@@ -98,6 +98,56 @@ func (r *Runner) CreateRollback(ctx context.Context, opts CreateRollbackOptions)
 	return rb, nil
 }
 
+// ListRollbacksOptions defines parameters for listing rollbacks
+type ListRollbacksOptions struct {
+	Namespace string
+	Target    string
+	Limit     int
+}
+
+// ListRollbacks fetches rollbacks for a specific target in a namespace, sorted by completion time (most recent first)
+func (r *Runner) ListRollbacks(ctx context.Context, opts ListRollbacksOptions) ([]deployv1alpha1.Rollback, error) {
+	var rollbackList deployv1alpha1.RollbackList
+	if err := r.client.List(ctx, &rollbackList, client.InNamespace(opts.Namespace)); err != nil {
+		return nil, err
+	}
+
+	rollbacks := rollbackList.Items
+
+	if opts.Target != "" {
+		var filtered []deployv1alpha1.Rollback
+		for _, rollback := range rollbacks {
+			if rollback.Spec.ToReleaseRef.Target == opts.Target {
+				filtered = append(filtered, rollback)
+			}
+		}
+		rollbacks = filtered
+	}
+
+	sortRollbacksByCompletionTime(rollbacks)
+
+	if opts.Limit > 0 && len(rollbacks) > opts.Limit {
+		rollbacks = rollbacks[:opts.Limit]
+	}
+
+	return rollbacks, nil
+}
+
+// Sorts rollbacks by CompletionTime in descending order (most recent first)
+func sortRollbacksByCompletionTime(rollbacks []deployv1alpha1.Rollback) {
+	sort.Slice(rollbacks, func(i, j int) bool {
+		ti := rollbacks[i].Status.CompletionTime
+		tj := rollbacks[j].Status.CompletionTime
+		if ti == nil {
+			return false
+		}
+		if tj == nil {
+			return true
+		}
+		return ti.After(tj.Time)
+	})
+}
+
 // ListReleasesOptions defines parameters for listing releases
 type ListReleasesOptions struct {
 	Namespace string

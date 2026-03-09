@@ -124,7 +124,7 @@ func (r *Runner) ListRollbacks(ctx context.Context, opts ListRollbacksOptions) (
 		rollbacks = filtered
 	}
 
-	sortRollbacksByCompletionTime(rollbacks)
+	sortRollbacksByEffectiveTime(rollbacks)
 
 	if opts.Limit > 0 && len(rollbacks) > opts.Limit {
 		rollbacks = rollbacks[:opts.Limit]
@@ -133,24 +133,10 @@ func (r *Runner) ListRollbacks(ctx context.Context, opts ListRollbacksOptions) (
 	return rollbacks, nil
 }
 
-// Sorts rollbacks by CompletionTime in descending order (most recent first)
-func sortRollbacksByCompletionTime(rollbacks []deployv1alpha1.Rollback) {
+// Sorts rollbacks by effective time (most recent first)
+func sortRollbacksByEffectiveTime(rollbacks []deployv1alpha1.Rollback) {
 	sort.Slice(rollbacks, func(i, j int) bool {
-		ti := rollbacks[i].Status.CompletionTime
-		tj := rollbacks[j].Status.CompletionTime
-		// If both have no completion time, sort by creation time (newer first)
-		if ti == nil && tj == nil {
-			return rollbacks[i].CreationTimestamp.After(rollbacks[j].CreationTimestamp.Time)
-		}
-		// If only i has no completion time, i comes after j (j is newer)
-		if ti == nil {
-			return true
-		}
-		// If only j has no completion time, j comes after i (i is newer)
-		if tj == nil {
-			return false
-		}
-		return ti.After(tj.Time)
+		return rollbacks[i].GetEffectiveTime().After(rollbacks[j].GetEffectiveTime())
 	})
 }
 

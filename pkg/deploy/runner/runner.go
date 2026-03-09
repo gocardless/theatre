@@ -138,11 +138,17 @@ func sortRollbacksByCompletionTime(rollbacks []deployv1alpha1.Rollback) {
 	sort.Slice(rollbacks, func(i, j int) bool {
 		ti := rollbacks[i].Status.CompletionTime
 		tj := rollbacks[j].Status.CompletionTime
-		if ti == nil {
-			return false
+		// If both have no completion time, sort by creation time (newer first)
+		if ti == nil && tj == nil {
+			return rollbacks[i].CreationTimestamp.After(rollbacks[j].CreationTimestamp.Time)
 		}
-		if tj == nil {
+		// If only i has no completion time, i comes after j (j is newer)
+		if ti == nil {
 			return true
+		}
+		// If only j has no completion time, j comes after i (i is newer)
+		if tj == nil {
+			return false
 		}
 		return ti.After(tj.Time)
 	})

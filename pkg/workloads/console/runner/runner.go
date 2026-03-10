@@ -257,15 +257,20 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	return csl, nil
 }
 
+// checkPodState returns (true, nil) when the pod has reached a terminal
+// success state, (false, nil) to continue watching, or (true, err) on failure.
+func checkPodState(pod *corev1.Pod) (bool, error) {
+	switch pod.Status.Phase {
+	case corev1.PodRunning:
+		return false, nil
+	case corev1.PodSucceeded:
+		return true, nil
+	default:
+		return true, fmt.Errorf("pod in unexpected state %s: %s", pod.Status.Phase, pod.Status.Message)
+	}
+}
+
 func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	isRunning := func(pod *corev1.Pod) bool {
-		return pod != nil && pod.Status.Phase == corev1.PodRunning
-	}
-
-	succeeded := func(pod *corev1.Pod) bool {
-		return pod != nil && pod.Status.Phase == corev1.PodSucceeded
-	}
-
 	// return object from closures is discarded
 	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
 		pod, _, err := c.GetAttachablePod(ctx, csl)
@@ -275,11 +280,9 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 			}
 			return nil, fmt.Errorf("retrieving pod: %w", err)
 		}
-		if succeeded(pod) {
-			return nil, nil
-		}
-		if !isRunning(pod) {
-			return nil, fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
+
+		if done, err := checkPodState(pod); done {
+			return nil, err
 		}
 
 		listOptions := metav1.SingleObject(pod.ObjectMeta)
@@ -301,13 +304,9 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 			}
 			lastPod = pod
-			if succeeded(pod) {
-				return nil, true, nil
-			}
-			if !isRunning(pod) {
-				return nil, false, fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
-			}
-			return nil, false, nil
+
+			done, err := checkPodState(pod)
+			return nil, done, err
 		}, func() error {
 			return fmt.Errorf("pod's last phase was: %v: %w", lastPod.Status.Phase, ctx.Err())
 		})
@@ -918,19 +917,27 @@ var (
 	errConsolePendingAuthorisation = errors.New("console pending authorisation")
 )
 
-func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
-	isRunning := func(csl *workloadsv1alpha1.Console) bool {
-		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleRunning
+// checkConsoleState returns (true, nil) when the console has reached a terminal
+// success state, (false, nil) to continue watching, or (true, err) on failure.
+func checkConsoleState(csl *workloadsv1alpha1.Console, waitForAuthorisation bool) (bool, error) {
+	switch csl.Status.Phase {
+	case workloadsv1alpha1.ConsoleRunning:
+		return true, nil
+	case workloadsv1alpha1.ConsolePendingAuthorisation:
+		if !waitForAuthorisation {
+			return true, errConsolePendingAuthorisation
+		}
+		return false, nil
+	// If the console has already stopped it may have already run to
+	// completion, so let's return it
+	case workloadsv1alpha1.ConsoleStopped:
+		return true, nil
+	default:
+		return false, nil
 	}
-	isPendingAuthorisation := func(csl *workloadsv1alpha1.Console) bool {
-		return !waitForAuthorisation &&
-			csl != nil &&
-			csl.Status.Phase == workloadsv1alpha1.ConsolePendingAuthorisation
-	}
-	isStopped := func(csl *workloadsv1alpha1.Console) bool {
-		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleStopped
-	}
+}
 
+func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
 	return withGoneRetry(maxWatchGoneRetries, func() (*workloadsv1alpha1.Console, error) {
 		csl := &workloadsv1alpha1.Console{}
 		err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
@@ -938,16 +945,8 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 			return nil, fmt.Errorf("error retrieving console: %w", err)
 		}
 
-		if isRunning(csl) {
-			return csl, nil
-		}
-		if isPendingAuthorisation(csl) {
-			return csl, errConsolePendingAuthorisation
-		}
-		// If the console has already stopped it may have already run to
-		// completion, so let's return it
-		if isStopped(csl) {
-			return csl, nil
+		if done, err := checkConsoleState(csl, waitForAuthorisation); done {
+			return csl, err
 		}
 
 		lastCsl := createdCsl.DeepCopy()
@@ -977,16 +976,8 @@ func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha
 				return nil, false, fmt.Errorf("converting unstructured to console: %w", err)
 			}
 			lastCsl = csl
-			if isRunning(csl) {
-				return csl, true, nil
-			}
-			if isPendingAuthorisation(csl) {
-				return csl, true, errConsolePendingAuthorisation
-			}
-			if isStopped(csl) {
-				return csl, true, nil
-			}
-			return nil, false, nil
+			done, err := checkConsoleState(csl, waitForAuthorisation)
+			return csl, done, err
 		}, func() error {
 			return fmt.Errorf("console's last phase was: %v: %w", lastCsl.Status.Phase, ctx.Err())
 		})

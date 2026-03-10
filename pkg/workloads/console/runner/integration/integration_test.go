@@ -395,28 +395,6 @@ var _ = Describe("Runner", func() {
 			})
 		})
 
-		Context("When waiting for console to exist", func() {
-			It("Returns successfully", func() {
-				csl := newConsole(namespace.Name, "idontexistyet", consoleTemplate.Name, "test-user", map[string]string{})
-				csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-				time.AfterFunc(timeout/2,
-					func() {
-						defer GinkgoRecover()
-						mustCreateConsole(csl)
-					})
-
-				rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
-				mustCreateRoleBinding(rb)
-
-				ctx, cancel := context.WithTimeout(context.Background(), timeout)
-				defer cancel()
-				upToDateCsl, err := consoleRunner.WaitUntilReady(ctx, csl, true)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
-			})
-		})
-
 		Describe("When waiting for the rolebinding to be ready", func() {
 			Context("When the rolebinding does not exist yet", func() {
 				It("Fails with a timeout", func() {

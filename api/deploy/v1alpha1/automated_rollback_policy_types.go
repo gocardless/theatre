@@ -8,6 +8,20 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	// AutomatedRollbackPolicyConditionActive indicates whether the automated rollback policy is enabled.
+	// Status=True means the automated rollback policy is enabled.
+	// Status=False means the automated rollback policy is disabled.
+	AutomatedRollbackPolicyConditionActive = "Automated"
+
+	// AutomatedRollbackPolicyReasonSetByUser indicates that the automated rollback policy is set by the user.
+	AutomatedRollbackPolicyReasonSetByUser = "SetByUser"
+
+	// AutomatedRollbackPolicyReasonDisabledByController indicates that the automated rollback policy is disabled
+	// because the controller has disabled it after an automated rollback has been performed.
+	AutomatedRollbackPolicyReasonDisabledByController = "DisabledByController"
+)
+
 // AutomatedRollbackPolicySpec defines the desired state
 type AutomatedRollbackPolicySpec struct {
 	// TargetName identifies which releases this policy applies to,

@@ -142,6 +142,7 @@ type ReleaseStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=rel
 // +kubebuilder:printcolumn:name="Target_Name",type="string",JSONPath=".config.targetName"
 // +kubebuilder:printcolumn:name="Active",type="string",JSONPath=".status.conditions[?(@.type==\"Active\")].status"
 // +kubebuilder:printcolumn:name="Healthy",type="string",JSONPath=".status.conditions[?(@.type==\"Healthy\")].status"

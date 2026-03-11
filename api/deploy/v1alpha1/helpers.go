@@ -207,6 +207,7 @@ func (r *Release) GetEffectiveTime() time.Time {
 
 // PolicyEvaluation is used as a result of evaluating the constraints of an automated rollback policy.
 // It indicates whether the policy is allowed to trigger with the relevant reason and message.
+// +kubebuilder:object:generate=false
 type PolicyEvaluation struct {
 	Allowed bool
 	Reason  string

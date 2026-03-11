@@ -12,7 +12,7 @@ spec:
     listKind: AutomatedRollbackPolicyList
     plural: automatedrollbackpolicies
     shortNames:
-    - rbp
+    - arbp
     singular: automatedrollbackpolicy
   scope: Namespaced
   versions:

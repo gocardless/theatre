@@ -11,6 +11,8 @@ spec:
     kind: Release
     listKind: ReleaseList
     plural: releases
+    shortNames:
+    - rel
     singular: release
   scope: Namespaced
   versions:

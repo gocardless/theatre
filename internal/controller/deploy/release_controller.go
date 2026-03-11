@@ -22,11 +22,6 @@ import (
 const (
 	// DefaultReleaseLimit is the default number of releases to keep in a namespace
 	DefaultReleaseLimit = 30
-
-	// Events
-	EventSuccessfulStatusUpdate = "SuccessfulStatusUpdate"
-	EventNoStatusUpdate         = "NoStatusUpdate"
-	EventReleaseCulled          = "ReleasedCulled"
 )
 
 var apiGVStr = deployv1alpha1.GroupVersion.String()

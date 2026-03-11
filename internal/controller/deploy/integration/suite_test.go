@@ -82,6 +82,14 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	automatedRollbackMgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0", // Disable metrics to avoid port conflicts
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+
 	deployer = NewFakeDeployer()
 
 	err = (&deploy.RollbackReconciler{
@@ -99,6 +107,13 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(ctx, releaseMgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = (&deploy.AutomatedRollbackReconciler{
+		Client: automatedRollbackMgr.GetClient(),
+		Scheme: automatedRollbackMgr.GetScheme(),
+		Log:    ctrl.Log.WithName("controllers").WithName("AutomatedRollback"),
+	}).SetupWithManager(ctx, automatedRollbackMgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err := rollbackMgr.Start(ctx)
@@ -108,6 +123,12 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer GinkgoRecover()
 		err := releaseMgr.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+
+	go func() {
+		defer GinkgoRecover()
+		err := automatedRollbackMgr.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	}()
 

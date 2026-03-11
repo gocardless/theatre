@@ -15,6 +15,7 @@ resources:
   - managers/workloads.yaml
   - managers/release.yaml
   - managers/rollback.yaml
+  - managers/automated-rollback.yaml
   - webhooks/vault.yaml
   - webhooks/workloads.yaml
   - webhooks/release-mutating.yaml

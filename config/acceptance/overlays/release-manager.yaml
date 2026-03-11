@@ -6,10 +6,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
+      controller: release-manager
       group: deploy.crd.gocardless.com
   template:
     metadata:
       labels:
+        controller: release-manager
         group: deploy.crd.gocardless.com
     spec:
       containers:

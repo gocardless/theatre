@@ -33,6 +33,15 @@ func (rollback *Rollback) GetEffectiveTime() time.Time {
 	return rollback.Status.CompletionTime.Time
 }
 
+func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
+	for _, rollback := range rollbackList.Items {
+		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
+			return &rollback
+		}
+	}
+	return nil
+}
+
 // Release helpers
 
 func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {
@@ -194,11 +203,45 @@ func (r *Release) GetEffectiveTime() time.Time {
 	return r.Status.DeploymentEndTime.Time
 }
 
-func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
-	for _, rollback := range rollbackList.Items {
-		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
-			return &rollback
+// AutomatedRollbackPolicy helpers
+
+// PolicyEvaluation is used as a result of evaluating the constraints of an automated rollback policy.
+// It indicates whether the policy is allowed to trigger with the relevant reason and message.
+type PolicyEvaluation struct {
+	Allowed bool
+	Reason  string
+	Message string
+}
+
+// EvaluatePolicyConstraints evaluates the constraints of the automated rollback policy
+// and returns a policy evaluation, which indicates whether the policy is allowed to trigger
+// with the relevant reason and message.
+func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints(release *Release) PolicyEvaluation {
+	if !policy.Spec.Enabled {
+		return PolicyEvaluation{
+			Allowed: false,
+			Reason:  AutomatedRollbackPolicyReasonSetByUser,
+			Message: "Automated rollback policy is disabled",
 		}
 	}
-	return nil
+
+	// Check if the trigger condition on the release has recovered and whether automated rollback can be re-enabled
+	if release != nil && meta.IsStatusConditionFalse(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive) {
+		releaseRecovered := !meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, policy.Spec.Trigger.ConditionType, policy.Spec.Trigger.ConditionStatus)
+		automatedCond := meta.FindStatusCondition(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive)
+
+		if !releaseRecovered {
+			return PolicyEvaluation{
+				Allowed: false,
+				Reason:  automatedCond.Reason,
+				Message: automatedCond.Message,
+			}
+		}
+	}
+
+	return PolicyEvaluation{
+		Allowed: true,
+		Reason:  AutomatedRollbackPolicyReasonSetByUser,
+		Message: "Automated rollback is enabled",
+	}
 }

@@ -395,6 +395,45 @@ var _ = Describe("Runner", func() {
 			})
 		})
 
+		Context("When console transitions from PendingAuthorisation to Running", func() {
+			BeforeEach(func() {
+				console.Status.Phase = workloadsv1alpha1.ConsolePendingAuthorisation
+			})
+
+			It("Returns successfully after the transition", func() {
+				time.AfterFunc(timeout/2,
+					func() {
+						defer GinkgoRecover()
+						mustUpdateConsolePhase(console, workloadsv1alpha1.ConsoleRunning)
+					},
+				)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				upToDateCsl, err := consoleRunner.WaitUntilReady(ctx, console, true)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
+			})
+		})
+
+		Context("When console enters PendingAuthorisation with waitForAuthorisation=false", func() {
+			It("Returns with pending authorisation error", func() {
+				time.AfterFunc(timeout/2,
+					func() {
+						defer GinkgoRecover()
+						mustUpdateConsolePhase(console, workloadsv1alpha1.ConsolePendingAuthorisation)
+					},
+				)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				_, err := consoleRunner.WaitUntilReady(ctx, console, false)
+
+				Expect(err).To(MatchError(ContainSubstring("console pending authorisation")))
+			})
+		})
+
 		Describe("When waiting for the rolebinding to be ready", func() {
 			Context("When the rolebinding does not exist yet", func() {
 				It("Fails with a timeout", func() {

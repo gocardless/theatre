@@ -67,7 +67,7 @@ type AutomatedRollbackPolicyStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=rbp
+// +kubebuilder:resource:shortName=arbp
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=".spec.targetName"
 // +kubebuilder:printcolumn:name="Trigger_Condition",type=string,JSONPath=".spec.trigger.conditionType"
 // +kubebuilder:printcolumn:name="Trigger_When",type=string,JSONPath=".spec.trigger.conditionStatus"

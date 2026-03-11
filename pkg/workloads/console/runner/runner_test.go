@@ -19,10 +19,11 @@ import (
 )
 
 func goneError() error {
-	return &apierrors.StatusError{ErrStatus: metav1.Status{
-		Code:   http.StatusGone,
-		Reason: metav1.StatusReasonGone,
-	}}
+	return apierrors.NewGone("Gone")
+}
+
+func expiredError() error {
+	return apierrors.NewResourceExpired("Expired")
 }
 
 var _ = Describe("checkPodState", func() {
@@ -206,6 +207,25 @@ var _ = Describe("withGoneRetry", func() {
 		})
 	})
 
+	When("function returns Gone, Expired, then succeeds", func() {
+		It("Retries and returns the successful result", func() {
+			calls := 0
+			result, err := withGoneRetry(3, func() (string, error) {
+				calls++
+				if calls == 1 {
+					return "", goneError()
+				}
+				if calls == 2 {
+					return "", expiredError()
+				}
+				return "recovered", nil
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("recovered"))
+			Expect(calls).To(Equal(3))
+		})
+	})
+
 	When("function always returns Gone", func() {
 		It("Gives up after max retries and returns Gone error", func() {
 			calls := 0
@@ -214,6 +234,18 @@ var _ = Describe("withGoneRetry", func() {
 				return nil, goneError()
 			})
 			Expect(apierrors.IsGone(err)).To(BeTrue())
+			Expect(calls).To(Equal(3))
+		})
+	})
+
+	When("function always returns Expired", func() {
+		It("Gives up after max retries and returns Expired error", func() {
+			calls := 0
+			_, err := withGoneRetry(3, func() (any, error) {
+				calls++
+				return nil, expiredError()
+			})
+			Expect(apierrors.IsResourceExpired(err)).To(BeTrue())
 			Expect(calls).To(Equal(3))
 		})
 	})

@@ -330,7 +330,7 @@ func withGoneRetry[T any](maxRetries int, fn watchGoneFunc[T]) (T, error) {
 			return result, err
 		}
 		if attempt == maxRetries-1 {
-			return result, fmt.Errorf("reached max retries (%d) for Gone event response.", maxRetries)
+			return result, fmt.Errorf("reached max retries (%d) for Gone event response: %w", maxRetries, err)
 		}
 	}
 	return zero, errors.New("unreachable")

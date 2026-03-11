@@ -27,13 +27,6 @@ const (
 
 	// Maximum number of times to retry triggering a deployment
 	MaxRetryAttempts = 3
-
-	// Deployment events
-	EventDeploymentTriggered     = "DeploymentTriggered"
-	EventDeploymentTriggerFailed = "DeploymentTriggerFailed"
-	EventDeploymentFailed        = "DeploymentFailed"
-	EventRollbackSucceeded       = "RollbackSucceeded"
-	EventRollbackFailed          = "RollbackFailed"
 )
 
 func init() {

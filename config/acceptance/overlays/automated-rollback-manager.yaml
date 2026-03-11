@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rollback-manager
+  name: automated-rollback-manager
 spec:
   replicas: 1
   selector:
     matchLabels:
-      controller: rollback-manager
+      controller: automated-rollback-manager
       group: deploy.crd.gocardless.com
   template:
     metadata:
       labels:
-        controller: rollback-manager
+        controller: automated-rollback-manager
         group: deploy.crd.gocardless.com
     spec:
       containers:
         - command:
-            - /usr/local/bin/rollback-manager
+            - /usr/local/bin/automated-rollback-manager
           args:
             - --metrics-address=0.0.0.0
           image: theatre:latest

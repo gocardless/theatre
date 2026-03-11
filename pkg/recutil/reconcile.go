@@ -274,3 +274,18 @@ func IsConditionStatusKnown(conditions []metav1.Condition, conditionTypes []stri
 	}
 	return true
 }
+
+func HasConditionTransitioned(oldConditions, newConditions []metav1.Condition, conditionType string) bool {
+	oldCond := meta.FindStatusCondition(oldConditions, conditionType)
+	newCond := meta.FindStatusCondition(newConditions, conditionType)
+
+	if oldCond == nil && newCond != nil {
+		return true
+	}
+
+	if oldCond != nil && newCond != nil {
+		return oldCond.Status != newCond.Status
+	}
+
+	return false
+}

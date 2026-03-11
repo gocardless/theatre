@@ -12,4 +12,7 @@ const (
 
 	// IndexFieldRollbackTarget indexes rollbacks by their target name
 	IndexFieldRollbackTarget = ".spec.toReleaseRef.target"
+
+	// IndexFieldPolicyTargetName indexes policies by their target name
+	IndexFieldPolicyTargetName = ".spec.targetName"
 )

@@ -326,8 +326,11 @@ func withGoneRetry[T any](maxRetries int, fn watchGoneFunc[T]) (T, error) {
 	var zero T
 	for attempt := range maxRetries {
 		result, err := fn()
-		if !apierrors.IsGone(err) || attempt == maxRetries-1 {
+		if !isCodeGoneAPIErr(err) {
 			return result, err
+		}
+		if attempt == maxRetries-1 {
+			return result, fmt.Errorf("reached max retries (%d) for Gone event response.", maxRetries)
 		}
 	}
 	return zero, errors.New("unreachable")
@@ -375,12 +378,19 @@ func watchUntil[T any](
 	}
 }
 
+func isCodeGoneAPIErr(err error) bool {
+	// IsGone handles errors with Reason=Gone, and unknown errors with code=410.
+	// Reason=Expired is also a 410 error, but is not handled by IsGone.
+	return apierrors.IsGone(err) || apierrors.IsResourceExpired(err)
+}
+
 func watchErrorToAPIError(event watch.Event) error {
-	status, ok := event.Object.(*metav1.Status)
+	errObj := apierrors.FromObject(event.Object)
+	statusErr, ok := errObj.(*apierrors.StatusError)
 	if !ok {
 		return fmt.Errorf("unexpected error event object: %v", reflect.TypeOf(event.Object))
 	}
-	return &apierrors.StatusError{ErrStatus: *status}
+	return statusErr
 }
 
 type GetOptions struct {

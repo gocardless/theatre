@@ -17,6 +17,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -1000,7 +1001,7 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	}
 
 	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
-	fieldSelector := "metadata.name=" + csl.Name
+	fieldSelector := fields.OneTermEqualSelector("metadata.name", csl.Name).String()
 
 	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
 		var lastResourceVersion string

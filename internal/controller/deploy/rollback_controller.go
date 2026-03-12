@@ -261,9 +261,6 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 		if rollback.Status.AttemptCount < MaxRetryAttempts {
 			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts, "event", EventDeploymentFailed)
 			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
-			if err := r.statusUpdate(ctx, logger, rollback); err != nil {
-				return ctrl.Result{}, err
-			}
 			return r.triggerDeployment(ctx, logger, rollback, toRelease)
 		}
 		// Max retries exceeded - terminal failure

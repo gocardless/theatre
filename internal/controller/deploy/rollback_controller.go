@@ -268,6 +268,7 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	case cicd.DeploymentStatusPending, cicd.DeploymentStatusInProgress:
 		// Update message and continue polling
+
 		rollback.Status.Message = statusResp.Message
 		if err := r.statusUpdate(ctx, logger, rollback); err != nil {
 			return ctrl.Result{}, err

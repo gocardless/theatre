@@ -229,7 +229,7 @@ func (policy *AutomatedRollbackPolicy) EvaluatePolicyConstraints(release *Releas
 	// Check if the trigger condition on the release has recovered and whether automated rollback can be re-enabled
 	if release != nil && meta.IsStatusConditionFalse(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive) {
 
-		releaseRecovered := recutil.IsConditionStatusKnown(release.Status.Conditions, []string{string(policy.Spec.Trigger.ConditionType)}) &&
+		releaseRecovered := recutil.IsConditionStatusKnown(release.Status.Conditions, []string{policy.Spec.Trigger.ConditionType}) &&
 			!meta.IsStatusConditionPresentAndEqual(release.Status.Conditions, policy.Spec.Trigger.ConditionType, policy.Spec.Trigger.ConditionStatus)
 		automatedCond := meta.FindStatusCondition(policy.Status.Conditions, AutomatedRollbackPolicyConditionActive)
 

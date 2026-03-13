@@ -265,7 +265,7 @@ var _ = Describe("Helpers", func() {
 					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
 				})
 
-				It("should return allowed=false when the policy is disabled by the controller and the release has not recovered from failure", func() {
+				It("should return allowed=false when the policy is disabled by the controller and the release has not recovered from failure RollbackRequired=True", func() {
 					// Set the policy as disabled by controller (simulating it was disabled due to too many rollbacks)
 					meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
 						Type:   AutomatedRollbackPolicyConditionActive,
@@ -281,6 +281,30 @@ var _ = Describe("Helpers", func() {
 					meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
 						Type:   ReleaseConditionRollbackRequired,
 						Status: metav1.ConditionTrue,
+						Reason: "AnalysisFailed",
+					})
+
+					result := policy.EvaluatePolicyConstraints(release)
+					Expect(result.Allowed).To(BeFalse())
+					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
+				})
+
+				It("should return allowed=false when the policy is disabled by the controller and the release has not recovered from failure RollbackRequired=Unknown", func() {
+					// Set the policy as disabled by controller (simulating it was disabled due to too many rollbacks)
+					meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+						Type:   AutomatedRollbackPolicyConditionActive,
+						Status: metav1.ConditionFalse,
+						Reason: AutomatedRollbackPolicyReasonDisabledByController,
+					})
+
+					// Create a mock release that shows it is still failing
+					release := &Release{
+						Status: ReleaseStatus{},
+					}
+
+					meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
+						Type:   ReleaseConditionRollbackRequired,
+						Status: metav1.ConditionUnknown,
 						Reason: "AnalysisFailed",
 					})
 

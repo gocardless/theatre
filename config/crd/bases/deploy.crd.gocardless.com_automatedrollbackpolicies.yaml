@@ -79,7 +79,11 @@ spec:
                 description: |-
                   TargetName identifies which releases this policy applies to,
                   matching Release.config.targetName.
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: TargetName is immutable
+                  rule: self == oldSelf
               trigger:
                 description: Trigger defines the Release condition that triggers a
                   rollback.

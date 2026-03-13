@@ -17,15 +17,19 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/remotecommand"
+	watchtools "k8s.io/client-go/tools/watch"
 	"k8s.io/kubectl/pkg/cmd/get"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util/term"
@@ -34,6 +38,11 @@ import (
 	rbacv1alpha1 "github.com/gocardless/theatre/v5/api/rbac/v1alpha1"
 	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 )
+
+// If watcher returns a "Gone" error, we will recreate the watcher and retry,
+// this many times. Gone errors can happen after etcd compaction, usually once
+// the watcher is 5min old.
+const maxWatchGoneRetries = 5
 
 // Alias genericclioptions.IOStreams to avoid additional imports
 type IOStreams genericclioptions.IOStreams
@@ -249,87 +258,140 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	return csl, nil
 }
 
+// checkPodState returns (true, nil) when the pod has reached a terminal
+// success state, (false, nil) to continue watching, or (true, err) on failure.
+func checkPodState(pod *corev1.Pod) (bool, error) {
+	switch pod.Status.Phase {
+	case corev1.PodRunning:
+		return false, nil
+	case corev1.PodSucceeded:
+		return true, nil
+	default:
+		return true, fmt.Errorf("pod in unexpected state %s: %s", pod.Status.Phase, pod.Status.Message)
+	}
+}
+
 func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	isRunning := func(pod *corev1.Pod) bool {
-		return pod != nil && pod.Status.Phase == corev1.PodRunning
-	}
-
-	succeeded := func(pod *corev1.Pod) bool {
-		return pod != nil && pod.Status.Phase == corev1.PodSucceeded
-	}
-
-	pod, _, err := c.GetAttachablePod(ctx, csl)
-	if err != nil {
-		return err
-	}
-
-	listOptions := metav1.SingleObject(pod.ObjectMeta)
-	w, err := c.clientset.CoreV1().Pods(pod.Namespace).Watch(ctx, listOptions)
-	if err != nil {
-		return fmt.Errorf("error watching pod: %w", err)
-	}
-
-	// We need to fetch the pod again now we have a watcher to avoid a race
-	// where the pod completed before we were listening for watch events
-	pod, _, err = c.GetAttachablePod(ctx, csl)
-	if err != nil {
-		// If we can't find the pod, then we should assume it finished successfully. Otherwise
-		// we might race against the operator to access a pod it wants to delete, and cause
-		// our runner to exit with error when all is fine.
-		//
-		// TODO: It may be better to recheck the console and look in its status?
-		if apierrors.IsNotFound(err) {
-			return nil
+	// return object from closures is discarded
+	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
+		pod, _, err := c.GetAttachablePod(ctx, csl)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("retrieving pod: %w", err)
 		}
 
-		return fmt.Errorf("error retrieving pod: %w", err)
-	}
+		if done, err := checkPodState(pod); done {
+			return nil, err
+		}
 
-	if succeeded(pod) {
-		return nil
-	}
+		listOptions := metav1.SingleObject(pod.ObjectMeta)
+		rw, err := watchtools.NewRetryWatcherWithContext(ctx, pod.ResourceVersion, &cache.ListWatch{
+			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				opts.FieldSelector = listOptions.FieldSelector
+				return c.clientset.CoreV1().Pods(pod.Namespace).Watch(ctx, opts)
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating pod watcher: %w", err)
+		}
+		defer rw.Stop()
 
-	if !isRunning(pod) {
-		return fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
-	}
-
-	status := w.ResultChan()
-	defer w.Stop()
-
-	for {
-		select {
-		case event, ok := <-status:
-			// If our channel is closed, exit with error, as we'll otherwise assume
-			// we were successful when we never reached this state.
-			if !ok {
-				return errors.New("watch channel closed")
-			}
-
-			// We can receive *metav1.Status events in the situation where there's an error, in
-			// which case we should exit early.
-			if status, ok := event.Object.(*metav1.Status); ok {
-				return fmt.Errorf("received failure from Kubernetes: %s", status.Reason)
-			}
-
-			// We should be safe now, as a watcher should return either Status or the type we
-			// asked it for. But we've been wrong before, and it wasn't easy to figure out what
-			// happened when we didn't print the type of the event.
+		lastPod := pod
+		_, err = watchUntil(ctx, rw, func(event watch.Event) (any, bool, error) {
 			pod, ok := event.Object.(*corev1.Pod)
 			if !ok {
-				return fmt.Errorf("received an event that didn't reference a pod, which is unexpected: %v",
-					reflect.TypeOf(event.Object))
+				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 			}
+			lastPod = pod
 
-			if succeeded(pod) {
-				return nil
-			}
-			if !isRunning(pod) {
-				return fmt.Errorf("pod in unsuccessful state %s: %s", pod.Status.Phase, pod.Status.Message)
-			}
-		case <-ctx.Done():
-			return fmt.Errorf("pod's last phase was: %v: %w", pod.Status.Phase, ctx.Err())
+			done, err := checkPodState(pod)
+			return nil, done, err
+		}, func() error {
+			return fmt.Errorf("pod's last phase was: %v: %w", lastPod.Status.Phase, ctx.Err())
+		})
+		return nil, err
+	})
+	return err
+}
+
+// watchGoneFunc is a function type to be passed in withGoneRetry. The function
+// is expected to re-fetch the current state of an object and start a fresh
+// watch. Function is expected to return Gone error to retry the function.
+type watchGoneFunc[T any] func() (T, error)
+
+// withGoneRetry retries fn when it returns a Gone error, up to maxRetries
+// total attempts.
+func withGoneRetry[T any](maxRetries int, fn watchGoneFunc[T]) (T, error) {
+	var zero T
+	for attempt := range maxRetries {
+		result, err := fn()
+		if !isCodeGoneAPIErr(err) {
+			return result, err
+		}
+		if attempt == maxRetries-1 {
+			return result, fmt.Errorf("reached max retries (%d) for Gone event response: %w", maxRetries, err)
 		}
 	}
+	return zero, errors.New("unreachable")
+}
+
+// processWatchEventFunc is a function type to be passed in watchUntil.
+// It is expected to process the event and signal completion or error.
+//
+// Return values:
+//
+//	result: the resultant object of the event processing
+//	done: true if processing is complete (further events will not be processed)
+//	err: error if processing failed (further events will not be processed)
+type processWatchEventFunc[T any] func(event watch.Event) (T, bool, error)
+
+// watchUntil reads events from a RetryWatcher until processEvent signals
+// completion or an error occurs. Bookmark and error events are handled
+// internally; processEvent only receives normal events.
+func watchUntil[T any](
+	ctx context.Context,
+	rw *watchtools.RetryWatcher,
+	processEvent processWatchEventFunc[T],
+	ctxDoneErr func() error,
+) (T, error) {
+	var zero T
+	for {
+		select {
+		case event, ok := <-rw.ResultChan():
+			if !ok {
+				return zero, errors.New("watch channel closed")
+			}
+			if event.Type == watch.Error {
+				return zero, watchErrorToAPIError(event)
+			}
+			result, done, err := processEvent(event)
+			if err != nil {
+				return result, err
+			}
+			if done {
+				return result, nil
+			}
+		case <-ctx.Done():
+			return zero, ctxDoneErr()
+		}
+	}
+}
+
+func isCodeGoneAPIErr(err error) bool {
+	// IsGone handles errors with Reason=Gone, and unknown errors with code=410.
+	// Reason=Expired is also a 410 error, but is not handled by IsGone.
+	return apierrors.IsGone(err) || apierrors.IsResourceExpired(err)
+}
+
+func watchErrorToAPIError(event watch.Event) error {
+	errObj := apierrors.FromObject(event.Object)
+	statusErr, ok := errObj.(*apierrors.StatusError)
+	if !ok {
+		return fmt.Errorf("unexpected error event object: %v", reflect.TypeOf(event.Object))
+	}
+	return statusErr
 }
 
 type GetOptions struct {
@@ -866,91 +928,71 @@ var (
 	errConsolePendingAuthorisation = errors.New("console pending authorisation")
 )
 
-func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
-	isRunning := func(csl *workloadsv1alpha1.Console) bool {
-		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleRunning
-	}
-	isPendingAuthorisation := func(csl *workloadsv1alpha1.Console) bool {
-		return !waitForAuthorisation &&
-			csl != nil &&
-			csl.Status.Phase == workloadsv1alpha1.ConsolePendingAuthorisation
-	}
-	isStopped := func(csl *workloadsv1alpha1.Console) bool {
-		return csl != nil && csl.Status.Phase == workloadsv1alpha1.ConsoleStopped
-	}
-
-	listOptions := metav1.SingleObject(createdCsl.ObjectMeta)
-	w, err := c.consoleClient.Namespace(createdCsl.Namespace).Watch(ctx, listOptions)
-	if err != nil {
-		return nil, fmt.Errorf("error watching console: %w", err)
-	}
-
-	// Get the console, because watch will only give us an event when something
-	// is changed, and the phase could have already stabilised before the watch
-	// is set up.
-	csl := &workloadsv1alpha1.Console{}
-
-	err = c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("error retrieving console: %w", err)
-	}
-
-	// If the console is already running then there's nothing to do
-	if isRunning(csl) {
-		return csl, nil
-	}
-	if isPendingAuthorisation(csl) {
-		return csl, errConsolePendingAuthorisation
-	}
+// checkConsoleState returns (true, nil) when the console has reached a terminal
+// success state, (false, nil) to continue watching, or (true, err) on failure.
+func checkConsoleState(csl *workloadsv1alpha1.Console, waitForAuthorisation bool) (bool, error) {
+	switch csl.Status.Phase {
+	case workloadsv1alpha1.ConsoleRunning:
+		return true, nil
+	case workloadsv1alpha1.ConsolePendingAuthorisation:
+		if !waitForAuthorisation {
+			return true, errConsolePendingAuthorisation
+		}
+		return false, nil
 	// If the console has already stopped it may have already run to
 	// completion, so let's return it
-	if isStopped(csl) {
-		return csl, nil
+	case workloadsv1alpha1.ConsoleStopped:
+		return true, nil
+	default:
+		return false, nil
 	}
+}
 
-	status := w.ResultChan()
-	defer w.Stop()
+func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
+	return withGoneRetry(maxWatchGoneRetries, func() (*workloadsv1alpha1.Console, error) {
+		csl := &workloadsv1alpha1.Console{}
+		err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("error retrieving console: %w", err)
+		}
 
-	for {
-		select {
-		case event, ok := <-status:
-			// If our channel is closed, exit with error, as we'll otherwise assume
-			// we were successful when we never reached this state.
-			if !ok {
-				return nil, errors.New("watch channel closed")
-			}
+		if done, err := checkConsoleState(csl, waitForAuthorisation); done {
+			return csl, err
+		}
 
-			// We can receive *metav1.Status events in the situation where there's an error, in
-			// which case we should exit early.
-			if status, ok := event.Object.(*metav1.Status); ok {
-				return nil, fmt.Errorf("received failure from Kubernetes: %s", status.Reason)
-			}
+		lastCsl := createdCsl.DeepCopy()
+		if csl.ResourceVersion != "" {
+			lastCsl = csl.DeepCopy()
+		}
 
+		listOptions := metav1.SingleObject(lastCsl.ObjectMeta)
+		rw, err := watchtools.NewRetryWatcherWithContext(ctx, listOptions.ResourceVersion, &cache.ListWatch{
+			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				opts.FieldSelector = listOptions.FieldSelector
+				return c.consoleClient.Namespace(createdCsl.Namespace).Watch(ctx, opts)
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating console watcher: %w", err)
+		}
+		defer rw.Stop()
+
+		return watchUntil(ctx, rw, func(event watch.Event) (*workloadsv1alpha1.Console, bool, error) {
 			obj, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
-				return nil, fmt.Errorf("received object not of type *unstructured.Unstructured: %v", reflect.TypeOf(event.Object))
+				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 			}
-
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl)
-			if err != nil {
-				return nil, fmt.Errorf("error converting unstructured object to console: %w", err)
+			csl := &workloadsv1alpha1.Console{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl); err != nil {
+				return nil, false, fmt.Errorf("converting unstructured to console: %w", err)
 			}
-
-			if isRunning(csl) {
-				return csl, nil
-			}
-			if isPendingAuthorisation(csl) {
-				return csl, errConsolePendingAuthorisation
-			}
-			// If the console has already stopped it may have already run to
-			// completion, so let's return it
-			if isStopped(csl) {
-				return csl, nil
-			}
-		case <-ctx.Done():
-			return nil, fmt.Errorf("console's last phase was: %v: %w", csl.Status.Phase, ctx.Err())
-		}
-	}
+			lastCsl = csl
+			done, err := checkConsoleState(csl, waitForAuthorisation)
+			return csl, done, err
+		}, func() error {
+			return fmt.Errorf("console's last phase was: %v: %w", lastCsl.Status.Phase, ctx.Err())
+		})
+	})
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
@@ -959,43 +1001,53 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	}
 
 	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
-	watcher, err := rbClient.Watch(context.TODO(), metav1.ListOptions{FieldSelector: "metadata.name=" + csl.Name})
-	if err != nil {
-		return fmt.Errorf("error watching rolebindings: %w", err)
-	}
-	defer watcher.Stop()
+	fieldSelector := fields.OneTermEqualSelector("metadata.name", csl.Name).String()
 
-	// The Console controller might have already created a DirectoryRoleBinding
-	// and the DirectoryRoleBinding controller might have created the RoleBinding
-	// and updated its subject list by this point. If so, we are already done, and
-	// might never receive another event from our RoleBinding Watcher, causing the
-	// subsequent loop would block forever.
-	// If the associated RoleBinding exists and has the console user in its
-	// subject list, return early.
-	rb, err := rbClient.Get(context.TODO(), csl.Name, metav1.GetOptions{})
-	if err == nil && rbHasSubject(rb, csl.Spec.User) {
-		return nil
-	}
+	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
+		var lastResourceVersion string
 
-	rbEvents := watcher.ResultChan()
-	for {
-		select {
-		case rbEvent, ok := <-rbEvents:
-			if !ok {
-				return errors.New("rolebinding event watcher channel closed")
-			}
-
-			rb := rbEvent.Object.(*rbacv1.RoleBinding)
+		rb, err := rbClient.Get(ctx, csl.Name, metav1.GetOptions{})
+		if err == nil {
 			if rbHasSubject(rb, csl.Spec.User) {
-				return nil
+				return nil, nil
 			}
-
-			continue
-
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
+			lastResourceVersion = rb.ResourceVersion
+		} else {
+			// We need a valid ResourceVersion to start the watch. RoleBindingList will give us
+			// an RV compatible with RoleBinding RV.
+			rbList, listErr := rbClient.List(ctx, metav1.ListOptions{FieldSelector: fieldSelector})
+			if listErr != nil {
+				return nil, fmt.Errorf("listing rolebindings for resource version: %w", listErr)
+			}
+			lastResourceVersion = rbList.ResourceVersion
 		}
-	}
+
+		rw, err := watchtools.NewRetryWatcherWithContext(ctx, lastResourceVersion, &cache.ListWatch{
+			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				opts.FieldSelector = fieldSelector
+				return rbClient.Watch(ctx, opts)
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating rolebinding watcher: %w", err)
+		}
+		defer rw.Stop()
+
+		_, err = watchUntil(ctx, rw, func(event watch.Event) (any, bool, error) {
+			rb, ok := event.Object.(*rbacv1.RoleBinding)
+			if !ok {
+				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
+			}
+			if rbHasSubject(rb, csl.Spec.User) {
+				return nil, true, nil
+			}
+			return nil, false, nil
+		}, func() error {
+			return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
+		})
+		return nil, err
+	})
+	return err
 }
 
 func rbHasSubject(rb *rbacv1.RoleBinding, subjectName string) bool {

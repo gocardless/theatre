@@ -90,38 +90,38 @@ func newRoleBinding(namespace, name, username string) rbacv1.RoleBinding {
 
 }
 
-func mustCreateNamespace(namespace corev1.Namespace) {
+func mustCreateNamespace(namespace *corev1.Namespace) {
 	By("Creating test namespace: " + namespace.Name)
-	Expect(kubeClient.Create(context.TODO(), &namespace)).NotTo(
+	Expect(kubeClient.Create(context.TODO(), namespace)).NotTo(
 		HaveOccurred(), "failed to create test namespace",
 	)
 }
 
-func mustCreateConsoleTemplate(consoleTemplate workloadsv1alpha1.ConsoleTemplate) {
+func mustCreateConsoleTemplate(consoleTemplate *workloadsv1alpha1.ConsoleTemplate) {
 	By("Creating console template: " + consoleTemplate.Name)
-	Expect(kubeClient.Create(context.TODO(), &consoleTemplate)).NotTo(
+	Expect(kubeClient.Create(context.TODO(), consoleTemplate)).NotTo(
 		HaveOccurred(), "failed to create console template",
 	)
 }
 
-func mustCreateConsole(console workloadsv1alpha1.Console) {
+func mustCreateConsole(console *workloadsv1alpha1.Console) {
 	By("Creating console: " + console.Name)
-	Expect(kubeClient.Create(context.TODO(), &console)).NotTo(
+	Expect(kubeClient.Create(context.TODO(), console)).NotTo(
 		HaveOccurred(), "failed to create console ",
 	)
 }
 
-func mustCreateRoleBinding(roleBinding rbacv1.RoleBinding) {
+func mustCreateRoleBinding(roleBinding *rbacv1.RoleBinding) {
 	By("Creating role binding: " + roleBinding.Name)
-	Expect(kubeClient.Create(context.TODO(), &roleBinding)).NotTo(
+	Expect(kubeClient.Create(context.TODO(), roleBinding)).NotTo(
 		HaveOccurred(), "failed to create role binding",
 	)
 }
 
-func mustAddSubjectsToRoleBinding(rb rbacv1.RoleBinding, subjects []rbacv1.Subject) {
+func mustAddSubjectsToRoleBinding(rb *rbacv1.RoleBinding, subjects []rbacv1.Subject) {
 	rb.Subjects = subjects
 	Eventually(func() error {
-		return kubeClient.Update(context.TODO(), &rb)
+		return kubeClient.Update(context.TODO(), rb)
 	}, 2*time.Second).ShouldNot(HaveOccurred())
 }
 
@@ -160,7 +160,7 @@ var _ = Describe("Runner", func() {
 
 		BeforeEach(func() {
 			namespace = newNamespace("")
-			mustCreateNamespace(namespace)
+			mustCreateNamespace(&namespace)
 
 			consoleTemplate = newConsoleTemplate(namespace.Name, "test", map[string]string{"release": "test"})
 		})
@@ -241,13 +241,13 @@ var _ = Describe("Runner", func() {
 
 		BeforeEach(func() {
 			namespace = newNamespace("")
-			mustCreateNamespace(namespace)
+			mustCreateNamespace(&namespace)
 
 			consoleTemplate = newConsoleTemplate(namespace.Name, "test", map[string]string{"release": "test"})
 		})
 
 		JustBeforeEach(func() {
-			mustCreateConsoleTemplate(consoleTemplate)
+			mustCreateConsoleTemplate(&consoleTemplate)
 		})
 
 		Context("Successfully finds template", func() {
@@ -261,7 +261,7 @@ var _ = Describe("Runner", func() {
 		Context("Unsuccessfully finds a template", func() {
 			JustBeforeEach(func() {
 				consoleTemplate = newConsoleTemplate(namespace.Name, "test-2", map[string]string{"release": "test"})
-				mustCreateConsoleTemplate(consoleTemplate)
+				mustCreateConsoleTemplate(&consoleTemplate)
 			})
 
 			It("Fails to find non-existent template", func() {
@@ -301,10 +301,10 @@ var _ = Describe("Runner", func() {
 		})
 
 		JustBeforeEach(func() {
-			mustCreateNamespace(namespace)
-			mustCreateConsoleTemplate(consoleTemplate)
-			mustCreateConsole(console)
-			mustCreateRoleBinding(roleBinding)
+			mustCreateNamespace(&namespace)
+			mustCreateConsoleTemplate(&consoleTemplate)
+			mustCreateConsole(&console)
+			mustCreateRoleBinding(&roleBinding)
 		})
 
 		Context("When console phase is Pending", func() {
@@ -395,25 +395,42 @@ var _ = Describe("Runner", func() {
 			})
 		})
 
-		Context("When waiting for console to exist", func() {
-			It("Returns successfully", func() {
-				csl := newConsole(namespace.Name, "idontexistyet", consoleTemplate.Name, "test-user", map[string]string{})
-				csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
+		Context("When console transitions from PendingAuthorisation to Running", func() {
+			BeforeEach(func() {
+				console.Status.Phase = workloadsv1alpha1.ConsolePendingAuthorisation
+			})
+
+			It("Returns successfully after the transition", func() {
 				time.AfterFunc(timeout/2,
 					func() {
 						defer GinkgoRecover()
-						mustCreateConsole(csl)
-					})
-
-				rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
-				mustCreateRoleBinding(rb)
+						mustUpdateConsolePhase(console, workloadsv1alpha1.ConsoleRunning)
+					},
+				)
 
 				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
-				upToDateCsl, err := consoleRunner.WaitUntilReady(ctx, csl, true)
+				upToDateCsl, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(upToDateCsl.Status.Phase).To(Equal(workloadsv1alpha1.ConsoleRunning))
+			})
+		})
+
+		Context("When console enters PendingAuthorisation with waitForAuthorisation=false", func() {
+			It("Returns with pending authorisation error", func() {
+				time.AfterFunc(timeout/2,
+					func() {
+						defer GinkgoRecover()
+						mustUpdateConsolePhase(console, workloadsv1alpha1.ConsolePendingAuthorisation)
+					},
+				)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				_, err := consoleRunner.WaitUntilReady(ctx, console, false)
+
+				Expect(err).To(MatchError(ContainSubstring("console pending authorisation")))
 			})
 		})
 
@@ -422,7 +439,7 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					csl := newConsole(namespace.Name, "consolewithoutrolebinding", consoleTemplate.Name, "test-user", map[string]string{})
 					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					mustCreateConsole(csl)
+					mustCreateConsole(&csl)
 
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					defer cancel()
@@ -437,13 +454,13 @@ var _ = Describe("Runner", func() {
 				It("Returns success", func() {
 					csl := newConsole(namespace.Name, "consolewithoutrolebinding", consoleTemplate.Name, "test-user", map[string]string{})
 					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					mustCreateConsole(csl)
+					mustCreateConsole(&csl)
 
 					rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
 					time.AfterFunc(timeout/2,
 						func() {
 							defer GinkgoRecover()
-							mustCreateRoleBinding(rb)
+							mustCreateRoleBinding(&rb)
 						})
 
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -458,11 +475,11 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					csl := newConsole(namespace.Name, "norolebindingsubjects", consoleTemplate.Name, "test-user", map[string]string{})
 					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					mustCreateConsole(csl)
+					mustCreateConsole(&csl)
 
 					rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
 					rb.Subjects = nil
-					mustCreateRoleBinding(rb)
+					mustCreateRoleBinding(&rb)
 
 					ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 					defer cancel()
@@ -477,16 +494,16 @@ var _ = Describe("Runner", func() {
 				It("Returns success", func() {
 					csl := newConsole(namespace.Name, "norolebindingsubjects", consoleTemplate.Name, "test-user", map[string]string{})
 					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					mustCreateConsole(csl)
+					mustCreateConsole(&csl)
 
 					rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
 					rb.Subjects = nil
-					mustCreateRoleBinding(rb)
+					mustCreateRoleBinding(&rb)
 
 					time.AfterFunc(timeout/2,
 						func() {
 							defer GinkgoRecover()
-							mustAddSubjectsToRoleBinding(rb, []rbacv1.Subject{{Kind: "User", Name: csl.Spec.User}})
+							mustAddSubjectsToRoleBinding(&rb, []rbacv1.Subject{{Kind: "User", Name: csl.Spec.User}})
 						},
 					)
 
@@ -502,16 +519,16 @@ var _ = Describe("Runner", func() {
 				It("Fails with a timeout", func() {
 					csl := newConsole(namespace.Name, "norolebindingsubjects", consoleTemplate.Name, "test-user", map[string]string{})
 					csl.Status.Phase = workloadsv1alpha1.ConsoleRunning
-					mustCreateConsole(csl)
+					mustCreateConsole(&csl)
 
 					rb := newRoleBinding(namespace.Name, csl.Name, csl.Spec.User)
 					rb.Subjects = nil
-					mustCreateRoleBinding(rb)
+					mustCreateRoleBinding(&rb)
 
 					time.AfterFunc(timeout/2,
 						func() {
 							defer GinkgoRecover()
-							mustAddSubjectsToRoleBinding(rb, []rbacv1.Subject{{Kind: "User", Name: "rando"}})
+							mustAddSubjectsToRoleBinding(&rb, []rbacv1.Subject{{Kind: "User", Name: "rando"}})
 						},
 					)
 

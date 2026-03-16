@@ -293,9 +293,6 @@ func checkPodState(pod *corev1.Pod) (bool, error) {
 }
 
 func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-
-	// NOTE: we could simplify this code if we just use a watch for the pod,
-	// instead of confirming attachable pod specifically
 	pod, _, err := c.GetAttachablePod(ctx, csl)
 	if err != nil {
 		if apierrors.IsNotFound(err) {

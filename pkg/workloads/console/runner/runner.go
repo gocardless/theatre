@@ -39,11 +39,6 @@ import (
 	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
 )
 
-// If watcher returns a "Gone" error, we will recreate the watcher and retry,
-// this many times. Gone errors can happen after etcd compaction, usually once
-// the watcher is 5min old.
-const maxWatchGoneRetries = 5
-
 // Alias genericclioptions.IOStreams to avoid additional imports
 type IOStreams genericclioptions.IOStreams
 
@@ -943,10 +938,7 @@ func (c *Runner) WaitUntilReady(ctx context.Context, createdCsl workloadsv1alpha
 	return csl, nil
 }
 
-var (
-	errConsoleNotFound             = errors.New("console not found")
-	errConsolePendingAuthorisation = errors.New("console pending authorisation")
-)
+var errConsolePendingAuthorisation = errors.New("console pending authorisation")
 
 // checkConsoleState returns (true, nil) when the console has reached a terminal
 // success state, (false, nil) to continue watching, or (true, err) on failure.

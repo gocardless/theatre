@@ -936,8 +936,8 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	}
 
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", csl.Name).String()
-	NamespacedRBClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
-	lw := getListWatch(ctx, NamespacedRBClient, fieldSelector)
+	namespacedRBClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
+	lw := getListWatch(ctx, namespacedRBClient, fieldSelector)
 
 	precondition := func(store cache.Store) (bool, error) {
 		items := store.List()

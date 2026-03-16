@@ -258,6 +258,32 @@ func (c *Runner) Create(ctx context.Context, opts CreateOptions) (*workloadsv1al
 	return csl, nil
 }
 
+// getListWatch is a convenience helper for creating a ListWatch for
+// different object types.
+//
+// It is meant to be used in methods that wait for objects:
+// - waitForSuccess (Pod)
+// - waitForConsole (Console)
+// - waitForRoleBinding (RoleBinding)
+func getListWatch[T runtime.Object](ctx context.Context, client resourceInterface[T], fieldSelector string) *cache.ListWatch {
+	return &cache.ListWatch{
+		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
+			opts.FieldSelector = fieldSelector
+			return client.List(ctx, opts)
+		},
+		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
+			opts.FieldSelector = fieldSelector
+			return client.Watch(ctx, opts)
+		},
+	}
+}
+
+// resourceInterface is a generic interface for use with getListWatch
+type resourceInterface[T runtime.Object] interface {
+	List(ctx context.Context, opts metav1.ListOptions) (T, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+}
+
 // checkPodState returns (true, nil) when the pod has reached a terminal
 // success state, (false, nil) to continue watching, or (true, err) on failure.
 func checkPodState(pod *corev1.Pod) (bool, error) {
@@ -272,47 +298,41 @@ func checkPodState(pod *corev1.Pod) (bool, error) {
 }
 
 func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Console) error {
-	// return object from closures is discarded
-	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
-		pod, _, err := c.GetAttachablePod(ctx, csl)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("retrieving pod: %w", err)
+
+	// NOTE: we could simplify this code if we just use a watch for the pod,
+	// instead of confirming attachable pod specifically
+	pod, _, err := c.GetAttachablePod(ctx, csl)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
 		}
+		return fmt.Errorf("retrieving pod: %w", err)
+	}
 
-		if done, err := checkPodState(pod); done {
-			return nil, err
+	fieldSelector := fields.OneTermEqualSelector("metadata.name", pod.Name).String()
+	podInterface := c.clientset.CoreV1().Pods(pod.Namespace)
+	lw := getListWatch(ctx, podInterface, fieldSelector)
+
+	// Precondition checks the current state from the informer's cache
+	// before processing any watch events
+	precondition := func(store cache.Store) (bool, error) {
+		items := store.List()
+		if len(items) == 0 {
+			return true, nil // pod gone, treat as success
 		}
+		return checkPodState(items[0].(*corev1.Pod))
+	}
 
-		listOptions := metav1.SingleObject(pod.ObjectMeta)
-		rw, err := watchtools.NewRetryWatcherWithContext(ctx, pod.ResourceVersion, &cache.ListWatch{
-			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-				opts.FieldSelector = listOptions.FieldSelector
-				return c.clientset.CoreV1().Pods(pod.Namespace).Watch(ctx, opts)
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("creating pod watcher: %w", err)
+	// Condition processes each watch event
+	condition := func(event watch.Event) (bool, error) {
+		pod, ok := event.Object.(*corev1.Pod)
+		if !ok {
+			return false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 		}
-		defer rw.Stop()
+		return checkPodState(pod)
+	}
 
-		lastPod := pod
-		_, err = watchUntil(ctx, rw, func(event watch.Event) (any, bool, error) {
-			pod, ok := event.Object.(*corev1.Pod)
-			if !ok {
-				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
-			}
-			lastPod = pod
-
-			done, err := checkPodState(pod)
-			return nil, done, err
-		}, func() error {
-			return fmt.Errorf("pod's last phase was: %v: %w", lastPod.Status.Phase, ctx.Err())
-		})
-		return nil, err
-	})
+	_, err = watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, precondition, condition)
 	return err
 }
 
@@ -949,50 +969,56 @@ func checkConsoleState(csl *workloadsv1alpha1.Console, waitForAuthorisation bool
 }
 
 func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
-	return withGoneRetry(maxWatchGoneRetries, func() (*workloadsv1alpha1.Console, error) {
+	// FIXME: is this correct? Risk of returning objects other than console of
+	// the same name?
+	fieldSelector := fields.OneTermEqualSelector("metadata.name", createdCsl.Name).String()
+	resourceInterface := c.consoleClient.Namespace(createdCsl.Namespace)
+	lw := getListWatch(ctx, resourceInterface, fieldSelector)
+
+	var resultCsl *workloadsv1alpha1.Console
+
+	// Precondition checks the current state from the informer's cache
+	// before processing any watch events
+	precondition := func(store cache.Store) (bool, error) {
+		items := store.List()
+		if len(items) == 0 {
+			return false, nil // not found yet, wait for events
+		}
+		obj := items[0].(*unstructured.Unstructured)
 		csl := &workloadsv1alpha1.Console{}
-		err := c.kubeClient.Get(ctx, client.ObjectKey{Name: createdCsl.Name, Namespace: createdCsl.Namespace}, csl)
-		if err != nil && !apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("error retrieving console: %w", err)
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(
+			obj.UnstructuredContent(), csl,
+		); err != nil {
+			return false, err
 		}
-
-		if done, err := checkConsoleState(csl, waitForAuthorisation); done {
-			return csl, err
+		done, err := checkConsoleState(csl, waitForAuthorisation)
+		if done {
+			resultCsl = csl
 		}
+		return done, err
+	}
 
-		lastCsl := createdCsl.DeepCopy()
-		if csl.ResourceVersion != "" {
-			lastCsl = csl.DeepCopy()
+	// Condition processes each watch event
+	condition := func(event watch.Event) (bool, error) {
+		obj, ok := event.Object.(*unstructured.Unstructured)
+		if !ok {
+			return false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 		}
-
-		listOptions := metav1.SingleObject(lastCsl.ObjectMeta)
-		rw, err := watchtools.NewRetryWatcherWithContext(ctx, listOptions.ResourceVersion, &cache.ListWatch{
-			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-				opts.FieldSelector = listOptions.FieldSelector
-				return c.consoleClient.Namespace(createdCsl.Namespace).Watch(ctx, opts)
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("creating console watcher: %w", err)
+		csl := &workloadsv1alpha1.Console{}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(
+			obj.UnstructuredContent(), csl,
+		); err != nil {
+			return false, err
 		}
-		defer rw.Stop()
+		done, err := checkConsoleState(csl, waitForAuthorisation)
+		if done {
+			resultCsl = csl
+		}
+		return done, err
+	}
 
-		return watchUntil(ctx, rw, func(event watch.Event) (*workloadsv1alpha1.Console, bool, error) {
-			obj, ok := event.Object.(*unstructured.Unstructured)
-			if !ok {
-				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
-			}
-			csl := &workloadsv1alpha1.Console{}
-			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), csl); err != nil {
-				return nil, false, fmt.Errorf("converting unstructured to console: %w", err)
-			}
-			lastCsl = csl
-			done, err := checkConsoleState(csl, waitForAuthorisation)
-			return csl, done, err
-		}, func() error {
-			return fmt.Errorf("console's last phase was: %v: %w", lastCsl.Status.Phase, ctx.Err())
-		})
-	})
+	_, err := watchtools.UntilWithSync(ctx, lw, &unstructured.Unstructured{}, precondition, condition)
+	return resultCsl, err
 }
 
 func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.Console) error {
@@ -1003,50 +1029,26 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", csl.Name).String()
 
-	_, err := withGoneRetry(maxWatchGoneRetries, func() (any, error) {
-		var lastResourceVersion string
+	lw := getListWatch(ctx, rbClient, fieldSelector)
 
-		rb, err := rbClient.Get(ctx, csl.Name, metav1.GetOptions{})
-		if err == nil {
-			if rbHasSubject(rb, csl.Spec.User) {
-				return nil, nil
-			}
-			lastResourceVersion = rb.ResourceVersion
-		} else {
-			// We need a valid ResourceVersion to start the watch. RoleBindingList will give us
-			// an RV compatible with RoleBinding RV.
-			rbList, listErr := rbClient.List(ctx, metav1.ListOptions{FieldSelector: fieldSelector})
-			if listErr != nil {
-				return nil, fmt.Errorf("listing rolebindings for resource version: %w", listErr)
-			}
-			lastResourceVersion = rbList.ResourceVersion
+	precondition := func(store cache.Store) (bool, error) {
+		items := store.List()
+		if len(items) == 0 {
+			return false, nil
 		}
+		rb := items[0].(*rbacv1.RoleBinding)
+		return rbHasSubject(rb, csl.Spec.User), nil
+	}
 
-		rw, err := watchtools.NewRetryWatcherWithContext(ctx, lastResourceVersion, &cache.ListWatch{
-			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-				opts.FieldSelector = fieldSelector
-				return rbClient.Watch(ctx, opts)
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("creating rolebinding watcher: %w", err)
+	condition := func(event watch.Event) (bool, error) {
+		rb, ok := event.Object.(*rbacv1.RoleBinding)
+		if !ok {
+			return false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
 		}
-		defer rw.Stop()
+		return rbHasSubject(rb, csl.Spec.User), nil
+	}
 
-		_, err = watchUntil(ctx, rw, func(event watch.Event) (any, bool, error) {
-			rb, ok := event.Object.(*rbacv1.RoleBinding)
-			if !ok {
-				return nil, false, fmt.Errorf("unexpected event object: %v", reflect.TypeOf(event.Object))
-			}
-			if rbHasSubject(rb, csl.Spec.User) {
-				return nil, true, nil
-			}
-			return nil, false, nil
-		}, func() error {
-			return fmt.Errorf("waiting for rolebinding interrupted: %w", ctx.Err())
-		})
-		return nil, err
-	})
+	_, err := watchtools.UntilWithSync(ctx, lw, &rbacv1.RoleBinding{}, precondition, condition)
 	return err
 }
 

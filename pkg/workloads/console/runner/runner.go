@@ -310,8 +310,8 @@ func (c *Runner) waitForSuccess(ctx context.Context, csl *workloadsv1alpha1.Cons
 	}
 
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", pod.Name).String()
-	podInterface := c.clientset.CoreV1().Pods(pod.Namespace)
-	lw := getListWatch(ctx, podInterface, fieldSelector)
+	namespacedPodClient := c.clientset.CoreV1().Pods(pod.Namespace)
+	lw := getListWatch(ctx, namespacedPodClient, fieldSelector)
 
 	// Precondition checks the current state from the informer's cache
 	// before processing any watch events
@@ -969,11 +969,9 @@ func checkConsoleState(csl *workloadsv1alpha1.Console, waitForAuthorisation bool
 }
 
 func (c *Runner) waitForConsole(ctx context.Context, createdCsl workloadsv1alpha1.Console, waitForAuthorisation bool) (*workloadsv1alpha1.Console, error) {
-	// FIXME: is this correct? Risk of returning objects other than console of
-	// the same name?
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", createdCsl.Name).String()
-	resourceInterface := c.consoleClient.Namespace(createdCsl.Namespace)
-	lw := getListWatch(ctx, resourceInterface, fieldSelector)
+	namespacedCslClient := c.consoleClient.Namespace(createdCsl.Namespace)
+	lw := getListWatch(ctx, namespacedCslClient, fieldSelector)
 
 	var resultCsl *workloadsv1alpha1.Console
 
@@ -1026,10 +1024,9 @@ func (c *Runner) waitForRoleBinding(ctx context.Context, csl *workloadsv1alpha1.
 		return nil
 	}
 
-	rbClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", csl.Name).String()
-
-	lw := getListWatch(ctx, rbClient, fieldSelector)
+	NamespacedRBClient := c.clientset.RbacV1().RoleBindings(csl.Namespace)
+	lw := getListWatch(ctx, NamespacedRBClient, fieldSelector)
 
 	precondition := func(store cache.Store) (bool, error) {
 		items := store.List()

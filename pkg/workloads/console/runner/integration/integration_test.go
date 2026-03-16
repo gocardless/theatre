@@ -11,6 +11,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workloadsv1alpha1 "github.com/gocardless/theatre/v5/api/workloads/v1alpha1"
@@ -307,14 +308,19 @@ var _ = Describe("Runner", func() {
 			mustCreateRoleBinding(&roleBinding)
 		})
 
+		AssertWaitContextTimeoutErr := func(ctx context.Context, err error) {
+			Expect(err).To(HaveOccurred())
+			Expect(wait.Interrupted(err)).To(BeTrue())
+			Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+		}
+
 		Context("When console phase is Pending", func() {
 			It("Fails with a timeout waiting", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
-				Expect(err.Error()).To(ContainSubstring("last phase was: Pending"))
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				AssertWaitContextTimeoutErr(ctx, err)
 			})
 		})
 
@@ -390,8 +396,7 @@ var _ = Describe("Runner", func() {
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
-				Expect(err.Error()).To(ContainSubstring("context deadline exceeded"))
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				AssertWaitContextTimeoutErr(ctx, err)
 			})
 		})
 
@@ -445,8 +450,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 
@@ -485,8 +489,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 
@@ -536,8 +539,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(MatchError(ContainSubstring("waiting for rolebinding interrupted")))
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 		})

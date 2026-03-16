@@ -308,15 +308,19 @@ var _ = Describe("Runner", func() {
 			mustCreateRoleBinding(&roleBinding)
 		})
 
+		AssertWaitContextTimeoutErr := func(ctx context.Context, err error) {
+			Expect(err).To(HaveOccurred())
+			Expect(wait.Interrupted(err)).To(BeTrue())
+			Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+		}
+
 		Context("When console phase is Pending", func() {
 			It("Fails with a timeout waiting", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
-				Expect(err).To(HaveOccurred())
-				Expect(wait.Interrupted(err)).To(BeTrue())
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				AssertWaitContextTimeoutErr(ctx, err)
 			})
 		})
 
@@ -392,9 +396,7 @@ var _ = Describe("Runner", func() {
 				defer cancel()
 				_, err := consoleRunner.WaitUntilReady(ctx, console, true)
 
-				Expect(err).To(HaveOccurred())
-				Expect(wait.Interrupted(err)).To(BeTrue())
-				Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+				AssertWaitContextTimeoutErr(ctx, err)
 			})
 		})
 
@@ -448,9 +450,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(HaveOccurred())
-					Expect(wait.Interrupted(err)).To(BeTrue())
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 
@@ -489,9 +489,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(HaveOccurred())
-					Expect(wait.Interrupted(err)).To(BeTrue())
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 
@@ -541,9 +539,7 @@ var _ = Describe("Runner", func() {
 					defer cancel()
 					_, err := consoleRunner.WaitUntilReady(ctx, csl, true)
 
-					Expect(err).To(HaveOccurred())
-					Expect(wait.Interrupted(err)).To(BeTrue())
-					Expect(ctx.Err()).To(MatchError(context.DeadlineExceeded), "context should have timed out")
+					AssertWaitContextTimeoutErr(ctx, err)
 				})
 			})
 		})

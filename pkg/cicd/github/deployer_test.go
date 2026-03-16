@@ -429,7 +429,6 @@ var _ = Describe("GitHub Deployer", func() {
 			It("returns pending status", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
-				Expect(result.Message).To(Equal("No status updates yet"))
 			})
 		})
 

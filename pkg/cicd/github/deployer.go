@@ -151,9 +151,8 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 
 	if len(statuses) == 0 {
 		return &cicd.DeploymentResult{
-			ID:      deploymentID,
-			Status:  cicd.DeploymentStatusPending,
-			Message: "No status updates yet",
+			ID:     deploymentID,
+			Status: cicd.DeploymentStatusPending,
 		}, nil
 	}
 

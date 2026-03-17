@@ -5,6 +5,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RollbackTemplate groups all configuration that the controller applies
+// when creating a Rollback resource.
+type RollbackTemplate struct {
+	// Metadata fields applied to the created Rollback resource.
+	// +kubebuilder:validation:Optional
+	Metadata RollbackTemplateMeta `json:"metadata,omitempty"`
+
+	// Spec fields applied to the created Rollback resource's spec.
+	// +kubebuilder:validation:Optional
+	Spec RollbackTemplateSpec `json:"spec,omitempty"`
+}
+
+// RollbackTemplateMeta contains metadata fields applied to the created Rollback resource.
+type RollbackTemplateMeta struct {
+	// Labels to add to the Rollback resource.
+	// +kubebuilder:validation:Optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Annotations to add to the Rollback resource.
+	// +kubebuilder:validation:Optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// RollbackTemplateSpec contains spec fields applied to the created Rollback resource.
+type RollbackTemplateSpec struct {
+	// DeploymentOptions contains additional rollback provider-specific options.
+	// +kubebuilder:validation:Optional
+	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
+}
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -39,9 +69,10 @@ type AutomatedRollbackPolicySpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
 
-	// DeploymentOptions contains additional rollback provider-specific options.
+	// RollbackTemplate groups all configuration applied to the Rollback resource
+	// created by the controller.
 	// +kubebuilder:validation:Optional
-	DeploymentOptions map[string]apiextv1.JSON `json:"deploymentOptions,omitempty"`
+	RollbackTemplate RollbackTemplate `json:"rollbackTemplate,omitempty"`
 }
 
 // RollbackTrigger defines the Release condition that triggers a rollback

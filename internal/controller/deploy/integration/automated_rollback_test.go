@@ -183,9 +183,13 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 		Context("when policy has deploymentOptions", func() {
 			BeforeEach(func() {
 				By("Creating policy with deploymentOptions")
-				policy.Spec.DeploymentOptions = map[string]apiextv1.JSON{
-					"skip_canary": {Raw: []byte(`true`)},
-					"timeout":     {Raw: []byte(`300`)},
+				policy.Spec.RollbackTemplate = deployv1alpha1.RollbackTemplate{
+					Spec: deployv1alpha1.RollbackTemplateSpec{
+						DeploymentOptions: map[string]apiextv1.JSON{
+							"skip_canary": {Raw: []byte(`true`)},
+							"timeout":     {Raw: []byte(`300`)},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
@@ -403,7 +407,11 @@ func generatePolicy(namespace, targetName string, opts map[string]apiextv1.JSON)
 	}
 
 	if opts != nil {
-		policy.Spec.DeploymentOptions = opts
+		policy.Spec.RollbackTemplate = deployv1alpha1.RollbackTemplate{
+			Spec: deployv1alpha1.RollbackTemplateSpec{
+				DeploymentOptions: opts,
+			},
+		}
 	}
 
 	return policy

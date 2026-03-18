@@ -10,15 +10,15 @@ import (
 type RollbackTemplate struct {
 	// Metadata fields applied to the created Rollback resource.
 	// +kubebuilder:validation:Optional
-	Metadata RollbackTemplateMeta `json:"metadata,omitempty"`
+	Metadata RollbackTemplateMetadata `json:"metadata,omitempty"`
 
 	// Spec fields applied to the created Rollback resource's spec.
 	// +kubebuilder:validation:Optional
 	Spec RollbackTemplateSpec `json:"spec,omitempty"`
 }
 
-// RollbackTemplateMeta contains metadata fields applied to the created Rollback resource.
-type RollbackTemplateMeta struct {
+// RollbackTemplateMetadata contains metadata fields applied to the created Rollback resource.
+type RollbackTemplateMetadata struct {
 	// Labels to add to the Rollback resource.
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`

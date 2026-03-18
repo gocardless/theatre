@@ -17,6 +17,8 @@ var (
 		"release",
 		"team",
 		"initiatedBy",
+		"severity",
+		"escalation_path",
 	}
 
 	rollbackTerminalTotal = prometheus.NewCounterVec(

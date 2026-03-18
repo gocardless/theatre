@@ -86,7 +86,7 @@ func (release *Release) IsAnalysisStatusKnown() bool {
 	})
 }
 
-func (release *Release) generateSignature() string {
+func (release *Release) GenerateSignature() string {
 	return fmt.Sprintf("%x", sha256.Sum256(release.ReleaseConfig.Serialise()))
 }
 
@@ -95,7 +95,7 @@ func (release *Release) InitialiseStatus(message string) {
 		message = "Release initialised successfully"
 	}
 	release.Status.Message = message
-	release.Status.Signature = release.generateSignature()[:SignatureLength]
+	release.Status.Signature = release.GenerateSignature()[:SignatureLength]
 
 	release.setConditionActive(metav1.ConditionUnknown, ReasonInitialised, message)
 }

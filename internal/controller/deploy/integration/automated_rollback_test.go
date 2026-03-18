@@ -180,12 +180,24 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 		})
 
-		Context("when policy has deploymentOptions", func() {
+		Context("when policy has a rollback template", func() {
 			BeforeEach(func() {
 				By("Creating policy with deploymentOptions")
-				policy.Spec.DeploymentOptions = map[string]apiextv1.JSON{
-					"skip_canary": {Raw: []byte(`true`)},
-					"timeout":     {Raw: []byte(`300`)},
+				policy.Spec.RollbackTemplate = deployv1alpha1.RollbackTemplate{
+					Metadata: deployv1alpha1.RollbackTemplateMetadata{
+						Labels: map[string]string{
+							"test": "label",
+						},
+						Annotations: map[string]string{
+							"test": "annotation",
+						},
+					},
+					Spec: deployv1alpha1.RollbackTemplateSpec{
+						DeploymentOptions: map[string]apiextv1.JSON{
+							"skip_canary": {Raw: []byte(`true`)},
+							"timeout":     {Raw: []byte(`300`)},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
@@ -205,6 +217,10 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				By("Verifying deploymentOptions are passed to rollback")
 				Expect(rollback.Spec.DeploymentOptions).To(HaveKey("skip_canary"))
 				Expect(rollback.Spec.DeploymentOptions).To(HaveKey("timeout"))
+
+				By("Verifying metadata is passed to rollback")
+				Expect(rollback.Labels).To(HaveKey("test"))
+				Expect(rollback.Annotations).To(HaveKey("test"))
 			})
 		})
 
@@ -403,7 +419,11 @@ func generatePolicy(namespace, targetName string, opts map[string]apiextv1.JSON)
 	}
 
 	if opts != nil {
-		policy.Spec.DeploymentOptions = opts
+		policy.Spec.RollbackTemplate = deployv1alpha1.RollbackTemplate{
+			Spec: deployv1alpha1.RollbackTemplateSpec{
+				DeploymentOptions: opts,
+			},
+		}
 	}
 
 	return policy

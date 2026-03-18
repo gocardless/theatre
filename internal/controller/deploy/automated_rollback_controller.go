@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -265,11 +266,17 @@ func (r *AutomatedRollbackReconciler) shouldTriggerRollback(ctx context.Context,
 
 func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, logger logr.Logger, policy *deployv1alpha1.AutomatedRollbackPolicy, release *deployv1alpha1.Release) error {
 	reason := fmt.Sprintf("Release %s status condition %s is %s", release.Name, policy.Spec.Trigger.ConditionType, policy.Spec.Trigger.ConditionStatus)
+	// Merge release labels with policy template labels; policy template labels take precedence.
+	labels := make(map[string]string)
+	maps.Copy(labels, release.Labels)
+	maps.Copy(labels, policy.Spec.RollbackTemplate.Metadata.Labels)
+
 	rollback := &deployv1alpha1.Rollback{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%s-", release.TargetName),
 			Namespace:    release.Namespace,
-			Labels:       release.Labels,
+			Labels:       labels,
+			Annotations:  policy.Spec.RollbackTemplate.Metadata.Annotations,
 		},
 		Spec: deployv1alpha1.RollbackSpec{
 			Reason: reason,
@@ -280,7 +287,7 @@ func (r *AutomatedRollbackReconciler) createRollback(ctx context.Context, logger
 			ToReleaseRef: deployv1alpha1.ReleaseReference{
 				Target: policy.Spec.TargetName,
 			},
-			DeploymentOptions: policy.Spec.DeploymentOptions,
+			DeploymentOptions: policy.Spec.RollbackTemplate.Spec.DeploymentOptions,
 		},
 	}
 

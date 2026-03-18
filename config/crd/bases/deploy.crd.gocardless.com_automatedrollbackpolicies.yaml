@@ -65,16 +65,41 @@ spec:
           spec:
             description: Spec defines the desired state of AutomatedRollbackPolicy
             properties:
-              deploymentOptions:
-                additionalProperties:
-                  x-kubernetes-preserve-unknown-fields: true
-                description: DeploymentOptions contains additional rollback provider-specific
-                  options.
-                type: object
               enabled:
                 default: false
                 description: Enabled controls whether automated rollbacks are active.
                 type: boolean
+              rollbackTemplate:
+                description: |-
+                  RollbackTemplate groups all configuration applied to the Rollback resource
+                  created by the controller.
+                properties:
+                  metadata:
+                    description: Metadata fields applied to the created Rollback resource.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations to add to the Rollback resource.
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Labels to add to the Rollback resource.
+                        type: object
+                    type: object
+                  spec:
+                    description: Spec fields applied to the created Rollback resource's
+                      spec.
+                    properties:
+                      deploymentOptions:
+                        additionalProperties:
+                          x-kubernetes-preserve-unknown-fields: true
+                        description: DeploymentOptions contains additional rollback
+                          provider-specific options.
+                        type: object
+                    type: object
+                type: object
               targetName:
                 description: |-
                   TargetName identifies which releases this policy applies to,

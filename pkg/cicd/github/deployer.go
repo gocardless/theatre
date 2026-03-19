@@ -74,7 +74,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	// Build the deployment payload with rollback metadata and user options
 	payload := d.buildPayload(req)
 
-	description := fmt.Sprintf("Rollback to %s: %s", req.Rollback.Spec.ToReleaseRef, req.Rollback.Spec.Reason)
+	description := fmt.Sprintf("Rollback to release %s. Reason: %s", req.Rollback.Spec.ToReleaseRef.Name, req.Rollback.Spec.Reason)
 	if len(description) > 140 {
 		description = description[:137] + "..."
 	}

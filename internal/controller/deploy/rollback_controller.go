@@ -30,7 +30,11 @@ const (
 )
 
 func init() {
-	metrics.Registry.MustRegister(rollbackTerminalTotal)
+	metrics.Registry.MustRegister(
+		rollbackTerminalTotal,
+		rollbackCompletionDurationSeconds,
+		rollbackRetryCount,
+	)
 }
 
 type RollbackReconciler struct {
@@ -307,7 +311,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "succeeded")).Inc()
+	recordRollbackTerminalMetrics(rollback, "succeeded", now)
 
 	logger.Info("rollback succeeded", "event", EventRollbackSucceeded)
 	return ctrl.Result{}, nil
@@ -339,8 +343,23 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "failed")).Inc()
+	recordRollbackTerminalMetrics(rollback, "failed", now)
 
 	logger.Info(fmt.Sprintf("rollback failed: %s", message), "event", EventRollbackFailed)
 	return ctrl.Result{}, nil
+}
+
+func recordRollbackTerminalMetrics(rollback *deployv1alpha1.Rollback, status string, completionTime metav1.Time) {
+	labels := buildRollbackLabels(rollback, status)
+	rollbackTerminalTotal.With(labels).Inc()
+
+	if !rollback.CreationTimestamp.IsZero() {
+		durationSeconds := completionTime.Time.Sub(rollback.CreationTimestamp.Time).Seconds()
+		if durationSeconds >= 0 {
+			rollbackCompletionDurationSeconds.With(labels).Observe(durationSeconds)
+		}
+	}
+
+	retryCount := max(0, rollback.Status.AttemptCount-1)
+	rollbackRetryCount.With(labels).Observe(float64(retryCount))
 }

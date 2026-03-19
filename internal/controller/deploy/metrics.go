@@ -28,6 +28,24 @@ var (
 		},
 		rollbackLabelKeys,
 	)
+
+	rollbackCompletionDurationSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "theatre_rollback_completion_duration_seconds",
+			Help:    "Time from rollback creation to rollback completion in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		rollbackLabelKeys,
+	)
+
+	rollbackRetryCount = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "theatre_rollback_retry_count",
+			Help:    "Number of retries performed by rollbacks before reaching terminal state",
+			Buckets: []float64{0, 1, 2, 3, 4, 5},
+		},
+		rollbackLabelKeys,
+	)
 )
 
 // buildRollbackLabels creates a prometheus.Labels map from the rollback's labels

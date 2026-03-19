@@ -26,11 +26,15 @@ const (
 	RequeueAfter = 15 * time.Second
 
 	// Maximum number of times to retry triggering a deployment
-	MaxRetryAttempts = 3
+	MaxRollbackAttempts = 3
 )
 
 func init() {
-	metrics.Registry.MustRegister(rollbackTerminalTotal)
+	metrics.Registry.MustRegister(
+		rollbackTerminalTotal,
+		rollbackCompletionDurationSeconds,
+		rollbackRetryCount,
+	)
 }
 
 type RollbackReconciler struct {
@@ -176,9 +180,9 @@ func (r *RollbackReconciler) statusUpdate(ctx context.Context, logger logr.Logge
 func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, toRelease *deployv1alpha1.Release) (ctrl.Result, error) {
 	logger.Info("triggering deployment", "deployer", r.Deployer.Name(), "toRelease", toRelease.Name)
 
-	if rollback.Status.AttemptCount >= MaxRetryAttempts {
-		logger.Info("max retry attempts exceeded", "attempts", rollback.Status.AttemptCount)
-		return r.markRollbackFailed(ctx, logger, rollback, "max retry attempts exceeded")
+	if rollback.Status.AttemptCount >= MaxRollbackAttempts {
+		logger.Info("max rollback attempts exceeded", "attempts", rollback.Status.AttemptCount)
+		return r.markRollbackFailed(ctx, logger, rollback, "max rollback attempts exceeded")
 	}
 
 	// Prepare deployment options using the shared CICD helper, which handles
@@ -206,7 +210,7 @@ func (r *RollbackReconciler) triggerDeployment(ctx context.Context, logger logr.
 		// Check if error is retryable
 		var deployerErr *cicd.DeployerError
 		if errors.As(err, &deployerErr) && deployerErr.Retryable {
-			message := fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRetryAttempts, err)
+			message := fmt.Sprintf("deployment trigger failed (attempt %d/%d): %v", rollback.Status.AttemptCount, MaxRollbackAttempts, err)
 			rollback.Status.Message = message
 			logger.Info(message, "event", EventDeploymentTriggerFailed, "attempt", rollback.Status.AttemptCount)
 			if updateErr := r.statusUpdate(ctx, logger, rollback); updateErr != nil {
@@ -258,9 +262,9 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	case cicd.DeploymentStatusFailed:
 		// Check if we should retry
-		if rollback.Status.AttemptCount < MaxRetryAttempts {
-			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRetryAttempts, "event", EventDeploymentFailed)
-			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRetryAttempts, statusResp.Message)
+		if rollback.Status.AttemptCount < MaxRollbackAttempts {
+			logger.Info("deployment failed, retrying", "attempt", rollback.Status.AttemptCount, "maxAttempts", MaxRollbackAttempts, "event", EventDeploymentFailed)
+			rollback.Status.Message = fmt.Sprintf("deployment failed (attempt %d/%d): %s", rollback.Status.AttemptCount, MaxRollbackAttempts, statusResp.Message)
 			return r.triggerDeployment(ctx, logger, rollback, toRelease)
 		}
 		// Max retries exceeded - terminal failure
@@ -307,7 +311,7 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "succeeded")).Inc()
+	recordRollbackTerminalMetrics(rollback, "succeeded", now)
 
 	logger.Info("rollback succeeded", "event", EventRollbackSucceeded)
 	return ctrl.Result{}, nil
@@ -339,8 +343,23 @@ func (r *RollbackReconciler) markRollbackFailed(ctx context.Context, logger logr
 		return ctrl.Result{}, err
 	}
 
-	rollbackTerminalTotal.With(buildRollbackLabels(rollback, "failed")).Inc()
+	recordRollbackTerminalMetrics(rollback, "failed", now)
 
 	logger.Info(fmt.Sprintf("rollback failed: %s", message), "event", EventRollbackFailed)
 	return ctrl.Result{}, nil
+}
+
+func recordRollbackTerminalMetrics(rollback *deployv1alpha1.Rollback, status string, completionTime metav1.Time) {
+	labels := buildRollbackLabels(rollback, status)
+	rollbackTerminalTotal.With(labels).Inc()
+
+	if !rollback.CreationTimestamp.IsZero() {
+		durationSeconds := completionTime.Time.Sub(rollback.CreationTimestamp.Time).Seconds()
+		if durationSeconds >= 0 {
+			rollbackCompletionDurationSeconds.With(labels).Observe(durationSeconds)
+		}
+	}
+
+	retryCount := max(0, rollback.Status.AttemptCount-1)
+	rollbackRetryCount.With(labels).Observe(float64(retryCount))
 }

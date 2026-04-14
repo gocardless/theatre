@@ -5,7 +5,15 @@ metadata:
   name: rbac-manager
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      controller: rbac-manager
+      group: rbac.crd.gocardless.com
   template:
+    metadata:
+      labels:
+        controller: rbac-manager
+        group: rbac.crd.gocardless.com
     spec:
       containers:
         - name: manager

@@ -169,8 +169,8 @@ metadata:
   name: workloads-manager
 spec:
   selector:
-    app: theatre
     group: workloads.crd.gocardless.com
+    controller: workloads-manager
   ports:
     - port: 443
       targetPort: 443

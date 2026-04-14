@@ -5,7 +5,15 @@ metadata:
   name: workloads-manager
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      controller: workloads-manager
+      group: workloads.crd.gocardless.com
   template:
+    metadata:
+      labels:
+        controller: workloads-manager
+        group: workloads.crd.gocardless.com
     spec:
       containers:
         - name: manager

@@ -5,7 +5,15 @@ metadata:
   name: vault-manager
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      controller: vault-manager
+      group: vault.crd.gocardless.com
   template:
+    metadata:
+      labels:
+        controller: vault-manager
+        group: vault.crd.gocardless.com
     spec:
       containers:
         - name: manager

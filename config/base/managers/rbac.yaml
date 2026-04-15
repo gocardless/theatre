@@ -69,6 +69,7 @@ metadata:
   name: rbac-manager
   labels:
     group: rbac.crd.gocardless.com
+    controller: rbac-manager
 spec:
   serviceName: rbac-manager
   replicas: 1
@@ -76,10 +77,12 @@ spec:
   selector:
     matchLabels:
       group: rbac.crd.gocardless.com
+      controller: rbac-manager
   template:
     metadata:
       labels:
         group: rbac.crd.gocardless.com
+        controller: rbac-manager
     spec:
       serviceAccountName: rbac-manager
       terminationGracePeriodSeconds: 10

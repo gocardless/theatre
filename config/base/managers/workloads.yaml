@@ -115,6 +115,7 @@ metadata:
   name: workloads-manager
   labels:
     group: workloads.crd.gocardless.com
+    controller: workloads-manager
 spec:
   serviceName: workloads-manager
   volumeClaimTemplates: []
@@ -122,10 +123,12 @@ spec:
   selector:
     matchLabels:
       group: workloads.crd.gocardless.com
+      controller: workloads-manager
   template:
     metadata:
       labels:
         group: workloads.crd.gocardless.com
+        controller: workloads-manager
     spec:
       serviceAccountName: workloads-manager
       terminationGracePeriodSeconds: 10
@@ -166,8 +169,8 @@ metadata:
   name: workloads-manager
 spec:
   selector:
-    app: theatre
     group: workloads.crd.gocardless.com
+    controller: workloads-manager
   ports:
     - port: 443
       targetPort: 443

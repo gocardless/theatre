@@ -9,8 +9,8 @@ import (
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gock "gopkg.in/h2non/gock.v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("ArgoCD Deployer", func() {
@@ -89,95 +89,102 @@ var _ = Describe("ArgoCD Deployer", func() {
 	})
 
 	Describe("GetDeploymentStatus", func() {
-		It("returns Succeeded when synced and healthy", func() {
-			gock.New(serverURL).
-				Get("/api/v1/applications/my-app").
-				MatchHeader("Authorization", "Bearer test-token").
-				Reply(200).
-				JSON(map[string]any{
-					"status": map[string]any{
-						"sync":   map[string]string{"status": "Synced"},
-						"health": map[string]string{"status": "Healthy"},
-					},
-				})
-
-			result, err := deployer.GetDeploymentStatus(ctx, "my-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
-			Expect(result.Message).To(Equal("Application synced and healthy"))
-		})
-
-		It("returns InProgress when operation is running", func() {
-			gock.New(serverURL).
-				Get("/api/v1/applications/my-app").
-				Reply(200).
-				JSON(map[string]any{
-					"status": map[string]any{
-						"sync":   map[string]string{"status": "OutOfSync"},
-						"health": map[string]string{"status": "Progressing"},
-						"operationState": map[string]string{
-							"phase":   "Running",
-							"message": "syncing resources",
+		DescribeTable("When operationPhase is not Succeeded",
+			func(phase string, status cicd.DeploymentStatus) {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":   phase,
+								"message": "Operation " + phase,
+							},
+							"sync":   map[string]string{"status": "Synced"},
+							"health": map[string]string{"status": "Healthy"},
 						},
-					},
-				})
+					})
 
-			result, err := deployer.GetDeploymentStatus(ctx, "my-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
-		})
+				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(status))
+				Expect(result.Message).To(Equal("Operation " + phase))
+			},
+			Entry("Running", "Running", cicd.DeploymentStatusInProgress),
+			Entry("Error", "Error", cicd.DeploymentStatusFailed),
+			Entry("Failed", "Failed", cicd.DeploymentStatusFailed),
+		)
 
-		It("returns Failed when operation has failed", func() {
-			gock.New(serverURL).
-				Get("/api/v1/applications/my-app").
-				Reply(200).
-				JSON(map[string]any{
-					"status": map[string]any{
-						"sync":   map[string]string{"status": "OutOfSync"},
-						"health": map[string]string{"status": "Degraded"},
-						"operationState": map[string]string{
-							"phase":   "Failed",
-							"message": "sync failed: resource validation error",
+		Describe("When operationPhase is Succeeded", func() {
+			It("returns Succeeded when Synced and Healthy", func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase": "Succeeded",
+							},
+							"sync":   map[string]string{"status": "Synced"},
+							"health": map[string]string{"status": "Healthy"},
 						},
-					},
-				})
+					})
 
-			result, err := deployer.GetDeploymentStatus(ctx, "my-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusFailed))
-			Expect(result.Message).To(ContainSubstring("sync failed"))
-		})
+				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
+				Expect(result.Message).To(Equal("Application synced and healthy"))
+			})
 
-		It("returns Pending when status is unknown", func() {
-			gock.New(serverURL).
-				Get("/api/v1/applications/my-app").
-				Reply(200).
-				JSON(map[string]any{
-					"status": map[string]any{
-						"sync":   map[string]string{"status": "Unknown"},
-						"health": map[string]string{"status": "Missing"},
-					},
-				})
+			It("returns Succeeded when OutOfSync and Healthy", func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					MatchHeader("Authorization", "Bearer test-token").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"sync":   map[string]string{"status": "OutOfSync"},
+							"health": map[string]string{"status": "Healthy"},
+						},
+					})
 
-			result, err := deployer.GetDeploymentStatus(ctx, "my-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
-		})
+				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
+				Expect(result.Message).To(Equal("Application synced and healthy"))
+			})
 
-		It("returns InProgress when synced but not healthy", func() {
-			gock.New(serverURL).
-				Get("/api/v1/applications/my-app").
-				Reply(200).
-				JSON(map[string]any{
-					"status": map[string]any{
-						"sync":   map[string]string{"status": "Synced"},
-						"health": map[string]string{"status": "Progressing"},
-					},
-				})
+			It("returns Pending when status is Unknown", func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"sync":   map[string]string{"status": "Unknown"},
+							"health": map[string]string{"status": "Missing"},
+						},
+					})
 
-			result, err := deployer.GetDeploymentStatus(ctx, "my-app")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
+				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+
+			It("returns Pending when Synced but health is Progressing", func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"sync":   map[string]string{"status": "Synced"},
+							"health": map[string]string{"status": "Progressing"},
+						},
+					})
+
+				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
 		})
 
 		Context("error handling", func() {

@@ -148,14 +148,14 @@ var _ = Describe("ArgoCD Deployer", func() {
 			Expect(result.Message).To(ContainSubstring("sync failed"))
 		})
 
-		It("returns Pending when not yet synced", func() {
+		It("returns Pending when status is unknown", func() {
 			gock.New(serverURL).
 				Get("/api/v1/applications/my-app").
 				Reply(200).
 				JSON(map[string]any{
 					"status": map[string]any{
-						"sync":   map[string]string{"status": "OutOfSync"},
-						"health": map[string]string{"status": "Healthy"},
+						"sync":   map[string]string{"status": "Unknown"},
+						"health": map[string]string{"status": "Missing"},
 					},
 				})
 

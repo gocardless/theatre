@@ -177,55 +177,6 @@ func (d *Deployer) findRevision(revisions []deployv1alpha1.Revision, revisionNam
 	return &revisions[0], nil
 }
 
-// applicationResponse represents the relevant fields from the ArgoCD Application API response.
-type applicationResponse struct {
-	Status struct {
-		Sync struct {
-			Status string `json:"status"`
-		} `json:"sync"`
-		Health struct {
-			Status string `json:"status"`
-		} `json:"health"`
-		OperationState *struct {
-			Phase   string `json:"phase"`
-			Message string `json:"message"`
-		} `json:"operationState,omitempty"`
-	} `json:"status"`
-}
-
-// applicationPatchRequest is the body sent to the ArgoCD PATCH endpoint.
-// The "patch" field is a JSON string containing the actual patch content.
-type applicationPatchRequest struct {
-	Name      string `json:"name"`
-	PatchType string `json:"patchType"`
-	Patch     string `json:"patch"`
-}
-
-// applicationPatch represents the merge-patch content (serialized to a string in the request).
-type applicationPatch struct {
-	Spec applicationPatchSpec `json:"spec"`
-}
-
-type applicationPatchSpec struct {
-	Source applicationPatchSource `json:"source"`
-}
-
-type applicationPatchSource struct {
-	TargetRevision string                 `json:"targetRevision"`
-	Plugin         applicationPatchPlugin `json:"plugin"`
-}
-
-type applicationPatchPlugin struct {
-	// This will replace the whole env array, fine for now, but might be
-	// an issue if there are multiple parameters in the future.
-	Env []applicationPatchEnv `json:"env"`
-}
-
-type applicationPatchEnv struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
 // updateApplication patches the ArgoCD application to set the target revision
 // and the REVISION parameter.
 func (d *Deployer) updateApplication(ctx context.Context, appName, infraRevision, appRevision string) error {
@@ -321,21 +272,21 @@ func (d *Deployer) mapSyncStatus(app applicationResponse) (cicd.DeploymentStatus
 	healthStatus := app.Status.Health.Status
 
 	// Check operation state first — it reflects the active sync operation
-	if phase := app.Status.OperationState.Phase; phase != "" {
-		switch phase {
-		case "Running":
-			return cicd.DeploymentStatusInProgress, app.Status.OperationState.Message
-		case "Error", "Failed":
-			return cicd.DeploymentStatusFailed, app.Status.OperationState.Message
+	if op := app.Status.OperationState; op != nil && op.Phase != "" {
+		switch op.Phase {
+		case OperationPhaseRunning:
+			return cicd.DeploymentStatusInProgress, op.Message
+		case OperationPhaseError, OperationPhaseFailed:
+			return cicd.DeploymentStatusFailed, op.Message
 		}
 	}
 
-	if healthStatus == "Degraded" {
+	if healthStatus == HealthStatusDegraded {
 		return cicd.DeploymentStatusFailed, "Application is degraded"
 	}
 
-	// If synced and healthy, the rollback succeeded
-	if healthStatus == "Healthy" && (syncStatus == "Synced" || syncStatus == "OutOfSync") {
+	// If healthy and either synced or out-of-sync (converging), the rollback succeeded
+	if healthStatus == HealthStatusHealthy && (syncStatus == SyncStatusSynced || syncStatus == SyncStatusOutOfSync) {
 		return cicd.DeploymentStatusSucceeded, "Application synced and healthy"
 	}
 

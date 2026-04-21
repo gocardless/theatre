@@ -18,9 +18,10 @@ const (
 // ArgoCD operation phases.
 // See: https://github.com/argoproj/gitops-engine/blob/master/pkg/sync/common/types.go
 const (
-	OperationPhaseRunning = "Running"
-	OperationPhaseError   = "Error"
-	OperationPhaseFailed  = "Failed"
+	OperationPhaseSucceeded = "Succeeded"
+	OperationPhaseRunning   = "Running"
+	OperationPhaseError     = "Error"
+	OperationPhaseFailed    = "Failed"
 )
 
 // applicationResponse represents the relevant fields from the ArgoCD Application API response.
@@ -29,8 +30,8 @@ type applicationResponse struct {
 }
 
 type applicationStatusResponse struct {
-	Sync           applicationSyncStatus    `json:"sync"`
-	Health         applicationHealthStatus  `json:"health"`
+	Sync           applicationSyncStatus      `json:"sync"`
+	Health         applicationHealthStatus    `json:"health"`
 	OperationState *applicationOperationState `json:"operationState,omitempty"`
 }
 

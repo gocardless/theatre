@@ -108,10 +108,9 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 			return nil, err
 		}
 
-		project := app.Spec.Project
-		// TODO: Add sync window logic here
+		projectName := app.Spec.Project
 
-		err = d.addSyncWindow(ctx, project)
+		err = d.addSyncWindow(ctx, projectName)
 		if err != nil {
 			return nil, err
 		}

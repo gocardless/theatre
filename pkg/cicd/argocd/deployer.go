@@ -20,6 +20,7 @@ const (
 	TargetRevisionNameKey = "target_revision"
 	AppRevisionNameKey    = "app_revision"
 	AppNameKey            = "argocd_app_name"
+	AddSyncWindowKey      = "argocd_add_sync_window"
 )
 
 // appNameTemplateData is the data available to the app name template.
@@ -96,6 +97,25 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	}
 
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
+
+	addSyncWindow, ok := req.Options[AddSyncWindowKey].(bool)
+	if !ok || !addSyncWindow {
+		d.logger.Info("Skipping sync window addition", "appName", appName)
+	} else {
+		d.logger.Info("Adding sync window", "appName", appName)
+		app, err := d.getApplication(ctx, appName)
+		if err != nil {
+			return nil, err
+		}
+
+		project := app.Spec.Project
+		// TODO: Add sync window logic here
+
+		err = d.addSyncWindow(ctx, project)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &cicd.DeploymentResult{
 		ID:      appName,
@@ -264,6 +284,54 @@ func (d *Deployer) getApplication(ctx context.Context, appName string) (*applica
 	}
 
 	return &app, nil
+}
+
+func (d *Deployer) addSyncWindow(ctx context.Context, project string) error {
+	path := fmt.Sprintf("/api/v1/projects/%s", url.PathEscape(project))
+
+	getResp, err := d.doRequest(ctx, http.MethodGet, path, nil, "")
+	if err != nil {
+		return err
+	}
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode >= 400 {
+		return d.handleErrorResponse(getResp, "AddSyncWindow", "get project")
+	}
+
+	var proj projectResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&proj); err != nil {
+		return fmt.Errorf("failed to decode project response: %w", err)
+	}
+
+	proj.Spec.SyncWindows = append(proj.Spec.SyncWindows, SyncWindow{
+		Kind:         "deny",
+		Schedule:     "* * * * *",
+		Duration:     "1h",
+		Applications: []string{"*"},
+		ManualSync:   false,
+	})
+
+	projectUpdate := projectUpdate{
+		Project: proj,
+	}
+
+	payloadBytes, err := json.Marshal(projectUpdate)
+	if err != nil {
+		return fmt.Errorf("failed to marshal project update: %w", err)
+	}
+
+	putResp, err := d.doRequest(ctx, http.MethodPut, path, payloadBytes, "application/json")
+	if err != nil {
+		return err
+	}
+	defer putResp.Body.Close()
+
+	if putResp.StatusCode >= 400 {
+		return d.handleErrorResponse(putResp, "AddSyncWindow", "update project")
+	}
+
+	return nil
 }
 
 // mapSyncStatus maps ArgoCD application status to a cicd.DeploymentStatus.

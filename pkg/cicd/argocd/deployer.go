@@ -268,9 +268,6 @@ func (d *Deployer) getApplication(ctx context.Context, appName string) (*applica
 
 // mapSyncStatus maps ArgoCD application status to a cicd.DeploymentStatus.
 func (d *Deployer) mapSyncStatus(app applicationResponse) (cicd.DeploymentStatus, string) {
-	syncStatus := app.Status.Sync.Status
-	healthStatus := app.Status.Health.Status
-
 	// Check operation state first — it reflects the active sync operation
 	if op := app.Status.OperationState; op != nil && op.Phase != "" {
 		switch op.Phase {
@@ -278,19 +275,14 @@ func (d *Deployer) mapSyncStatus(app applicationResponse) (cicd.DeploymentStatus
 			return cicd.DeploymentStatusInProgress, op.Message
 		case OperationPhaseError, OperationPhaseFailed:
 			return cicd.DeploymentStatusFailed, op.Message
+		case OperationPhaseSucceeded:
+			return cicd.DeploymentStatusSucceeded, op.Message
+		default:
+			return cicd.DeploymentStatusPending, fmt.Sprintf("Operation phase: %s", op.Phase)
 		}
 	}
 
-	if healthStatus == HealthStatusDegraded {
-		return cicd.DeploymentStatusFailed, "Application is degraded"
-	}
-
-	// If healthy and either synced or out-of-sync (converging), the rollback succeeded
-	if healthStatus == HealthStatusHealthy && (syncStatus == SyncStatusSynced || syncStatus == SyncStatusOutOfSync) {
-		return cicd.DeploymentStatusSucceeded, "Application synced and healthy"
-	}
-
-	return cicd.DeploymentStatusPending, fmt.Sprintf("sync: %s, health: %s", syncStatus, healthStatus)
+	return cicd.DeploymentStatusPending, "No active operation"
 }
 
 // doRequest performs an HTTP request to the ArgoCD API with authentication.

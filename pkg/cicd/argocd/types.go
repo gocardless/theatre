@@ -8,7 +8,6 @@ const (
 )
 
 // ArgoCD health status codes.
-// See: https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go
 const (
 	HealthStatusHealthy     = "Healthy"
 	HealthStatusDegraded    = "Degraded"
@@ -16,7 +15,6 @@ const (
 )
 
 // ArgoCD operation phases.
-// See: https://github.com/argoproj/gitops-engine/blob/master/pkg/sync/common/types.go
 const (
 	OperationPhaseSucceeded = "Succeeded"
 	OperationPhaseRunning   = "Running"
@@ -26,7 +24,12 @@ const (
 
 // applicationResponse represents the relevant fields from the ArgoCD Application API response.
 type applicationResponse struct {
+	Spec   applicationSpecResponse   `json:"spec"`
 	Status applicationStatusResponse `json:"status"`
+}
+
+type applicationSpecResponse struct {
+	Project string `json:"project"`
 }
 
 type applicationStatusResponse struct {
@@ -50,7 +53,6 @@ type applicationOperationState struct {
 
 // applicationPatchRequest is the body sent to the ArgoCD PATCH endpoint.
 // The "patch" field is a JSON string containing the actual patch content.
-// See: https://github.com/argoproj/argo-cd/blob/master/server/application/application.proto
 type applicationPatchRequest struct {
 	Name      string `json:"name"`
 	PatchType string `json:"patchType"`
@@ -80,4 +82,61 @@ type applicationPatchPlugin struct {
 type applicationPatchEnv struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+type projectUpdate struct {
+	Project projectResponse `json:"project"`
+}
+
+// projectResponse represents the full ArgoCD Project object returned by GET /api/v1/projects/{name}.
+// It is also used as the body for PUT /api/v1/projects/{name}.
+type projectResponse struct {
+	Metadata projectMetadata `json:"metadata"`
+	Spec     projectSpec     `json:"spec"`
+}
+
+type projectMetadata struct {
+	Name            string            `json:"name"`
+	ResourceVersion string            `json:"resourceVersion"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty"`
+}
+
+type projectSpec struct {
+	SourceRepos                []string             `json:"sourceRepos,omitempty"`
+	Destinations               []projectDestination `json:"destinations,omitempty"`
+	ClusterResourceWhitelist   []projectGroupKind   `json:"clusterResourceWhitelist,omitempty"`
+	NamespaceResourceBlacklist []projectGroupKind   `json:"namespaceResourceBlacklist,omitempty"`
+	SyncWindows                []SyncWindow         `json:"syncWindows,omitempty"`
+}
+
+type projectDestination struct {
+	Server    string `json:"server,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+type projectGroupKind struct {
+	Group string `json:"group"`
+	Kind  string `json:"kind"`
+}
+
+// applicationProjectUpdate represents the patch content for updating a project.
+type applicationProjectUpdate struct {
+	Spec applicationProjectSpec `json:"spec"`
+}
+
+type applicationProjectSpec struct {
+	SyncWindows []SyncWindow `json:"syncWindows"`
+}
+
+type SyncWindow struct {
+	Kind         string   `json:"kind"`
+	Schedule     string   `json:"schedule"`
+	Duration     string   `json:"duration"`
+	Applications []string `json:"applications"`
+	Namespaces   []string `json:"namespaces"`
+	Clusters     []string `json:"clusters"`
+	ManualSync   bool     `json:"manualSync"`
+	TimeZone     string   `json:"timeZone"`
 }

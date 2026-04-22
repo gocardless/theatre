@@ -258,7 +258,14 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
-		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
+		message := statusResp.Message
+		err := r.triggerPostDeploymentHooks(ctx, rollback, toRelease)
+		if err != nil {
+			logger.Error(err, "failed to trigger post deployment hooks")
+			message = fmt.Sprintf("%s (post-deployment hooks failed: %v)", message, err)
+		}
+
+		return r.markRollbackSucceeded(ctx, logger, rollback, message)
 
 	case cicd.DeploymentStatusFailed:
 		// Check if we should retry
@@ -284,6 +291,18 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 		logger.Info("unknown deployment status, continuing to poll", "status", statusResp.Status)
 		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 	}
+}
+
+func (r *RollbackReconciler) triggerPostDeploymentHooks(ctx context.Context, rollback *deployv1alpha1.Rollback, toRelease *deployv1alpha1.Release) error {
+	// Prepare deployment options using the shared CICD helper, which handles
+	// jsonpath expressions and JSON decoding into native types.
+	parsedOptions, _ := cicd.ParseDeploymentOptions(rollback.Spec.DeploymentOptions, toRelease)
+
+	return r.Deployer.PostDeploymentHooks(ctx, cicd.DeploymentRequest{
+		Rollback:  rollback,
+		ToRelease: toRelease,
+		Options:   parsedOptions,
+	}, rollback.Status.DeploymentID)
 }
 
 func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {

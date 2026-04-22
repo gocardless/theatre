@@ -167,6 +167,11 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 	}, nil
 }
 
+func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
+	// The GitHub deployer doesn't implement any PostDeploymentHooks
+	return nil
+}
+
 // buildPayload constructs the deployment payload from rollback metadata
 // and user-provided options.
 func (d *Deployer) buildPayload(req cicd.DeploymentRequest) map[string]interface{} {

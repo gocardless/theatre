@@ -89,72 +89,188 @@ var _ = Describe("ArgoCD Deployer", func() {
 	})
 
 	Describe("GetDeploymentStatus", func() {
-		DescribeTable("When operationPhase is not Succeeded",
-			func(phase string, status cicd.DeploymentStatus) {
+		var (
+			deploymentID string
+			result       *cicd.DeploymentResult
+			err          error
+		)
+
+		BeforeEach(func() {
+			deploymentID = "my-app"
+		})
+
+		JustBeforeEach(func() {
+			result, err = deployer.GetDeploymentStatus(ctx, deploymentID)
+		})
+
+		Context("with a running operation", func() {
+			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
 						"status": map[string]any{
 							"operationState": map[string]any{
-								"phase":   phase,
-								"message": "Operation " + phase,
+								"phase":   "Running",
+								"message": "Syncing resources",
 							},
-							"sync":   map[string]string{"status": "Synced"},
-							"health": map[string]string{"status": "Healthy"},
 						},
 					})
+			})
 
-				result, err := deployer.GetDeploymentStatus(ctx, "my-app")
+			It("succeeds", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(status))
-			},
-			Entry("Running", "Running", cicd.DeploymentStatusInProgress),
-			Entry("Error", "Error", cicd.DeploymentStatusFailed),
-			Entry("Failed", "Failed", cicd.DeploymentStatusFailed),
-			Entry("Succeeded", "Succeeded", cicd.DeploymentStatusSucceeded),
-			Entry("None", "", cicd.DeploymentStatusPending),
-		)
+			})
 
-		Context("error handling", func() {
-			It("returns a retryable error on 500", func() {
+			It("returns in-progress status", func() {
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
+			})
+
+			It("returns the operation message", func() {
+				Expect(result.Message).To(Equal("Syncing resources"))
+			})
+
+			It("returns the application URL", func() {
+				Expect(result.URL).To(Equal("https://argocd.example.com/applications/my-app"))
+			})
+		})
+
+		Context("with a succeeded operation", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":   "Succeeded",
+								"message": "successfully synced",
+							},
+						},
+					})
+			})
+
+			It("returns succeeded status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
+			})
+		})
+
+		Context("with a failed operation", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":   "Failed",
+								"message": "sync failed: resource not found",
+							},
+						},
+					})
+			})
+
+			It("returns failed status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusFailed))
+			})
+
+			It("returns the failure message", func() {
+				Expect(result.Message).To(Equal("sync failed: resource not found"))
+			})
+		})
+
+		Context("with an errored operation", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":   "Error",
+								"message": "ComparisonError",
+							},
+						},
+					})
+			})
+
+			It("returns failed status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusFailed))
+			})
+		})
+
+		Context("with no active operation", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{},
+					})
+			})
+
+			It("returns pending status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+		})
+
+		Context("when ArgoCD API returns 500", func() {
+			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(500).
 					BodyString("internal server error")
-
-				_, err := deployer.GetDeploymentStatus(ctx, "my-app")
-				Expect(err).To(HaveOccurred())
-
-				var deployerErr *cicd.DeployerError
-				Expect(err).To(BeAssignableToTypeOf(deployerErr))
-				deployerErr = err.(*cicd.DeployerError)
-				Expect(deployerErr.Retryable).To(BeTrue())
 			})
 
-			It("returns a retryable error on 429", func() {
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("is retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeTrue())
+			})
+		})
+
+		Context("when ArgoCD API returns 429 (rate limited)", func() {
+			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(429).
 					BodyString("rate limited")
-
-				_, err := deployer.GetDeploymentStatus(ctx, "my-app")
-				Expect(err).To(HaveOccurred())
-
-				deployerErr := err.(*cicd.DeployerError)
-				Expect(deployerErr.Retryable).To(BeTrue())
 			})
 
-			It("returns a non-retryable error on 404", func() {
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("is retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeTrue())
+			})
+		})
+
+		Context("when ArgoCD API returns 404", func() {
+			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(404).
 					BodyString("application not found")
+			})
 
-				_, err := deployer.GetDeploymentStatus(ctx, "my-app")
+			It("returns an error", func() {
 				Expect(err).To(HaveOccurred())
+			})
 
-				deployerErr := err.(*cicd.DeployerError)
+			It("is not retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
 				Expect(deployerErr.Retryable).To(BeFalse())
 			})
 		})
@@ -216,12 +332,16 @@ var _ = Describe("ArgoCD Deployer", func() {
 	})
 
 	Describe("TriggerDeployment", func() {
-		var req cicd.DeploymentRequest
+		var (
+			req    cicd.DeploymentRequest
+			result *cicd.DeploymentResult
+			err    error
+		)
 
 		BeforeEach(func() {
 			req = cicd.DeploymentRequest{
 				Rollback: &deployv1alpha1.Rollback{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-rollback", Namespace: "elozev"},
+					ObjectMeta: metav1.ObjectMeta{Name: "test-rollback", Namespace: "default"},
 					Spec: deployv1alpha1.RollbackSpec{
 						ToReleaseRef: deployv1alpha1.ReleaseReference{
 							Target: "my-app",
@@ -240,39 +360,346 @@ var _ = Describe("ArgoCD Deployer", func() {
 			}
 		})
 
-		It("triggers a deployment successfully", func() {
-			gock.New(serverURL).
-				Patch("/api/v1/applications/compute-lab-elozev-my-app").
-				Reply(200).
-				JSON(map[string]any{})
+		Context("with a valid request", func() {
+			JustBeforeEach(func() {
+				gock.New(serverURL).
+					Patch("/api/v1/applications/compute-lab-default-my-app").
+					MatchHeader("Authorization", "Bearer test-token").
+					Reply(200).
+					JSON(map[string]any{})
 
-			gock.New(serverURL).
-				Post("/api/v1/applications/compute-lab-elozev-my-app/sync").
-				Reply(200).
-				JSON(map[string]any{})
+				gock.New(serverURL).
+					Post("/api/v1/applications/compute-lab-default-my-app/sync").
+					Reply(200).
+					JSON(map[string]any{})
 
-			result, err := deployer.TriggerDeployment(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.ID).To(Equal("compute-lab-elozev-my-app"))
-			Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
-			Expect(result.URL).To(Equal("https://argocd.example.com/applications/compute-lab-elozev-my-app"))
-			Expect(gock.IsDone()).To(BeTrue())
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("succeeds", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns the application name as the deployment ID", func() {
+				Expect(result.ID).To(Equal("compute-lab-default-my-app"))
+			})
+
+			It("returns pending status", func() {
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+
+			It("returns the ArgoCD application URL", func() {
+				Expect(result.URL).To(Equal("https://argocd.example.com/applications/compute-lab-default-my-app"))
+			})
+
+			It("calls both patch and sync endpoints", func() {
+				Expect(gock.IsDone()).To(BeTrue())
+			})
+
+			Context("with an app_revision option set", func() {
+				BeforeEach(func() {
+					req.Options[AppRevisionNameKey] = "app-commit-sha"
+				})
+
+				It("succeeds", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.ID).To(Equal("compute-lab-default-my-app"))
+				})
+			})
+
+			Context("with argocd_app_name option overriding the template", func() {
+				BeforeEach(func() {
+					req.Options[AppNameKey] = "custom-app-name"
+				})
+
+				JustBeforeEach(func() {
+					gock.New(serverURL).
+						Patch("/api/v1/applications/custom-app-name").
+						Reply(200).
+						JSON(map[string]any{})
+
+					gock.New(serverURL).
+						Post("/api/v1/applications/custom-app-name/sync").
+						Reply(200).
+						JSON(map[string]any{})
+
+					result, err = deployer.TriggerDeployment(ctx, req)
+				})
+
+				It("uses the custom app name", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.ID).To(Equal("custom-app-name"))
+				})
+			})
 		})
 
-		It("returns error when target_revision option is missing", func() {
-			req.Options = map[string]any{}
+		Context("with missing target_revision option", func() {
+			BeforeEach(func() {
+				req.Options = map[string]any{}
+			})
 
-			_, err := deployer.TriggerDeployment(ctx, req)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("target_revision is a required deploymentOption"))
+			JustBeforeEach(func() {
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("target_revision is a required deploymentOption"))
+			})
+
+			It("is not retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeFalse())
+			})
 		})
 
-		It("returns error when target is empty", func() {
-			req.Rollback.Spec.ToReleaseRef.Target = ""
+		Context("with an empty rollback target", func() {
+			BeforeEach(func() {
+				req.Rollback.Spec.ToReleaseRef.Target = ""
+			})
 
-			_, err := deployer.TriggerDeployment(ctx, req)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("rollback target is empty"))
+			JustBeforeEach(func() {
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("rollback target is empty"))
+			})
+
+			It("is not retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeFalse())
+			})
+		})
+
+		Context("when the patch API call returns 500", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Patch("/api/v1/applications/compute-lab-default-my-app").
+					Reply(500).
+					BodyString("internal server error")
+			})
+
+			JustBeforeEach(func() {
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("is retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeTrue())
+			})
+		})
+
+		Context("when the sync API call returns 400", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Patch("/api/v1/applications/compute-lab-default-my-app").
+					Reply(200).
+					JSON(map[string]any{})
+
+				gock.New(serverURL).
+					Post("/api/v1/applications/compute-lab-default-my-app/sync").
+					Reply(400).
+					BodyString("bad request")
+			})
+
+			JustBeforeEach(func() {
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("is not retryable", func() {
+				deployerErr, ok := err.(*cicd.DeployerError)
+				Expect(ok).To(BeTrue())
+				Expect(deployerErr.Retryable).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("PostDeploymentHooks", func() {
+		var (
+			req cicd.DeploymentRequest
+			err error
+		)
+
+		BeforeEach(func() {
+			req = cicd.DeploymentRequest{
+				Rollback: &deployv1alpha1.Rollback{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-rollback", Namespace: "default"},
+					Spec: deployv1alpha1.RollbackSpec{
+						ToReleaseRef: deployv1alpha1.ReleaseReference{
+							Target: "my-app",
+						},
+					},
+				},
+				Options: map[string]any{},
+			}
+		})
+
+		JustBeforeEach(func() {
+			err = deployer.PostDeploymentHooks(ctx, req, "compute-lab-default-my-app")
+		})
+
+		Context("when add_sync_window option is not set", func() {
+			It("succeeds without making any API calls", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(gock.IsDone()).To(BeTrue())
+			})
+		})
+
+		Context("when add_sync_window option is false", func() {
+			BeforeEach(func() {
+				req.Options[AddSyncWindowKey] = false
+			})
+
+			It("succeeds without making any API calls", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(gock.IsDone()).To(BeTrue())
+			})
+		})
+
+		Context("when add_sync_window option is true", func() {
+			BeforeEach(func() {
+				req.Options[AddSyncWindowKey] = true
+			})
+
+			Context("with a successful project update", func() {
+				BeforeEach(func() {
+					gock.New(serverURL).
+						Get("/api/v1/applications/compute-lab-default-my-app").
+						Reply(200).
+						JSON(map[string]any{
+							"spec":   map[string]any{"project": "my-project"},
+							"status": map[string]any{},
+						})
+
+					gock.New(serverURL).
+						Get("/api/v1/projects/my-project").
+						MatchHeader("Authorization", "Bearer test-token").
+						Reply(200).
+						JSON(map[string]any{
+							"metadata": map[string]any{"name": "my-project", "resourceVersion": "42"},
+							"spec":     map[string]any{"syncWindows": []any{}},
+						})
+
+					gock.New(serverURL).
+						Put("/api/v1/projects/my-project").
+						MatchHeader("Authorization", "Bearer test-token").
+						Reply(200).
+						JSON(map[string]any{})
+				})
+
+				It("succeeds", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("calls the get application, get project, and update project endpoints", func() {
+					Expect(gock.IsDone()).To(BeTrue())
+				})
+			})
+
+			Context("when fetching the application returns 500", func() {
+				BeforeEach(func() {
+					gock.New(serverURL).
+						Get("/api/v1/applications/compute-lab-default-my-app").
+						Reply(500).
+						BodyString("internal server error")
+				})
+
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
+
+				It("is retryable", func() {
+					deployerErr, ok := err.(*cicd.DeployerError)
+					Expect(ok).To(BeTrue())
+					Expect(deployerErr.Retryable).To(BeTrue())
+				})
+			})
+
+			Context("when fetching the project returns 404", func() {
+				BeforeEach(func() {
+					gock.New(serverURL).
+						Get("/api/v1/applications/compute-lab-default-my-app").
+						Reply(200).
+						JSON(map[string]any{
+							"spec":   map[string]any{"project": "my-project"},
+							"status": map[string]any{},
+						})
+
+					gock.New(serverURL).
+						Get("/api/v1/projects/my-project").
+						Reply(404).
+						BodyString("project not found")
+				})
+
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
+
+				It("is not retryable", func() {
+					deployerErr, ok := err.(*cicd.DeployerError)
+					Expect(ok).To(BeTrue())
+					Expect(deployerErr.Retryable).To(BeFalse())
+				})
+			})
+
+			Context("when updating the project returns 500", func() {
+				BeforeEach(func() {
+					gock.New(serverURL).
+						Get("/api/v1/applications/compute-lab-default-my-app").
+						Reply(200).
+						JSON(map[string]any{
+							"spec":   map[string]any{"project": "my-project"},
+							"status": map[string]any{},
+						})
+
+					gock.New(serverURL).
+						Get("/api/v1/projects/my-project").
+						Reply(200).
+						JSON(map[string]any{
+							"metadata": map[string]any{"name": "my-project", "resourceVersion": "1"},
+							"spec":     map[string]any{},
+						})
+
+					gock.New(serverURL).
+						Put("/api/v1/projects/my-project").
+						Reply(500).
+						BodyString("internal server error")
+				})
+
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
+
+				It("is retryable", func() {
+					deployerErr, ok := err.(*cicd.DeployerError)
+					Expect(ok).To(BeTrue())
+					Expect(deployerErr.Retryable).To(BeTrue())
+				})
+			})
+		})
+
+		Context("when the rollback target is empty", func() {
+			BeforeEach(func() {
+				req.Rollback.Spec.ToReleaseRef.Target = ""
+			})
+
+			It("returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("rollback target is empty"))
+			})
 		})
 	})
 
@@ -280,23 +707,23 @@ var _ = Describe("ArgoCD Deployer", func() {
 		It("renders the app name from the template", func() {
 			req := cicd.DeploymentRequest{
 				Rollback: &deployv1alpha1.Rollback{
-					ObjectMeta: metav1.ObjectMeta{Namespace: "elozev"},
+					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: deployv1alpha1.RollbackSpec{
-						ToReleaseRef: deployv1alpha1.ReleaseReference{Target: "elozev-playground"},
+						ToReleaseRef: deployv1alpha1.ReleaseReference{Target: "my-playground"},
 					},
 				},
 			}
 			name, err := deployer.resolveAppName(req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(name).To(Equal("compute-lab-elozev-elozev-playground"))
+			Expect(name).To(Equal("compute-lab-default-my-playground"))
 		})
 
 		It("uses argocd_app_name from options when provided", func() {
 			req := cicd.DeploymentRequest{
 				Rollback: &deployv1alpha1.Rollback{
-					ObjectMeta: metav1.ObjectMeta{Namespace: "elozev"},
+					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec: deployv1alpha1.RollbackSpec{
-						ToReleaseRef: deployv1alpha1.ReleaseReference{Target: "elozev-playground"},
+						ToReleaseRef: deployv1alpha1.ReleaseReference{Target: "my-playground"},
 					},
 				},
 				Options: map[string]any{AppNameKey: "custom-app-name"},

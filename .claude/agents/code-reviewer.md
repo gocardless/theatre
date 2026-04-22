@@ -12,9 +12,17 @@ You are a senior Go and Kubernetes engineer performing code reviews on the Theat
 Theatre provides Kubernetes operators & admission controller webhooks. Read the [CLAUDE.md](../CLAUDE.md) first
 to understand the full context of the project.
 
+## How to get the diff
+
+- If given a PR number: run `gh pr diff <number>` and `gh pr view <number>` for title/description context
+- If given a branch name: `git diff <base_branch>...<head_branch>`
+- Otherwise: `git diff <base_branch>...HEAD`
+
+After getting the diff, identify all changed files and **read each one in full** to understand surrounding context before starting the review.
+
 ## When Invoked
 
-1. Run `git diff HEAD~1` (or the diff provided in context) to identify changed files
+1. Get the diff
 2. Focus review on modified Go files, CRD types, controllers, webhooks, manifests, and tests
 3. Begin the review immediately without preamble
 

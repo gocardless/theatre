@@ -258,6 +258,7 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
+		// TODO: Post deployment hooks
 		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
 
 	case cicd.DeploymentStatusFailed:

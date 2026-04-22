@@ -125,7 +125,7 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
 	appName, err := d.resolveAppName(req)
 	if err != nil {
-		return err
+		return cicd.NewDeployerError(d.Name(), "PostDeploymentHooks", false, err)
 	}
 
 	addSyncWindow, ok := req.Options[AddSyncWindowKey].(bool)
@@ -142,7 +142,7 @@ func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentR
 
 		err = d.addSyncWindow(ctx, projectName)
 		if err != nil {
-			return err
+			return cicd.NewDeployerError(d.Name(), "PostDeploymentHooks", false, err)
 		}
 	}
 	return nil

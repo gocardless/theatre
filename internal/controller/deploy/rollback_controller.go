@@ -258,14 +258,14 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 
 	switch statusResp.Status {
 	case cicd.DeploymentStatusSucceeded:
-
+		message := statusResp.Message
 		err := r.triggerPostDeploymentHooks(ctx, rollback, toRelease)
 		if err != nil {
 			logger.Error(err, "failed to trigger post deployment hooks")
-			return ctrl.Result{}, err
+			message = fmt.Sprintf("%s (post-deployment hooks failed: %v)", message, err)
 		}
 
-		return r.markRollbackSucceeded(ctx, logger, rollback, statusResp.Message)
+		return r.markRollbackSucceeded(ctx, logger, rollback, message)
 
 	case cicd.DeploymentStatusFailed:
 		// Check if we should retry

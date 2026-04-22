@@ -98,24 +98,6 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
 
-	addSyncWindow, ok := req.Options[AddSyncWindowKey].(bool)
-	if !ok || !addSyncWindow {
-		d.logger.Info("Skipping sync window addition", "appName", appName)
-	} else {
-		d.logger.Info("Adding sync window", "appName", appName)
-		app, err := d.getApplication(ctx, appName)
-		if err != nil {
-			return nil, err
-		}
-
-		projectName := app.Spec.Project
-
-		err = d.addSyncWindow(ctx, projectName)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &cicd.DeploymentResult{
 		ID:      appName,
 		URL:     appURL,
@@ -141,7 +123,28 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 }
 
 func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
-	// TODO: add sync window here
+	appName, err := d.resolveAppName(req)
+	if err != nil {
+		return err
+	}
+
+	addSyncWindow, ok := req.Options[AddSyncWindowKey].(bool)
+	if !ok || !addSyncWindow {
+		d.logger.Info("Skipping sync window addition", "appName", appName)
+	} else {
+		d.logger.Info("Adding sync window", "appName", appName)
+		app, err := d.getApplication(ctx, appName)
+		if err != nil {
+			return err
+		}
+
+		projectName := app.Spec.Project
+
+		err = d.addSyncWindow(ctx, projectName)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

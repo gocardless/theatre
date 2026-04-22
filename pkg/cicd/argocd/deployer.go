@@ -140,6 +140,11 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 	}, nil
 }
 
+func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
+	// TODO: add sync window here
+	return nil
+}
+
 // resolveAppName determines the ArgoCD application name for the deployment.
 // If "argocd_app_name" is set in the deployment options, it is used directly.
 // Otherwise, the configured app name template is rendered with Namespace and Target.

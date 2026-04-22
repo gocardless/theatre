@@ -107,6 +107,7 @@ type projectSpec struct {
 	Destinations               []projectDestination `json:"destinations,omitempty"`
 	ClusterResourceWhitelist   []projectGroupKind   `json:"clusterResourceWhitelist,omitempty"`
 	NamespaceResourceBlacklist []projectGroupKind   `json:"namespaceResourceBlacklist,omitempty"`
+	Roles                      []projectRole        `json:"roles,omitempty"`
 	SyncWindows                []SyncWindow         `json:"syncWindows,omitempty"`
 }
 
@@ -119,11 +120,6 @@ type projectDestination struct {
 type projectGroupKind struct {
 	Group string `json:"group"`
 	Kind  string `json:"kind"`
-}
-
-// applicationProjectUpdate represents the patch content for updating a project.
-type applicationProjectUpdate struct {
-	Spec applicationProjectSpec `json:"spec"`
 }
 
 type applicationProjectSpec struct {
@@ -139,4 +135,11 @@ type SyncWindow struct {
 	Clusters     []string `json:"clusters"`
 	ManualSync   bool     `json:"manualSync"`
 	TimeZone     string   `json:"timeZone"`
+}
+
+type projectRole struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Policies    []string `json:"policies"`
+	Groups      []string `json:"groups"`
 }

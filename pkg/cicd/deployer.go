@@ -73,6 +73,10 @@ type Deployer interface {
 	// The deploymentID should be the ID returned from TriggerDeployment.
 	GetDeploymentStatus(ctx context.Context, deploymentID string) (*DeploymentResult, error)
 
+	// PostDeploymentHooks is called after a deployment is successful.
+	// E.g. adding a sync window on a ArgoCD application
+	PostDeploymentHooks(ctx context.Context, req DeploymentRequest, deploymentID string) error
+
 	// Name returns a human-readable name for this deployer (e.g., "github").
 	// Used for logging and metrics.
 	Name() string
@@ -131,6 +135,11 @@ func (n *NoopDeployer) GetDeploymentStatus(ctx context.Context, deploymentID str
 		Status:  DeploymentStatusSucceeded,
 		Message: "noop deployer always succeeds",
 	}, nil
+}
+
+func (n *NoopDeployer) PostDeploymentHooks(ctx context.Context, req DeploymentRequest, deploymentID string) error {
+	// The noop deployer doesn't implement any PostDeploymentHooks
+	return nil
 }
 
 func (n *NoopDeployer) Name() string {

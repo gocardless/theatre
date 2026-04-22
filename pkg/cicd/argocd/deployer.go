@@ -142,7 +142,7 @@ func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentR
 
 		err = d.addSyncWindow(ctx, projectName)
 		if err != nil {
-			return cicd.NewDeployerError(d.Name(), "PostDeploymentHooks", false, err)
+			return err
 		}
 	}
 	return nil

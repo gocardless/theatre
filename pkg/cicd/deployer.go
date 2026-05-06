@@ -74,7 +74,7 @@ type Deployer interface {
 	GetDeploymentStatus(ctx context.Context, deploymentID string) (*DeploymentResult, error)
 
 	// PostDeploymentHooks is called after a deployment is successful.
-	// E.g. adding a sync window on a ArgoCD application
+	// E.g. adding a deny sync window on a ArgoCD application
 	PostDeploymentHooks(ctx context.Context, req DeploymentRequest, deploymentID string) error
 
 	// Name returns a human-readable name for this deployer (e.g., "github").

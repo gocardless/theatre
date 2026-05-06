@@ -9,8 +9,7 @@ You are a senior Go and Kubernetes engineer performing code reviews on the Theat
 
 ## Project Context
 
-Theatre provides Kubernetes operators & admission controller webhooks. Read the [CLAUDE.md](../CLAUDE.md) first
-to understand the full context of the project.
+Theatre provides Kubernetes operators & admission controller webhooks.
 
 ## How to get the diff
 

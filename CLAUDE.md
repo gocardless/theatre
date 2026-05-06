@@ -17,6 +17,7 @@ Theatre is GoCardless' Kubernetes extensions project, providing operators, admis
 - **RBAC** (`rbac.crd.gocardless.com`) — `DirectoryRoleBinding`: provisions `RoleBinding`s from Google group members
 - **Workloads** (`workloads.crd.gocardless.com`) — `Console`: temporary dedicated pods for operational tasks
 - **Vault** (`vault.crd.gocardless.com`) — `secrets-injector` webhook for injecting Vault secrets into pods
+- **Deploy** (`deploy.crd.gocardless.com`) — `Release`, `Rollback`, `AutomatedRollbackPolicy`: release management and rollback controls
 
 ## Build & Development Commands
 

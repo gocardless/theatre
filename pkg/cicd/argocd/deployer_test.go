@@ -96,14 +96,14 @@ var _ = Describe("ArgoCD Deployer", func() {
 		)
 
 		BeforeEach(func() {
-			deploymentID = "my-app"
+			deploymentID = "my-app::2024-01-15T10:00:00Z"
 		})
 
 		JustBeforeEach(func() {
 			result, err = deployer.GetDeploymentStatus(ctx, deploymentID)
 		})
 
-		Context("with a running operation", func() {
+		Context("with a running operation matching the deployment ID", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
@@ -111,8 +111,9 @@ var _ = Describe("ArgoCD Deployer", func() {
 					JSON(map[string]any{
 						"status": map[string]any{
 							"operationState": map[string]any{
-								"phase":   "Running",
-								"message": "Syncing resources",
+								"phase":     "Running",
+								"message":   "Syncing resources",
+								"startedAt": "2024-01-15T10:00:00Z",
 							},
 						},
 					})
@@ -135,6 +136,31 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
+		Context("when the operation has been superseded by a newer sync", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":     "Running",
+								"startedAt": "2024-01-15T11:00:00Z",
+							},
+						},
+					})
+			})
+
+			It("returns unknown status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusUnknown))
+			})
+
+			It("returns a descriptive message", func() {
+				Expect(result.Message).To(ContainSubstring("superseded"))
+			})
+		})
+
 		Context("with a succeeded operation", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
@@ -143,8 +169,9 @@ var _ = Describe("ArgoCD Deployer", func() {
 					JSON(map[string]any{
 						"status": map[string]any{
 							"operationState": map[string]any{
-								"phase":   "Succeeded",
-								"message": "successfully synced",
+								"phase":     "Succeeded",
+								"message":   "successfully synced",
+								"startedAt": "2024-01-15T10:00:00Z",
 							},
 						},
 					})
@@ -164,8 +191,9 @@ var _ = Describe("ArgoCD Deployer", func() {
 					JSON(map[string]any{
 						"status": map[string]any{
 							"operationState": map[string]any{
-								"phase":   "Failed",
-								"message": "sync failed: resource not found",
+								"phase":     "Failed",
+								"message":   "sync failed: resource not found",
+								"startedAt": "2024-01-15T10:00:00Z",
 							},
 						},
 					})
@@ -189,8 +217,9 @@ var _ = Describe("ArgoCD Deployer", func() {
 					JSON(map[string]any{
 						"status": map[string]any{
 							"operationState": map[string]any{
-								"phase":   "Error",
-								"message": "ComparisonError",
+								"phase":     "Error",
+								"message":   "ComparisonError",
+								"startedAt": "2024-01-15T10:00:00Z",
 							},
 						},
 					})
@@ -215,6 +244,29 @@ var _ = Describe("ArgoCD Deployer", func() {
 			It("returns pending status", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+		})
+
+		Context("with a legacy plain app-name deployment ID", func() {
+			BeforeEach(func() {
+				deploymentID = "my-app"
+
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":     "Succeeded",
+								"startedAt": "2024-01-15T10:00:00Z",
+							},
+						},
+					})
+			})
+
+			It("skips the startedAt check and returns the operation status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
 			})
 		})
 
@@ -312,7 +364,7 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Reply(200).
 				JSON(map[string]any{})
 
-			err := deployer.syncApplication(ctx, "my-app", "abc123")
+			_, err := deployer.syncApplication(ctx, "my-app", "abc123")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gock.IsDone()).To(BeTrue())
 		})
@@ -323,7 +375,7 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Reply(400).
 				BodyString("bad request")
 
-			err := deployer.syncApplication(ctx, "my-app", "abc123")
+			_, err := deployer.syncApplication(ctx, "my-app", "abc123")
 			Expect(err).To(HaveOccurred())
 
 			deployerErr := err.(*cicd.DeployerError)
@@ -371,7 +423,14 @@ var _ = Describe("ArgoCD Deployer", func() {
 				gock.New(serverURL).
 					Post("/api/v1/applications/compute-lab-default-my-app/sync").
 					Reply(200).
-					JSON(map[string]any{})
+					JSON(map[string]any{
+						"status": map[string]any{
+							"operationState": map[string]any{
+								"phase":     "Running",
+								"startedAt": "2024-01-15T10:00:00Z",
+							},
+						},
+					})
 
 				result, err = deployer.TriggerDeployment(ctx, req)
 			})
@@ -380,8 +439,8 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("returns the application name as the deployment ID", func() {
-				Expect(result.ID).To(Equal("compute-lab-default-my-app"))
+			It("returns a composite deployment ID with the app name and startedAt timestamp", func() {
+				Expect(result.ID).To(Equal("compute-lab-default-my-app::2024-01-15T10:00:00Z"))
 			})
 
 			It("returns pending status", func() {
@@ -396,6 +455,27 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Expect(gock.IsDone()).To(BeTrue())
 			})
 
+			Context("when the sync response has no operationState", func() {
+				JustBeforeEach(func() {
+					gock.New(serverURL).
+						Patch("/api/v1/applications/compute-lab-default-my-app").
+						Reply(200).
+						JSON(map[string]any{})
+
+					gock.New(serverURL).
+						Post("/api/v1/applications/compute-lab-default-my-app/sync").
+						Reply(200).
+						JSON(map[string]any{})
+
+					result, err = deployer.TriggerDeployment(ctx, req)
+				})
+
+				It("falls back to using the plain app name as the deployment ID", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.ID).To(Equal("compute-lab-default-my-app"))
+				})
+			})
+
 			Context("with an app_revision option set", func() {
 				BeforeEach(func() {
 					req.Options[AppRevisionNameKey] = "app-commit-sha"
@@ -403,7 +483,7 @@ var _ = Describe("ArgoCD Deployer", func() {
 
 				It("succeeds", func() {
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.ID).To(Equal("compute-lab-default-my-app"))
+					Expect(result.ID).To(Equal("compute-lab-default-my-app::2024-01-15T10:00:00Z"))
 				})
 			})
 
@@ -421,14 +501,21 @@ var _ = Describe("ArgoCD Deployer", func() {
 					gock.New(serverURL).
 						Post("/api/v1/applications/custom-app-name/sync").
 						Reply(200).
-						JSON(map[string]any{})
+						JSON(map[string]any{
+							"status": map[string]any{
+								"operationState": map[string]any{
+									"phase":     "Running",
+									"startedAt": "2024-01-15T10:00:00Z",
+								},
+							},
+						})
 
 					result, err = deployer.TriggerDeployment(ctx, req)
 				})
 
-				It("uses the custom app name", func() {
+				It("uses the custom app name in the composite ID", func() {
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.ID).To(Equal("custom-app-name"))
+					Expect(result.ID).To(Equal("custom-app-name::2024-01-15T10:00:00Z"))
 				})
 			})
 		})

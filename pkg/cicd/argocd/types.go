@@ -47,8 +47,10 @@ type applicationHealthStatus struct {
 }
 
 type applicationOperationState struct {
-	Phase   string `json:"phase"`
-	Message string `json:"message"`
+	Phase     string                `json:"phase"`
+	Message   string                `json:"message"`
+	StartedAt string                `json:"startedAt"`
+	Operation *applicationOperation `json:"operation,omitempty"`
 }
 
 // applicationPatchRequest is the body sent to the ArgoCD PATCH endpoint.
@@ -71,6 +73,15 @@ type applicationPatchSpec struct {
 type applicationPatchSource struct {
 	TargetRevision string                 `json:"targetRevision"`
 	Plugin         applicationPatchPlugin `json:"plugin"`
+}
+
+type applicationOperation struct {
+	InitiatedBy applicationInitiatedBy `json:"initiatedBy"`
+}
+
+type applicationInitiatedBy struct {
+	Username  string `json:"username"`
+	Automated bool   `json:"automated"`
 }
 
 type applicationPatchPlugin struct {

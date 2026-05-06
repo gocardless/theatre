@@ -21,6 +21,8 @@ const (
 	AppRevisionNameKey    = "app_revision"
 	AppNameKey            = "argocd_app_name"
 	AddSyncWindowKey      = "argocd_add_sync_window"
+
+	deploymentIDSep = "::"
 )
 
 // appNameTemplateData is the data available to the app name template.
@@ -92,14 +94,20 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 		return nil, err
 	}
 
-	if err := d.syncApplication(ctx, appName, infraRevision); err != nil {
+	syncedApp, err := d.syncApplication(ctx, appName, infraRevision)
+	if err != nil {
 		return nil, err
 	}
 
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
 
+	deploymentID := appName
+	if syncedApp != nil && syncedApp.Status.OperationState != nil && syncedApp.Status.OperationState.StartedAt != "" {
+		deploymentID = encodeDeploymentID(appName, syncedApp.Status.OperationState.StartedAt)
+	}
+
 	return &cicd.DeploymentResult{
-		ID:      appName,
+		ID:      deploymentID,
 		URL:     appURL,
 		Status:  cicd.DeploymentStatusPending,
 		Message: "ArgoCD sync triggered",
@@ -107,9 +115,20 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 }
 
 func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string) (*cicd.DeploymentResult, error) {
-	app, err := d.getApplication(ctx, deploymentID)
+	appName, startedAt := decodeDeploymentID(deploymentID)
+
+	app, err := d.getApplication(ctx, appName)
 	if err != nil {
 		return nil, err
+	}
+
+	if startedAt != "" && app.Status.OperationState != nil && app.Status.OperationState.StartedAt != startedAt {
+		return &cicd.DeploymentResult{
+			ID:      deploymentID,
+			Status:  cicd.DeploymentStatusUnknown,
+			Message: "sync operation was superseded by a newer operation",
+			URL:     fmt.Sprintf("%s/applications/%s", d.serverURL, appName),
+		}, nil
 	}
 
 	status, message := d.mapSyncStatus(*app)
@@ -118,7 +137,7 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 		ID:      deploymentID,
 		Status:  status,
 		Message: message,
-		URL:     fmt.Sprintf("%s/applications/%s", d.serverURL, deploymentID),
+		URL:     fmt.Sprintf("%s/applications/%s", d.serverURL, appName),
 	}, nil
 }
 
@@ -256,19 +275,43 @@ func (d *Deployer) updateApplication(ctx context.Context, appName, infraRevision
 }
 
 // syncApplication triggers an ArgoCD sync operation for the application.
-func (d *Deployer) syncApplication(ctx context.Context, appName, revision string) error {
+// It returns the application state as reported by the sync response, which includes
+// the operationState.startedAt timestamp that can be used to correlate this specific sync.
+func (d *Deployer) syncApplication(ctx context.Context, appName, revision string) (*applicationResponse, error) {
 	path := fmt.Sprintf("/api/v1/applications/%s/sync", url.PathEscape(appName))
 	resp, err := d.doRequest(ctx, http.MethodPost, path, []byte{}, "application/json")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return d.handleErrorResponse(resp, "TriggerDeployment", "sync application")
+		return nil, d.handleErrorResponse(resp, "TriggerDeployment", "sync application")
 	}
 
-	return nil
+	var app applicationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
+		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false,
+			fmt.Errorf("failed to decode sync response: %w", err))
+	}
+
+	return &app, nil
+}
+
+// encodeDeploymentID encodes the ArgoCD app name and the sync operation's startedAt
+// timestamp into a single deployment ID string.
+func encodeDeploymentID(appName, startedAt string) string {
+	return appName + deploymentIDSep + startedAt
+}
+
+// decodeDeploymentID splits a deployment ID back into the app name and startedAt timestamp.
+// For legacy plain-app-name IDs (no separator), startedAt is returned as an empty string.
+func decodeDeploymentID(id string) (appName, startedAt string) {
+	parts := strings.SplitN(id, deploymentIDSep, 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return id, ""
 }
 
 // getApplication fetches the current state of an ArgoCD application.

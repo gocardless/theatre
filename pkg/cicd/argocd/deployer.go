@@ -22,6 +22,8 @@ const (
 	AppNameKey            = "argocd_app_name"
 	AddSyncWindowKey      = "argocd_add_sync_window"
 
+	// deploymentIDSep separates the ArgoCD app name from the pre-sync max history ID
+	// in a composite deployment ID, e.g. "my-app::42".
 	deploymentIDSep = "::"
 )
 
@@ -90,25 +92,26 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 		appRevision = ""
 	}
 
-	if err := d.updateApplication(ctx, appName, infraRevision, appRevision); err != nil {
-		return nil, err
-	}
-
-	syncedApp, err := d.syncApplication(ctx, appName)
+	// Snapshot the current max history ID before triggering the sync so we can
+	// identify the resulting history entry when polling for status.
+	app, err := d.getApplication(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
 
-	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
-
-	deploymentID := appName
-	d.logger.Info("synced", "appName", appName, "syncedApp", syncedApp)
-	if syncedApp != nil && syncedApp.Status.OperationState != nil && syncedApp.Status.OperationState.StartedAt != "" {
-		deploymentID = encodeDeploymentID(appName, syncedApp.Status.OperationState.StartedAt)
+	if err := d.updateApplication(ctx, appName, infraRevision, appRevision); err != nil {
+		return nil, err
 	}
 
+	if err := d.syncApplication(ctx, appName); err != nil {
+		return nil, err
+	}
+
+	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
+	syncOperationHistoryID := maxHistoryEntryID(app.Status.History) + 1
+
 	return &cicd.DeploymentResult{
-		ID:      deploymentID,
+		ID:      encodeDeploymentID(appName, syncOperationHistoryID),
 		URL:     appURL,
 		Status:  cicd.DeploymentStatusPending,
 		Message: "ArgoCD sync triggered",
@@ -116,19 +119,23 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 }
 
 func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string) (*cicd.DeploymentResult, error) {
-	appName, startedAt := decodeDeploymentID(deploymentID)
+	appName, syncOperationHistoryID, hasID := decodeDeploymentID(deploymentID)
 
 	app, err := d.getApplication(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
 
-	if startedAt != "" && app.Status.OperationState != nil && app.Status.OperationState.StartedAt != startedAt {
+	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
+
+	lastHistoryId := maxHistoryEntryID(app.Status.History)
+
+	if hasID && lastHistoryId > syncOperationHistoryID {
 		return &cicd.DeploymentResult{
 			ID:      deploymentID,
 			Status:  cicd.DeploymentStatusUnknown,
 			Message: "sync operation was superseded by a newer operation",
-			URL:     fmt.Sprintf("%s/applications/%s", d.serverURL, appName),
+			URL:     appURL,
 		}, nil
 	}
 
@@ -138,7 +145,7 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 		ID:      deploymentID,
 		Status:  status,
 		Message: message,
-		URL:     fmt.Sprintf("%s/applications/%s", d.serverURL, appName),
+		URL:     appURL,
 	}, nil
 }
 
@@ -276,43 +283,48 @@ func (d *Deployer) updateApplication(ctx context.Context, appName, infraRevision
 }
 
 // syncApplication triggers an ArgoCD sync operation for the application.
-// It returns the application state as reported by the sync response, which includes
-// the operationState.startedAt timestamp that can be used to correlate this specific sync.
-func (d *Deployer) syncApplication(ctx context.Context, appName string) (*applicationResponse, error) {
+func (d *Deployer) syncApplication(ctx context.Context, appName string) error {
 	path := fmt.Sprintf("/api/v1/applications/%s/sync", url.PathEscape(appName))
 	resp, err := d.doRequest(ctx, http.MethodPost, path, []byte{}, "application/json")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, d.handleErrorResponse(resp, "TriggerDeployment", "sync application")
+		return d.handleErrorResponse(resp, "TriggerDeployment", "sync application")
 	}
 
-	var app applicationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
-		return nil, cicd.NewDeployerError(d.Name(), "TriggerDeployment", false,
-			fmt.Errorf("failed to decode sync response: %w", err))
-	}
-
-	return &app, nil
+	return nil
 }
 
-// encodeDeploymentID encodes the ArgoCD app name and the sync operation's startedAt
-// timestamp into a single deployment ID string.
-func encodeDeploymentID(appName, startedAt string) string {
-	return appName + deploymentIDSep + startedAt
+// encodeDeploymentID encodes the ArgoCD app name and the pre-sync max history ID
+// into a composite deployment ID string, e.g. "my-app::42".
+func encodeDeploymentID(appName string, maxHistoryID int64) string {
+	return fmt.Sprintf("%s%s%d", appName, deploymentIDSep, maxHistoryID)
 }
 
-// decodeDeploymentID splits a deployment ID back into the app name and startedAt timestamp.
-// For legacy plain-app-name IDs (no separator), startedAt is returned as an empty string.
-func decodeDeploymentID(id string) (appName, startedAt string) {
+// decodeDeploymentID splits a composite deployment ID into the app name and pre-sync
+// max history ID. hasID is false for legacy plain-app-name IDs.
+func decodeDeploymentID(id string) (appName string, maxHistoryID int64, hasID bool) {
 	parts := strings.SplitN(id, deploymentIDSep, 2)
 	if len(parts) == 2 {
-		return parts[0], parts[1]
+		var parsed int64
+		if _, err := fmt.Sscanf(parts[1], "%d", &parsed); err == nil {
+			return parts[0], parsed, true
+		}
 	}
-	return id, ""
+	return id, 0, false
+}
+
+// maxHistoryEntryID returns the highest history entry ID from the given list,
+// or -1 if the list is empty.
+func maxHistoryEntryID(history []applicationHistoryEntry) int64 {
+	maxID := int64(-1)
+	for _, entry := range history {
+		maxID = max(maxID, entry.ID)
+	}
+	return maxID
 }
 
 // getApplication fetches the current state of an ArgoCD application.

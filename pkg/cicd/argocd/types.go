@@ -36,6 +36,7 @@ type applicationStatusResponse struct {
 	Sync           applicationSyncStatus      `json:"sync"`
 	Health         applicationHealthStatus    `json:"health"`
 	OperationState *applicationOperationState `json:"operationState,omitempty"`
+	History        []applicationHistoryEntry  `json:"history,omitempty"`
 }
 
 type applicationSyncStatus struct {
@@ -47,10 +48,16 @@ type applicationHealthStatus struct {
 }
 
 type applicationOperationState struct {
-	Phase     string                `json:"phase"`
-	Message   string                `json:"message"`
-	StartedAt string                `json:"startedAt"`
-	Operation *applicationOperation `json:"operation,omitempty"`
+	Phase   string `json:"phase"`
+	Message string `json:"message"`
+}
+
+type applicationHistoryEntry struct {
+	ID              int64                  `json:"id"`
+	Revision        string                 `json:"revision"`
+	DeployedAt      string                 `json:"deployedAt"`
+	DeployStartedAt string                 `json:"deployStartedAt"`
+	InitiatedBy     applicationInitiatedBy `json:"initiatedBy"`
 }
 
 // applicationPatchRequest is the body sent to the ArgoCD PATCH endpoint.

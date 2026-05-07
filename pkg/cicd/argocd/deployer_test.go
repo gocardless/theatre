@@ -43,48 +43,141 @@ var _ = Describe("ArgoCD Deployer", func() {
 		})
 	})
 
-	Describe("findRevision", func() {
-		var revisions []deployv1alpha1.Revision
+	Describe("encodeDeploymentID and decodeDeploymentID", func() {
+		It("round-trips with target revision only", func() {
+			id := encodeDeploymentID("my-app", "abc123", "")
+			appName, targetRev, appRev := decodeDeploymentID(id)
+			Expect(appName).To(Equal("my-app"))
+			Expect(targetRev).To(Equal("abc123"))
+			Expect(appRev).To(BeEmpty())
+		})
 
-		BeforeEach(func() {
-			revisions = []deployv1alpha1.Revision{
-				{Name: "app-revision", ID: "abc123", Source: "repo/app", Type: "git"},
-				{Name: "chart-revision", ID: "v1.2.3", Source: "repo/chart", Type: "helm_chart"},
+		It("round-trips with both revisions", func() {
+			id := encodeDeploymentID("my-app", "abc123", "def456")
+			appName, targetRev, appRev := decodeDeploymentID(id)
+			Expect(appName).To(Equal("my-app"))
+			Expect(targetRev).To(Equal("abc123"))
+			Expect(appRev).To(Equal("def456"))
+		})
+
+		It("handles plain app name (no separator)", func() {
+			appName, targetRev, appRev := decodeDeploymentID("my-app")
+			Expect(appName).To(Equal("my-app"))
+			Expect(targetRev).To(BeEmpty())
+			Expect(appRev).To(BeEmpty())
+		})
+	})
+
+	Describe("revisionMatches", func() {
+		It("returns true when synced to target revision without app revision", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "abc123",
+					},
+				},
 			}
+			Expect(revisionMatches(app, "abc123", "")).To(BeTrue())
 		})
 
-		It("finds a revision by name", func() {
-			rev, err := deployer.findRevision(revisions, "app-revision")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(rev.Name).To(Equal("app-revision"))
-			Expect(rev.ID).To(Equal("abc123"))
-		})
-
-		It("returns error when revision name not found", func() {
-			_, err := deployer.findRevision(revisions, "nonexistent")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no revision found with name"))
-		})
-
-		It("returns the single revision when no name specified", func() {
-			single := []deployv1alpha1.Revision{
-				{Name: "only-one", ID: "def456"},
+		It("returns false when not synced", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusOutOfSync,
+						Revision: "abc123",
+					},
+				},
 			}
-			rev, err := deployer.findRevision(single, "")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(rev.ID).To(Equal("def456"))
+			Expect(revisionMatches(app, "abc123", "")).To(BeFalse())
 		})
 
-		It("returns error when multiple revisions and no name specified", func() {
-			_, err := deployer.findRevision(revisions, "")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("multiple revisions found"))
+		It("returns false when revision doesn't match", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "different",
+					},
+				},
+			}
+			Expect(revisionMatches(app, "abc123", "")).To(BeFalse())
 		})
 
-		It("returns error when no revisions exist", func() {
-			_, err := deployer.findRevision([]deployv1alpha1.Revision{}, "")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no revisions found"))
+		It("returns true when both revisions match", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "abc123",
+						ComparedTo: &applicationSyncComparedTo{
+							Source: applicationSource{
+								Plugin: applicationSourcePlugin{
+									Env: []applicationPatchEnv{
+										{Name: "REVISION", Value: "def456"},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(revisionMatches(app, "abc123", "def456")).To(BeTrue())
+		})
+
+		It("returns false when app revision doesn't match", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "abc123",
+						ComparedTo: &applicationSyncComparedTo{
+							Source: applicationSource{
+								Plugin: applicationSourcePlugin{
+									Env: []applicationPatchEnv{
+										{Name: "REVISION", Value: "wrong"},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(revisionMatches(app, "abc123", "def456")).To(BeFalse())
+		})
+
+		It("returns false when app revision required but comparedTo is nil", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "abc123",
+					},
+				},
+			}
+			Expect(revisionMatches(app, "abc123", "def456")).To(BeFalse())
+		})
+
+		It("returns false when app revision required but no REVISION env var", func() {
+			app := &applicationResponse{
+				Status: applicationStatusResponse{
+					Sync: applicationSyncStatus{
+						Status:   SyncStatusSynced,
+						Revision: "abc123",
+						ComparedTo: &applicationSyncComparedTo{
+							Source: applicationSource{
+								Plugin: applicationSourcePlugin{
+									Env: []applicationPatchEnv{
+										{Name: "OTHER", Value: "def456"},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(revisionMatches(app, "abc123", "def456")).To(BeFalse())
 		})
 	})
 
@@ -96,42 +189,35 @@ var _ = Describe("ArgoCD Deployer", func() {
 		)
 
 		BeforeEach(func() {
-			// deploymentID encodes the expected history ID (pre-sync max + 1)
-			deploymentID = "my-app::306"
+			// Deployment ID encodes appName::targetRevision
+			deploymentID = "my-app::abc123"
 		})
 
 		JustBeforeEach(func() {
 			result, err = deployer.GetDeploymentStatus(ctx, deploymentID)
 		})
 
-		Context("when the sync operation is still running (lastHistoryId == syncOperationHistoryID)", func() {
+		Context("when the application is synced to the target revision", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
-							"operationState": map[string]any{
-								"phase":   "Running",
-								"message": "Syncing resources",
-							},
-							"history": []any{
-								map[string]any{"id": 306, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "abc123",
 							},
 						},
 					})
 			})
 
-			It("succeeds", func() {
+			It("returns succeeded status", func() {
 				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("returns in-progress status", func() {
-				Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
-			})
-
-			It("returns the operation message", func() {
-				Expect(result.Message).To(Equal("Syncing resources"))
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
 			})
 
 			It("returns the application URL", func() {
@@ -139,19 +225,30 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
-		Context("when the sync operation succeeded (operationState phase Succeeded)", func() {
+		Context("when the application is synced to the target revision with matching app revision", func() {
 			BeforeEach(func() {
+				deploymentID = "my-app::abc123::def456"
+
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
-							"operationState": map[string]any{
-								"phase":   "Succeeded",
-								"message": "successfully synced",
-							},
-							"history": []any{
-								map[string]any{"id": 306, "revision": "def", "initiatedBy": map[string]any{"username": "theatre"}},
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "abc123",
+								"comparedTo": map[string]any{
+									"source": map[string]any{
+										"plugin": map[string]any{
+											"env": []any{
+												map[string]any{"name": "REVISION", "value": "def456"},
+											},
+										},
+									},
+								},
 							},
 						},
 					})
@@ -163,48 +260,94 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
-		Context("when the operation has been superseded (lastHistoryId > syncOperationHistoryID)", func() {
+		Context("when the application is synced but app revision doesn't match", func() {
 			BeforeEach(func() {
+				deploymentID = "my-app::abc123::def456"
+
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
-							"operationState": map[string]any{
-								"phase":   "Succeeded",
-								"message": "successfully synced",
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "abc123",
+								"comparedTo": map[string]any{
+									"source": map[string]any{
+										"plugin": map[string]any{
+											"env": []any{
+												map[string]any{"name": "REVISION", "value": "wrong-rev"},
+											},
+										},
+									},
+								},
 							},
-							"history": []any{
-								map[string]any{"id": 306, "revision": "def", "initiatedBy": map[string]any{"username": "theatre"}},
-								map[string]any{"id": 307, "revision": "ghi", "initiatedBy": map[string]any{"username": "theatre"}},
+							"operationState": map[string]any{
+								"phase":   "Running",
+								"message": "syncing",
 							},
 						},
 					})
 			})
 
-			It("returns superseded status", func() {
+			It("returns in-progress status (revision mismatch, sync still running)", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(cicd.DeploymentStatusSuperseded))
-			})
-
-			It("returns a descriptive message", func() {
-				Expect(result.Message).To(ContainSubstring("superseded"))
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
 			})
 		})
 
-		Context("with a failed operation (no new history entry)", func() {
+		Context("when the sync operation is running", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "OutOfSync",
+								"revision": "old-rev",
+							},
+							"operationState": map[string]any{
+								"phase":   "Running",
+								"message": "Syncing resources",
+							},
+						},
+					})
+			})
+
+			It("returns in-progress status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusInProgress))
+			})
+
+			It("returns the operation message", func() {
+				Expect(result.Message).To(Equal("Syncing resources"))
+			})
+		})
+
+		Context("when the sync operation failed", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
+						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "OutOfSync",
+								"revision": "old-rev",
+							},
 							"operationState": map[string]any{
 								"phase":   "Failed",
 								"message": "sync failed: resource not found",
-							},
-							"history": []any{
-								map[string]any{"id": 306, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
 							},
 						},
 					})
@@ -220,19 +363,23 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
-		Context("with an errored operation (no new history entry)", func() {
+		Context("when the sync operation errored", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "OutOfSync",
+								"revision": "old-rev",
+							},
 							"operationState": map[string]any{
 								"phase":   "Error",
 								"message": "ComparisonError",
-							},
-							"history": []any{
-								map[string]any{"id": 306, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
 							},
 						},
 					})
@@ -244,15 +391,83 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
-		Context("with no active operation and no new history entry", func() {
+		Context("when the last operation succeeded but spec still targets our revision (waiting for sync cycle)", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
 						"status": map[string]any{
-							"history": []any{
-								map[string]any{"id": 306, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "old-rev",
+							},
+							"operationState": map[string]any{
+								"phase":   "Succeeded",
+								"message": "previous sync done",
+							},
+						},
+					})
+			})
+
+			It("returns pending status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+
+			It("indicates waiting for sync", func() {
+				Expect(result.Message).To(ContainSubstring("waiting for sync"))
+			})
+		})
+
+		Context("when the last operation succeeded and spec targets a different revision (superseded)", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "someone-elses-rev"},
+						},
+						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "someone-elses-rev",
+							},
+							"operationState": map[string]any{
+								"phase":   "Succeeded",
+								"message": "synced to different revision",
+							},
+						},
+					})
+			})
+
+			It("returns superseded status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSuperseded))
+			})
+
+			It("returns a descriptive message", func() {
+				Expect(result.Message).To(ContainSubstring("changed by another operation"))
+			})
+		})
+
+		Context("when there is no operation state and spec targets our revision", func() {
+			BeforeEach(func() {
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
+						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "OutOfSync",
+								"revision": "old-rev",
 							},
 						},
 					})
@@ -264,25 +479,27 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
-		Context("with a legacy plain app-name deployment ID", func() {
+		Context("when there is no operation state and spec targets a different revision", func() {
 			BeforeEach(func() {
-				deploymentID = "my-app"
-
 				gock.New(serverURL).
 					Get("/api/v1/applications/my-app").
 					Reply(200).
 					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "different-rev"},
+						},
 						"status": map[string]any{
-							"operationState": map[string]any{
-								"phase": "Succeeded",
+							"sync": map[string]any{
+								"status":   "OutOfSync",
+								"revision": "old-rev",
 							},
 						},
 					})
 			})
 
-			It("skips the history check and returns the operation status", func() {
+			It("returns superseded status", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(cicd.DeploymentStatusSucceeded))
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSuperseded))
 			})
 		})
 
@@ -431,17 +648,6 @@ var _ = Describe("ArgoCD Deployer", func() {
 		Context("with a valid request", func() {
 			JustBeforeEach(func() {
 				gock.New(serverURL).
-					Get("/api/v1/applications/compute-lab-default-my-app").
-					Reply(200).
-					JSON(map[string]any{
-						"status": map[string]any{
-							"history": []any{
-								map[string]any{"id": 42, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
-							},
-						},
-					})
-
-				gock.New(serverURL).
 					Patch("/api/v1/applications/compute-lab-default-my-app").
 					MatchHeader("Authorization", "Bearer test-token").
 					Reply(200).
@@ -459,8 +665,8 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("returns a composite deployment ID encoding the expected history ID (pre-sync max + 1)", func() {
-				Expect(result.ID).To(Equal("compute-lab-default-my-app::43"))
+			It("returns a deployment ID encoding the app name and target revision", func() {
+				Expect(result.ID).To(Equal("compute-lab-default-my-app::abc123"))
 			})
 
 			It("returns pending status", func() {
@@ -471,81 +677,58 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Expect(result.URL).To(Equal("https://argocd.example.com/applications/compute-lab-default-my-app"))
 			})
 
-			It("calls get, patch, and sync endpoints", func() {
+			It("calls patch and sync endpoints", func() {
 				Expect(gock.IsDone()).To(BeTrue())
 			})
+		})
 
-			Context("when the app has no history yet", func() {
-				JustBeforeEach(func() {
-					gock.New(serverURL).
-						Get("/api/v1/applications/compute-lab-default-my-app").
-						Reply(200).
-						JSON(map[string]any{"status": map[string]any{}})
-
-					gock.New(serverURL).
-						Patch("/api/v1/applications/compute-lab-default-my-app").
-						Reply(200).
-						JSON(map[string]any{})
-
-					gock.New(serverURL).
-						Post("/api/v1/applications/compute-lab-default-my-app/sync").
-						Reply(200).
-						JSON(map[string]any{})
-
-					result, err = deployer.TriggerDeployment(ctx, req)
-				})
-
-				It("encodes 0 as the expected history ID (empty history max -1 + 1)", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.ID).To(Equal("compute-lab-default-my-app::0"))
-				})
+		Context("with an app_revision option set", func() {
+			BeforeEach(func() {
+				req.Options[AppRevisionNameKey] = "app-commit-sha"
 			})
 
-			Context("with an app_revision option set", func() {
-				BeforeEach(func() {
-					req.Options[AppRevisionNameKey] = "app-commit-sha"
-				})
+			JustBeforeEach(func() {
+				gock.New(serverURL).
+					Patch("/api/v1/applications/compute-lab-default-my-app").
+					Reply(200).
+					JSON(map[string]any{})
 
-				It("succeeds", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.ID).To(Equal("compute-lab-default-my-app::43"))
-				})
+				gock.New(serverURL).
+					Post("/api/v1/applications/compute-lab-default-my-app/sync").
+					Reply(200).
+					JSON(map[string]any{})
+
+				result, err = deployer.TriggerDeployment(ctx, req)
 			})
 
-			Context("with argocd_app_name option overriding the template", func() {
-				BeforeEach(func() {
-					req.Options[AppNameKey] = "custom-app-name"
-				})
+			It("includes both revisions in the deployment ID", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.ID).To(Equal("compute-lab-default-my-app::abc123::app-commit-sha"))
+			})
+		})
 
-				JustBeforeEach(func() {
-					gock.New(serverURL).
-						Get("/api/v1/applications/custom-app-name").
-						Reply(200).
-						JSON(map[string]any{
-							"status": map[string]any{
-								"history": []any{
-									map[string]any{"id": 10, "revision": "abc", "initiatedBy": map[string]any{"username": "theatre"}},
-								},
-							},
-						})
+		Context("with argocd_app_name option overriding the template", func() {
+			BeforeEach(func() {
+				req.Options[AppNameKey] = "custom-app-name"
+			})
 
-					gock.New(serverURL).
-						Patch("/api/v1/applications/custom-app-name").
-						Reply(200).
-						JSON(map[string]any{})
+			JustBeforeEach(func() {
+				gock.New(serverURL).
+					Patch("/api/v1/applications/custom-app-name").
+					Reply(200).
+					JSON(map[string]any{})
 
-					gock.New(serverURL).
-						Post("/api/v1/applications/custom-app-name/sync").
-						Reply(200).
-						JSON(map[string]any{})
+				gock.New(serverURL).
+					Post("/api/v1/applications/custom-app-name/sync").
+					Reply(200).
+					JSON(map[string]any{})
 
-					result, err = deployer.TriggerDeployment(ctx, req)
-				})
+				result, err = deployer.TriggerDeployment(ctx, req)
+			})
 
-				It("uses the custom app name in the composite ID", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.ID).To(Equal("custom-app-name::11"))
-				})
+			It("uses the custom app name in the deployment ID", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.ID).To(Equal("custom-app-name::abc123"))
 			})
 		})
 
@@ -594,11 +777,6 @@ var _ = Describe("ArgoCD Deployer", func() {
 		Context("when the patch API call returns 500", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).
-					Get("/api/v1/applications/compute-lab-default-my-app").
-					Reply(200).
-					JSON(map[string]any{"status": map[string]any{}})
-
-				gock.New(serverURL).
 					Patch("/api/v1/applications/compute-lab-default-my-app").
 					Reply(500).
 					BodyString("internal server error")
@@ -621,11 +799,6 @@ var _ = Describe("ArgoCD Deployer", func() {
 
 		Context("when the sync API call returns 400", func() {
 			BeforeEach(func() {
-				gock.New(serverURL).
-					Get("/api/v1/applications/compute-lab-default-my-app").
-					Reply(200).
-					JSON(map[string]any{"status": map[string]any{}})
-
 				gock.New(serverURL).
 					Patch("/api/v1/applications/compute-lab-default-my-app").
 					Reply(200).

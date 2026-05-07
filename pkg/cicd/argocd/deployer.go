@@ -12,7 +12,6 @@ import (
 	"text/template"
 
 	"github.com/go-logr/logr"
-	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
 )
 
@@ -22,8 +21,8 @@ const (
 	AppNameKey            = "argocd_app_name"
 	AddSyncWindowKey      = "argocd_add_sync_window"
 
-	// deploymentIDSep separates the ArgoCD app name from the pre-sync max history ID
-	// in a composite deployment ID, e.g. "my-app::42".
+	// deploymentIDSep separates components in a composite deployment ID,
+	// e.g. "my-app::abc123" or "my-app::abc123::def456".
 	deploymentIDSep = "::"
 )
 
@@ -88,15 +87,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 
 	appRevision, ok := req.Options[AppRevisionNameKey].(string)
 	if !ok {
-		// App revision isn't required, so we can ignore if there is an error
 		appRevision = ""
-	}
-
-	// Snapshot the current max history ID before triggering the sync so we can
-	// identify the resulting history entry when polling for status.
-	app, err := d.getApplication(ctx, appName)
-	if err != nil {
-		return nil, err
 	}
 
 	if err := d.updateApplication(ctx, appName, infraRevision, appRevision); err != nil {
@@ -108,10 +99,9 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	}
 
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
-	syncOperationHistoryID := maxHistoryEntryID(app.Status.History) + 1
 
 	return &cicd.DeploymentResult{
-		ID:      encodeDeploymentID(appName, syncOperationHistoryID),
+		ID:      encodeDeploymentID(appName, infraRevision, appRevision),
 		URL:     appURL,
 		Status:  cicd.DeploymentStatusPending,
 		Message: "ArgoCD sync triggered",
@@ -119,7 +109,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 }
 
 func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string) (*cicd.DeploymentResult, error) {
-	appName, syncOperationHistoryID, hasID := decodeDeploymentID(deploymentID)
+	appName, targetRevision, appRevision := decodeDeploymentID(deploymentID)
 
 	app, err := d.getApplication(ctx, appName)
 	if err != nil {
@@ -128,25 +118,41 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
 
-	lastHistoryId := maxHistoryEntryID(app.Status.History)
-
-	if hasID && lastHistoryId > syncOperationHistoryID {
+	result := func(status cicd.DeploymentStatus, message string) (*cicd.DeploymentResult, error) {
 		return &cicd.DeploymentResult{
-			ID:      deploymentID,
-			Status:  cicd.DeploymentStatusSuperseded,
-			Message: "sync operation was superseded by a newer operation",
-			URL:     appURL,
+			ID: deploymentID, Status: status, Message: message, URL: appURL,
 		}, nil
 	}
 
-	status, message := d.mapSyncStatus(*app)
+	// Primary check: has the application reached the desired state?
+	if revisionMatches(app, targetRevision, appRevision) {
+		return result(cicd.DeploymentStatusSucceeded, "application synced to target revision")
+	}
 
-	return &cicd.DeploymentResult{
-		ID:      deploymentID,
-		Status:  status,
-		Message: message,
-		URL:     appURL,
-	}, nil
+	// Check operation state for in-progress or failure
+	if op := app.Status.OperationState; op != nil {
+		switch op.Phase {
+		case OperationPhaseRunning:
+			return result(cicd.DeploymentStatusInProgress, op.Message)
+		case OperationPhaseError, OperationPhaseFailed:
+			return result(cicd.DeploymentStatusFailed, op.Message)
+		case OperationPhaseSucceeded:
+			// Last operation succeeded but our revision isn't applied yet.
+			// If spec still targets our revision, a sync cycle will apply it.
+			if app.Spec.Source.TargetRevision == targetRevision {
+				return result(cicd.DeploymentStatusPending, "waiting for sync to apply target revision")
+			}
+			// Spec changed to a different revision — our rollback was superseded.
+			return result(cicd.DeploymentStatusSuperseded, "application target revision changed by another operation")
+		}
+	}
+
+	// No active operation state
+	if app.Spec.Source.TargetRevision == targetRevision {
+		return result(cicd.DeploymentStatusPending, "waiting for sync operation to start")
+	}
+
+	return result(cicd.DeploymentStatusSuperseded, "application target revision changed by another operation")
 }
 
 func (d *Deployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
@@ -193,6 +199,10 @@ func (d *Deployer) resolveAppName(req cicd.DeploymentRequest) (string, error) {
 		return "", fmt.Errorf("rollback target is empty")
 	}
 
+	if d.appNameTemplate == nil {
+		return "", fmt.Errorf("no app name template configured for argocd deployer")
+	}
+
 	var buf strings.Builder
 	if err := d.appNameTemplate.Execute(&buf, appNameTemplateData{
 		Namespace: namespace,
@@ -202,33 +212,6 @@ func (d *Deployer) resolveAppName(req cicd.DeploymentRequest) (string, error) {
 	}
 
 	return buf.String(), nil
-}
-
-// findRevision finds a revision by name in the release's revisions list.
-// If revisionName is empty and there is exactly one revision, it returns that one.
-func (d *Deployer) findRevision(revisions []deployv1alpha1.Revision, revisionName string) (*deployv1alpha1.Revision, error) {
-	if revisionName != "" {
-		for i := range revisions {
-			if revisions[i].Name == revisionName {
-				return &revisions[i], nil
-			}
-		}
-		return nil, fmt.Errorf("no revision found with name %q", revisionName)
-	}
-
-	if len(revisions) == 0 {
-		return nil, fmt.Errorf("no revisions found in target release")
-	}
-
-	if len(revisions) > 1 {
-		names := make([]string, len(revisions))
-		for i, r := range revisions {
-			names[i] = r.Name
-		}
-		return nil, fmt.Errorf("multiple revisions found (%v); specify %q or %q to select one", names, TargetRevisionNameKey, AppRevisionNameKey)
-	}
-
-	return &revisions[0], nil
 }
 
 // updateApplication patches the ArgoCD application to set the target revision
@@ -298,33 +281,51 @@ func (d *Deployer) syncApplication(ctx context.Context, appName string) error {
 	return nil
 }
 
-// encodeDeploymentID encodes the ArgoCD app name and the pre-sync max history ID
-// into a composite deployment ID string, e.g. "my-app::42".
-func encodeDeploymentID(appName string, maxHistoryID int64) string {
-	return fmt.Sprintf("%s%s%d", appName, deploymentIDSep, maxHistoryID)
+// encodeDeploymentID encodes the ArgoCD app name and target revisions into a
+// composite deployment ID, e.g. "my-app::abc123" or "my-app::abc123::def456".
+func encodeDeploymentID(appName, targetRevision, appRevision string) string {
+	if appRevision != "" {
+		return appName + deploymentIDSep + targetRevision + deploymentIDSep + appRevision
+	}
+	return appName + deploymentIDSep + targetRevision
 }
 
-// decodeDeploymentID splits a composite deployment ID into the app name and pre-sync
-// max history ID. hasID is false for legacy plain-app-name IDs.
-func decodeDeploymentID(id string) (appName string, maxHistoryID int64, hasID bool) {
-	parts := strings.SplitN(id, deploymentIDSep, 2)
-	if len(parts) == 2 {
-		var parsed int64
-		if _, err := fmt.Sscanf(parts[1], "%d", &parsed); err == nil {
-			return parts[0], parsed, true
+// decodeDeploymentID splits a composite deployment ID into the app name,
+// target revision, and optional app revision.
+func decodeDeploymentID(id string) (appName, targetRevision, appRevision string) {
+	parts := strings.SplitN(id, deploymentIDSep, 3)
+	switch len(parts) {
+	case 3:
+		return parts[0], parts[1], parts[2]
+	case 2:
+		return parts[0], parts[1], ""
+	default:
+		return id, "", ""
+	}
+}
+
+// revisionMatches checks whether the ArgoCD application is synced to the
+// expected target revision and (if set) the expected app revision in the
+// REVISION plugin environment variable.
+func revisionMatches(app *applicationResponse, targetRevision, appRevision string) bool {
+	if app.Status.Sync.Status != SyncStatusSynced {
+		return false
+	}
+	if app.Status.Sync.Revision != targetRevision {
+		return false
+	}
+	if appRevision == "" {
+		return true
+	}
+	if app.Status.Sync.ComparedTo == nil {
+		return false
+	}
+	for _, env := range app.Status.Sync.ComparedTo.Source.Plugin.Env {
+		if env.Name == "REVISION" && env.Value == appRevision {
+			return true
 		}
 	}
-	return id, 0, false
-}
-
-// maxHistoryEntryID returns the highest history entry ID from the given list,
-// or -1 if the list is empty.
-func maxHistoryEntryID(history []applicationHistoryEntry) int64 {
-	maxID := int64(-1)
-	for _, entry := range history {
-		maxID = max(maxID, entry.ID)
-	}
-	return maxID
+	return false
 }
 
 // getApplication fetches the current state of an ArgoCD application.

@@ -29,7 +29,22 @@ type applicationResponse struct {
 }
 
 type applicationSpecResponse struct {
-	Project string `json:"project"`
+	Project string            `json:"project"`
+	Source  applicationSource `json:"source"`
+}
+
+// applicationSource represents a source definition in an ArgoCD Application.
+// Used both in spec.source and status.sync.comparedTo.source.
+type applicationSource struct {
+	RepoURL        string                  `json:"repoURL,omitempty"`
+	Path           string                  `json:"path,omitempty"`
+	TargetRevision string                  `json:"targetRevision,omitempty"`
+	Plugin         applicationSourcePlugin `json:"plugin,omitempty"`
+}
+
+type applicationSourcePlugin struct {
+	Name string               `json:"name,omitempty"`
+	Env  []applicationPatchEnv `json:"env,omitempty"`
 }
 
 type applicationStatusResponse struct {
@@ -40,7 +55,13 @@ type applicationStatusResponse struct {
 }
 
 type applicationSyncStatus struct {
-	Status string `json:"status"`
+	Status     string                     `json:"status"`
+	Revision   string                     `json:"revision,omitempty"`
+	ComparedTo *applicationSyncComparedTo `json:"comparedTo,omitempty"`
+}
+
+type applicationSyncComparedTo struct {
+	Source applicationSource `json:"source"`
 }
 
 type applicationHealthStatus struct {
@@ -79,7 +100,7 @@ type applicationPatchSpec struct {
 
 type applicationPatchSource struct {
 	TargetRevision string                 `json:"targetRevision"`
-	Plugin         applicationPatchPlugin `json:"plugin"`
+	Plugin         applicationPatchPlugin `json:"plugin,omitempty"`
 }
 
 type applicationOperation struct {
@@ -138,10 +159,6 @@ type projectDestination struct {
 type projectGroupKind struct {
 	Group string `json:"group"`
 	Kind  string `json:"kind"`
-}
-
-type applicationProjectSpec struct {
-	SyncWindows []SyncWindow `json:"syncWindows"`
 }
 
 type SyncWindow struct {

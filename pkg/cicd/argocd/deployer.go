@@ -102,6 +102,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 	appURL := fmt.Sprintf("%s/applications/%s", d.serverURL, appName)
 
 	deploymentID := appName
+	d.logger.Info("synced", "appName", appName, "syncedApp", syncedApp)
 	if syncedApp != nil && syncedApp.Status.OperationState != nil && syncedApp.Status.OperationState.StartedAt != "" {
 		deploymentID = encodeDeploymentID(appName, syncedApp.Status.OperationState.StartedAt)
 	}

@@ -287,6 +287,9 @@ func (r *RollbackReconciler) pollDeploymentStatus(ctx context.Context, logger lo
 		}
 		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
 
+	case cicd.DeploymentStatusSuperseded:
+		return r.markRollbackSuperseded(ctx, logger, rollback, "Deployment superseded")
+
 	default:
 		logger.Info("unknown deployment status, continuing to poll", "status", statusResp.Status)
 		return ctrl.Result{RequeueAfter: RequeueAfter}, nil
@@ -333,6 +336,37 @@ func (r *RollbackReconciler) markRollbackSucceeded(ctx context.Context, logger l
 	recordRollbackTerminalMetrics(rollback, "succeeded", now)
 
 	logger.Info("rollback succeeded", "event", EventRollbackSucceeded)
+	return ctrl.Result{}, nil
+}
+
+func (r *RollbackReconciler) markRollbackSuperseded(ctx context.Context, logger logr.Logger, rollback *deployv1alpha1.Rollback, message string) (ctrl.Result, error) {
+	now := metav1.Now()
+	rollback.Status.CompletionTime = &now
+	rollback.Status.Message = message
+
+	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
+		Type:               deployv1alpha1.RollbackConditionInProgress,
+		Status:             metav1.ConditionFalse,
+		Reason:             "Superseded",
+		Message:            "Rollback deployment superseded",
+		LastTransitionTime: now,
+	})
+
+	meta.SetStatusCondition(&rollback.Status.Conditions, metav1.Condition{
+		Type:               deployv1alpha1.RollbackConditionSucceded,
+		Status:             metav1.ConditionFalse,
+		Reason:             "DeploymentSuperseded",
+		Message:            message,
+		LastTransitionTime: now,
+	})
+
+	if err := r.statusUpdate(ctx, logger, rollback); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	recordRollbackTerminalMetrics(rollback, "superseded", now)
+
+	logger.Info("rollback superseded", "event", EventRollbackSuperseded)
 	return ctrl.Result{}, nil
 }
 

@@ -43,6 +43,9 @@ const (
 
 	// DeploymentStatusUnknown indicates the status could not be determined
 	DeploymentStatusUnknown DeploymentStatus = "Unknown"
+
+	// DeploymentStatusSuperseded indicates the deployment was superseded by a newer deployment
+	DeploymentStatusSuperseded DeploymentStatus = "Superseded"
 )
 
 // DeploymentResult represents the response from a CICD system, used both

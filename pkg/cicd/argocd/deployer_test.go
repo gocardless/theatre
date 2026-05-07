@@ -182,9 +182,9 @@ var _ = Describe("ArgoCD Deployer", func() {
 					})
 			})
 
-			It("returns unknown status", func() {
+			It("returns superseded status", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(cicd.DeploymentStatusUnknown))
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusSuperseded))
 			})
 
 			It("returns a descriptive message", func() {

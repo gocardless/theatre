@@ -133,7 +133,7 @@ func (d *Deployer) GetDeploymentStatus(ctx context.Context, deploymentID string)
 	if hasID && lastHistoryId > syncOperationHistoryID {
 		return &cicd.DeploymentResult{
 			ID:      deploymentID,
-			Status:  cicd.DeploymentStatusUnknown,
+			Status:  cicd.DeploymentStatusSuperseded,
 			Message: "sync operation was superseded by a newer operation",
 			URL:     appURL,
 		}, nil

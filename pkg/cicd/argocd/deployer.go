@@ -94,7 +94,7 @@ func (d *Deployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentReq
 		return nil, err
 	}
 
-	syncedApp, err := d.syncApplication(ctx, appName, infraRevision)
+	syncedApp, err := d.syncApplication(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (d *Deployer) updateApplication(ctx context.Context, appName, infraRevision
 // syncApplication triggers an ArgoCD sync operation for the application.
 // It returns the application state as reported by the sync response, which includes
 // the operationState.startedAt timestamp that can be used to correlate this specific sync.
-func (d *Deployer) syncApplication(ctx context.Context, appName, revision string) (*applicationResponse, error) {
+func (d *Deployer) syncApplication(ctx context.Context, appName string) (*applicationResponse, error) {
 	path := fmt.Sprintf("/api/v1/applications/%s/sync", url.PathEscape(appName))
 	resp, err := d.doRequest(ctx, http.MethodPost, path, []byte{}, "application/json")
 	if err != nil {

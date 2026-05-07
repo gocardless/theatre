@@ -364,7 +364,7 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Reply(200).
 				JSON(map[string]any{})
 
-			_, err := deployer.syncApplication(ctx, "my-app", "abc123")
+			_, err := deployer.syncApplication(ctx, "my-app")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gock.IsDone()).To(BeTrue())
 		})
@@ -375,7 +375,7 @@ var _ = Describe("ArgoCD Deployer", func() {
 				Reply(400).
 				BodyString("bad request")
 
-			_, err := deployer.syncApplication(ctx, "my-app", "abc123")
+			_, err := deployer.syncApplication(ctx, "my-app")
 			Expect(err).To(HaveOccurred())
 
 			deployerErr := err.(*cicd.DeployerError)

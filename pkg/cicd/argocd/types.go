@@ -43,7 +43,7 @@ type applicationSource struct {
 }
 
 type applicationSourcePlugin struct {
-	Name string               `json:"name,omitempty"`
+	Name string                `json:"name,omitempty"`
 	Env  []applicationPatchEnv `json:"env,omitempty"`
 }
 
@@ -99,8 +99,8 @@ type applicationPatchSpec struct {
 }
 
 type applicationPatchSource struct {
-	TargetRevision string                 `json:"targetRevision"`
-	Plugin         applicationPatchPlugin `json:"plugin,omitempty"`
+	TargetRevision string                  `json:"targetRevision"`
+	Plugin         *applicationPatchPlugin `json:"plugin,omitempty"`
 }
 
 type applicationOperation struct {

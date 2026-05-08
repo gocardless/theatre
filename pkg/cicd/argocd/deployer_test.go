@@ -423,6 +423,49 @@ var _ = Describe("ArgoCD Deployer", func() {
 			})
 		})
 
+		Context("when the last operation succeeded, targetRevision matches spec, but appRevision not yet applied", func() {
+			BeforeEach(func() {
+				deploymentID = "my-app::abc123::def456"
+
+				gock.New(serverURL).
+					Get("/api/v1/applications/my-app").
+					Reply(200).
+					JSON(map[string]any{
+						"spec": map[string]any{
+							"source": map[string]any{"targetRevision": "abc123"},
+						},
+						"status": map[string]any{
+							"sync": map[string]any{
+								"status":   "Synced",
+								"revision": "abc123",
+								"comparedTo": map[string]any{
+									"source": map[string]any{
+										"plugin": map[string]any{
+											"env": []any{
+												map[string]any{"name": "REVISION", "value": "old-app-rev"},
+											},
+										},
+									},
+								},
+							},
+							"operationState": map[string]any{
+								"phase":   "Succeeded",
+								"message": "successfully synced",
+							},
+						},
+					})
+			})
+
+			It("returns pending status", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(cicd.DeploymentStatusPending))
+			})
+
+			It("indicates waiting for sync", func() {
+				Expect(result.Message).To(ContainSubstring("waiting for sync"))
+			})
+		})
+
 		Context("when the last operation succeeded and spec targets a different revision (superseded)", func() {
 			BeforeEach(func() {
 				gock.New(serverURL).

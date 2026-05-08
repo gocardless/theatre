@@ -9,7 +9,7 @@ This package implements the `cicd.Deployer` interface using ArgoCD's REST API, e
    - `spec.source.targetRevision` to the value of `target_revision`
    - `spec.source.plugin.env[REVISION]` to the value of `app_revision` (if provided)
 3. **Sync application** — triggers a sync via `POST /api/v1/applications/{name}/sync`.
-4. **Poll status** — `GetDeploymentStatus` fetches the application via `GET /api/v1/applications/{name}` and maps `status.operationState.phase` to a `cicd.DeploymentStatus`.
+4. **Poll status** — `GetDeploymentStatus` fetches the application via `GET /api/v1/applications/{name}` and checks whether the application has synced to the target revision; falls back to `status.operationState.phase` to determine in-progress, failed, pending, or superseded states.
 
 ## Configuration
 
@@ -28,24 +28,28 @@ These are set per Rollback resource under `deploymentOptions`.
 
 ### Required
 
-| Key               | Description                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_revision` | The infrastructure revision to deploy. Can be a literal revision string or a JSONPath expression into the Release (e.g. `{.config.revisions[?(@.name=="infrastructure")].id}`). |
+| Key               | Description                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target_revision` | The infrastructure revision to deploy. A JSONPath expression into the Release (e.g. `{.config.revisions[?(@.name=="infrastructure")].id}`). |
 
 ### Optional
 
-| Key               | Description                                                                                                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `app_revision`    | The application revision. Same format as `target_revision` (e.g. `{.config.revisions[?(@.name=="application")].id}`). Set as the `REVISION` plugin env variable on the ArgoCD application. |
-| `argocd_app_name` | Override the application name derived from `--argocd-app-name-template`. Useful when a specific application does not follow the standard naming convention.                                |
+| Key                      | Description                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app_revision`           | The application revision. Same format as `target_revision` (e.g. `{.config.revisions[?(@.name=="application")].id}`). Set as the `REVISION` plugin env variable on the ArgoCD application. |
+| `argocd_app_name`        | Override the application name derived from `--argocd-app-name-template`. Useful when a specific application does not follow the standard naming convention.                                |
+| `argocd_add_sync_window` | Add a sync window to the project to prevent automatic syncs after the deployment.                                                                                                          |
 
 ## Status Mapping
 
-The deployer maps ArgoCD `status.operationState.phase` to `cicd.DeploymentStatus` as follows:
+`GetDeploymentStatus` first checks whether the application has reached the desired revision, then falls back to `status.operationState.phase`:
 
-| ArgoCD Phase            | Deployment Status |
-| ----------------------- | ----------------- |
-| `Running`               | `InProgress`      |
-| `Succeeded`             | `Succeeded`       |
-| `Error` / `Failed`      | `Failed`          |
-| _(no active operation)_ | `Pending`         |
+| Condition                                                                             | Deployment Status |
+| ------------------------------------------------------------------------------------- | ----------------- |
+| Application is already synced to `targetRevision`                                     | `Succeeded`       |
+| `operationState.phase` is `Running`                                                   | `InProgress`      |
+| `operationState.phase` is `Error` or `Failed`                                         | `Failed`          |
+| `operationState.phase` is `Succeeded` and `spec.source.targetRevision` matches        | `Pending`         |
+| `operationState.phase` is `Succeeded` and `spec.source.targetRevision` does not match | `Superseded`      |
+| No active operation and `spec.source.targetRevision` matches                          | `Pending`         |
+| No active operation and `spec.source.targetRevision` does not match                   | `Superseded`      |

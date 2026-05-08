@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 	"github.com/google/go-github/v34/github"
@@ -22,7 +23,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -76,7 +76,7 @@ func main() {
 	defer cancel()
 
 	// Initialize the deployer based on the configured backend
-	deployer, err := createDeployer(ctx, *cicdBackend)
+	deployer, err := createDeployer(ctx, *cicdBackend, logger)
 	if err != nil {
 		app.Fatalf("failed to create deployer: %v", err)
 	}
@@ -125,7 +125,7 @@ func main() {
 	}
 }
 
-func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) {
+func createDeployer(ctx context.Context, backend string, logger logr.Logger) (cicd.Deployer, error) {
 	switch backend {
 	case "noop":
 		return &cicd.NoopDeployer{}, nil
@@ -136,7 +136,6 @@ func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) 
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken})
 		httpClient := oauth2.NewClient(ctx, ts)
 		ghClient := github.NewClient(httpClient)
-		logger := zap.New(zap.UseDevMode(true))
 		return ghdeployer.NewDeployer(ghClient, logger), nil
 	case "argocd":
 		if *argocdServerURL == "" {
@@ -146,8 +145,8 @@ func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) 
 			return nil, fmt.Errorf("argocd-auth-token is required when using the argocd deployer backend")
 		}
 
-		logger := zap.New(zap.UseDevMode(true))
-		return argocddeployer.NewDeployer(http.DefaultClient, *argocdServerURL, *argocdAuthToken, *argocdAppNameTemplate, logger)
+		httpClient := http.DefaultClient
+		return argocddeployer.NewDeployer(httpClient, *argocdServerURL, *argocdAuthToken, *argocdAppNameTemplate, logger)
 	default:
 		return nil, fmt.Errorf("unknown deployer backend: %s", backend)
 	}

@@ -226,7 +226,7 @@ func (d *Deployer) updateApplication(ctx context.Context, appName, infraRevision
 	}
 
 	if appRevision != "" {
-		patch.Spec.Source.Plugin = applicationPatchPlugin{
+		patch.Spec.Source.Plugin = &applicationPatchPlugin{
 			Env: []applicationPatchEnv{
 				{Name: "REVISION", Value: appRevision},
 			},
@@ -338,13 +338,12 @@ func (d *Deployer) getApplication(ctx context.Context, appName string) (*applica
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, d.handleErrorResponse(resp, "GetDeploymentStatus", "get application")
+		return nil, d.handleErrorResponse(resp, "GetApplication", "get application")
 	}
 
 	var app applicationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
-		return nil, cicd.NewDeployerError(d.Name(), "GetDeploymentStatus", false,
-			fmt.Errorf("failed to decode application response: %w", err))
+		return nil, err
 	}
 
 	return &app, nil
@@ -396,25 +395,6 @@ func (d *Deployer) addSyncWindow(ctx context.Context, project string) error {
 	}
 
 	return nil
-}
-
-// mapSyncStatus maps ArgoCD application status to a cicd.DeploymentStatus.
-func (d *Deployer) mapSyncStatus(app applicationResponse) (cicd.DeploymentStatus, string) {
-	// Check operation state first — it reflects the active sync operation
-	if op := app.Status.OperationState; op != nil && op.Phase != "" {
-		switch op.Phase {
-		case OperationPhaseRunning:
-			return cicd.DeploymentStatusInProgress, op.Message
-		case OperationPhaseError, OperationPhaseFailed:
-			return cicd.DeploymentStatusFailed, op.Message
-		case OperationPhaseSucceeded:
-			return cicd.DeploymentStatusSucceeded, op.Message
-		default:
-			return cicd.DeploymentStatusPending, fmt.Sprintf("Operation phase: %s", op.Phase)
-		}
-	}
-
-	return cicd.DeploymentStatusPending, "No active operation"
 }
 
 // doRequest performs an HTTP request to the ArgoCD API with authentication.

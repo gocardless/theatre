@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/go-logr/logr"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/cmd"
 	"github.com/google/go-github/v34/github"
@@ -14,13 +16,13 @@ import (
 	rollbackcontroller "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	rollbackwebhook "github.com/gocardless/theatre/v5/internal/webhook/deploy/v1alpha1/rollback"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
+	argocddeployer "github.com/gocardless/theatre/v5/pkg/cicd/argocd"
 	ghdeployer "github.com/gocardless/theatre/v5/pkg/cicd/github"
 	"github.com/gocardless/theatre/v5/pkg/signals"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -33,13 +35,22 @@ var (
 				Default("10").
 				Envar("ROLLBACK_MANAGER_HISTORY_LIMIT").
 				Int()
-	cicdBackend = app.Flag("cicd-backend", "CICD backend to use (noop, github)").
+	cicdBackend = app.Flag("cicd-backend", "CICD backend to use (noop, github, argocd)").
 			Default("noop").
 			Envar("ROLLBACK_MANAGER_CICD_BACKEND").
-			Enum("noop", "github")
+			Enum("noop", "github", "argocd")
 	githubToken = app.Flag("github-token", "GitHub API token for the github cicd backend").
 			Envar("ROLLBACK_MANAGER_GITHUB_TOKEN").
 			String()
+	argocdServerURL = app.Flag("argocd-server-url", "ArgoCD server URL for the argocd cicd backend").
+			Envar("ROLLBACK_MANAGER_ARGOCD_SERVER_URL").
+			String()
+	argocdAuthToken = app.Flag("argocd-auth-token", "ArgoCD auth token for the argocd cicd backend").
+			Envar("ROLLBACK_MANAGER_ARGOCD_AUTH_TOKEN").
+			String()
+	argocdAppNameTemplate = app.Flag("argocd-app-name-template", "Go template for deriving ArgoCD application name. Available fields: {{.Namespace}}, {{.Target}}").
+				Envar("ROLLBACK_MANAGER_ARGOCD_APP_NAME_TEMPLATE").
+				String()
 	commonOptions = cmd.NewCommonOptions(app).WithMetrics(app)
 
 	// deployer holds the configured CICD deployer implementation.
@@ -65,7 +76,7 @@ func main() {
 	defer cancel()
 
 	// Initialize the deployer based on the configured backend
-	deployer, err := createDeployer(ctx, *cicdBackend)
+	deployer, err := createDeployer(ctx, *cicdBackend, logger)
 	if err != nil {
 		app.Fatalf("failed to create deployer: %v", err)
 	}
@@ -114,7 +125,7 @@ func main() {
 	}
 }
 
-func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) {
+func createDeployer(ctx context.Context, backend string, logger logr.Logger) (cicd.Deployer, error) {
 	switch backend {
 	case "noop":
 		return &cicd.NoopDeployer{}, nil
@@ -125,8 +136,17 @@ func createDeployer(ctx context.Context, backend string) (cicd.Deployer, error) 
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken})
 		httpClient := oauth2.NewClient(ctx, ts)
 		ghClient := github.NewClient(httpClient)
-		logger := zap.New(zap.UseDevMode(true))
 		return ghdeployer.NewDeployer(ghClient, logger), nil
+	case "argocd":
+		if *argocdServerURL == "" {
+			return nil, fmt.Errorf("argocd-server-url is required when using the argocd deployer backend")
+		}
+		if *argocdAuthToken == "" {
+			return nil, fmt.Errorf("argocd-auth-token is required when using the argocd deployer backend")
+		}
+
+		httpClient := http.DefaultClient
+		return argocddeployer.NewDeployer(httpClient, *argocdServerURL, *argocdAuthToken, *argocdAppNameTemplate, logger)
 	default:
 		return nil, fmt.Errorf("unknown deployer backend: %s", backend)
 	}

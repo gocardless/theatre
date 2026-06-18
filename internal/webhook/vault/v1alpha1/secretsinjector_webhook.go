@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -22,6 +24,8 @@ import (
 
 const SecretsInjectorFQDN = "secrets-injector.vault.crd.gocardless.com"
 const EnvconsulInjectorFQDN = "envconsul-injector.vault.crd.gocardless.com"
+const SecretsInstallVolume = "theatre-secrets-install"
+const SafeToEvictLocalVolumesAnnotation = "cluster-autoscaler.kubernetes.io/safe-to-evict-local-volumes"
 
 var FQDNArray = []string{SecretsInjectorFQDN, EnvconsulInjectorFQDN}
 
@@ -201,12 +205,30 @@ func (i podInjector) Inject(pod corev1.Pod) *corev1.Pod {
 	mutatedPod := pod.DeepCopy()
 	expirySeconds := int64(i.ServiceAccountTokenExpiry / time.Second)
 
+	if metav1.HasAnnotation(mutatedPod.ObjectMeta, SafeToEvictLocalVolumesAnnotation) {
+		existing := mutatedPod.GetAnnotations()[SafeToEvictLocalVolumesAnnotation]
+
+		if !slices.Contains(strings.Split(existing, ","), SecretsInstallVolume) {
+			metav1.SetMetaDataAnnotation(
+				&mutatedPod.ObjectMeta,
+				SafeToEvictLocalVolumesAnnotation,
+				existing+","+SecretsInstallVolume,
+			)
+		}
+	} else {
+		metav1.SetMetaDataAnnotation(
+			&mutatedPod.ObjectMeta,
+			SafeToEvictLocalVolumesAnnotation,
+			SecretsInstallVolume,
+		)
+	}
+
 	mutatedPod.Spec.InitContainers = append(mutatedPod.Spec.InitContainers, i.buildInitContainer())
 	mutatedPod.Spec.Volumes = append(
 		mutatedPod.Spec.Volumes,
 		// Installation directory for theatre binaries, used as a scratch installation path
 		corev1.Volume{
-			Name: "theatre-secrets-install",
+			Name: SecretsInstallVolume,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -299,7 +321,7 @@ func (i podInjector) buildInitContainer() corev1.Container {
 		Command:         []string{"theatre-secrets", "install", "--path", i.InstallPath},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "theatre-secrets-install",
+				Name:      SecretsInstallVolume,
 				MountPath: i.InstallPath,
 				ReadOnly:  false,
 			},
@@ -351,7 +373,7 @@ func (i podInjector) configureContainer(reference corev1.Container, containerCon
 		// Mount the binaries from our installation, ensuring we can run the command in this
 		// container
 		corev1.VolumeMount{
-			Name:      "theatre-secrets-install",
+			Name:      SecretsInstallVolume,
 			MountPath: i.InstallPath,
 			ReadOnly:  true,
 		},

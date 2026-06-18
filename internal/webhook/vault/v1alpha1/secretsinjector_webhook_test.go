@@ -170,7 +170,7 @@ var _ = Describe("PodInjector", func() {
 							"Name": Equal("app"),
 							"VolumeMounts": ContainElement(
 								corev1.VolumeMount{
-									Name:      "theatre-secrets-install",
+									Name:      SecretsInstallVolume,
 									MountPath: "/var/run/theatre-secrets",
 									ReadOnly:  true,
 								},
@@ -179,6 +179,39 @@ var _ = Describe("PodInjector", func() {
 					),
 				),
 			)
+		})
+
+		It("Sets safe-to-evict-local-volumes annotation for theatre-secrets-install", func() {
+			Expect(pod.Annotations).To(HaveKeyWithValue(
+				SafeToEvictLocalVolumesAnnotation,
+				SecretsInstallVolume,
+			))
+		})
+
+		Context("With existing safe-to-evict-local-volumes annotation", func() {
+			BeforeEach(func() {
+				fixture.Annotations[SafeToEvictLocalVolumesAnnotation] = "existing-volume"
+			})
+
+			It("Appends theatre-secrets-install to existing annotation", func() {
+				Expect(pod.Annotations).To(HaveKeyWithValue(
+					SafeToEvictLocalVolumesAnnotation,
+					"existing-volume,theatre-secrets-install",
+				))
+			})
+		})
+
+		Context("With theatre-secrets-install already in safe-to-evict-local-volumes annotation", func() {
+			BeforeEach(func() {
+				fixture.Annotations[SafeToEvictLocalVolumesAnnotation] = "theatre-secrets-install,other-volume"
+			})
+
+			It("Does not duplicate theatre-secrets-install in annotation", func() {
+				Expect(pod.Annotations).To(HaveKeyWithValue(
+					SafeToEvictLocalVolumesAnnotation,
+					"theatre-secrets-install,other-volume",
+				))
+			})
 		})
 
 		It("Adds service account volumeMount", func() {

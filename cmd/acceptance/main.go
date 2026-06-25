@@ -24,6 +24,7 @@ import (
 
 	"github.com/gocardless/theatre/v5/pkg/signals"
 
+	rollbackManagerAcceptance "github.com/gocardless/theatre/v5/cmd/rollback-manager/acceptance"
 	vaultManagerAcceptance "github.com/gocardless/theatre/v5/cmd/vault-manager/acceptance"
 	workloadsManagerAcceptance "github.com/gocardless/theatre/v5/cmd/workloads-manager/acceptance"
 )
@@ -54,6 +55,7 @@ var (
 var Runners = []runner{
 	&vaultManagerAcceptance.Runner{},
 	&workloadsManagerAcceptance.Runner{},
+	&rollbackManagerAcceptance.Runner{},
 }
 
 type runner interface {

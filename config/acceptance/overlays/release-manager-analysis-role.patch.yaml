@@ -1,0 +1,24 @@
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+      - argoproj.io
+    resources:
+      - analysisruns
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+      - argoproj.io
+    resources:
+      - analysistemplates
+      - clusteranalysistemplates
+    verbs:
+      - get
+      - list
+      - watch

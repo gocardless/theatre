@@ -19,7 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const namespace = "theatre-deploy"
+const (
+	namespace           = "theatre-deploy"
+	acceptanceTestLabel = "theatre-acceptance-test"
+)
 
 var (
 	scheme      = runtime.NewScheme()
@@ -44,34 +47,42 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 	Describe("Automated Rollback", func() {
-		var kubeClient client.Client
+		var (
+			kubeClient         client.Client
+			targetName         string
+			previousTargetName string
+		)
 
 		BeforeEach(func() {
 			kubeClient = newClient(config)
 			waitForRollbackWebhook(kubeClient, logger)
 		})
 
+		AfterEach(func() {
+			cleanupRollbackTestResources(kubeClient, targetName)
+		})
+
 		Specify("Happy Path", func() {
 			By("Create a automated rollback policy")
-			targetName := generateTargetName()
+			targetName = generateTargetName()
 			createPolicy(kubeClient, targetName, true)
 
 			By("Create rollback analysis")
-			previousTargetName := generateName("previous-target")
-			createAnalysisTemplate(kubeClient, previousTargetName, "health", "true")
-			createAnalysisTemplate(kubeClient, targetName, "rollback", "true")
+			previousTargetName = generateName("previous-target")
+			createAnalysisTemplate(kubeClient, targetName, previousTargetName, "health", "true")
+			createAnalysisTemplate(kubeClient, targetName, targetName, "rollback", "true")
 
 			By("Create releases")
-			previousRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"acceptance-target": previousTargetName})
-			previousAnalysisRun := expectAnalysisRunCreated(kubeClient, previousTargetName, "health", "true")
+			previousRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": previousTargetName})
+			previousAnalysisRun := expectAnalysisRunCreated(kubeClient, previousTargetName, "health", "true", targetName)
 			completeAnalysisRun(kubeClient, previousAnalysisRun.Name, analysisv1alpha1.AnalysisPhaseSuccessful)
 			expectReleaseHealthy(kubeClient, previousRelease.Name)
-			activeRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"acceptance-target": targetName})
+			activeRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": targetName})
 			deactivateRelease(kubeClient, previousRelease.Name)
 			setPreviousRelease(kubeClient, activeRelease.Name, previousRelease.Name)
 
 			By("Fail release rollback analysis")
-			analysisRun := expectAnalysisRunCreated(kubeClient, targetName, "rollback", "true")
+			analysisRun := expectAnalysisRunCreated(kubeClient, targetName, "rollback", "true", targetName)
 			completeAnalysisRun(kubeClient, analysisRun.Name, analysisv1alpha1.AnalysisPhaseFailed)
 			expectRollbackRequired(kubeClient, activeRelease.Name)
 
@@ -118,6 +129,35 @@ func waitForRollbackWebhook(kubeClient client.Client, logger kitlog.Logger) {
 	}).Should(Equal(true))
 }
 
+func cleanupRollbackTestResources(kubeClient client.Client, targetName string) {
+	if targetName == "" {
+		return
+	}
+
+	By("Cleaning up rollback acceptance test resources")
+
+	foreground := metav1.DeletePropagationForeground
+	labelSelector := client.MatchingLabels{acceptanceTestLabel: targetName}
+
+	for _, obj := range []client.Object{
+		&deployv1alpha1.AutomatedRollbackPolicy{},
+		&deployv1alpha1.Release{},
+		&analysisv1alpha1.AnalysisTemplate{},
+	} {
+		_ = kubeClient.DeleteAllOf(context.TODO(), obj,
+			client.InNamespace(namespace),
+			labelSelector,
+			client.PropagationPolicy(foreground),
+		)
+	}
+
+	Eventually(func(g Gomega) {
+		policyList := &deployv1alpha1.AutomatedRollbackPolicyList{}
+		g.Expect(kubeClient.List(context.TODO(), policyList, client.InNamespace(namespace), labelSelector)).To(Succeed())
+		g.Expect(policyList.Items).To(BeEmpty())
+	}).Should(Succeed())
+}
+
 func generateName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, testCounter.Add(1))
 }
@@ -127,6 +167,11 @@ func generateTargetName() string {
 }
 
 func createReleaseWithLabels(kubeClient client.Client, targetName string, annotations, labels map[string]string) *deployv1alpha1.Release {
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[acceptanceTestLabel] = targetName
+
 	release := &deployv1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        generateName("release"),
@@ -181,13 +226,14 @@ func getPolicy(kubeClient client.Client, targetName string) *deployv1alpha1.Auto
 	return policy
 }
 
-func createAnalysisTemplate(kubeClient client.Client, targetName, analysisType, analysisValue string) *analysisv1alpha1.AnalysisTemplate {
+func createAnalysisTemplate(kubeClient client.Client, testName, targetName, analysisType, analysisValue string) *analysisv1alpha1.AnalysisTemplate {
 	template := &analysisv1alpha1.AnalysisTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      generateName(analysisType + "-analysis"),
 			Namespace: namespace,
 			Labels: map[string]string{
-				"acceptance-target": targetName,
+				"target-name":       targetName,
+				acceptanceTestLabel: testName,
 				analysisType:        analysisValue,
 			},
 		},
@@ -209,7 +255,7 @@ func createAnalysisTemplate(kubeClient client.Client, targetName, analysisType, 
 	return template
 }
 
-func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType, analysisValue string) analysisv1alpha1.AnalysisRun {
+func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType, analysisValue, testName string) analysisv1alpha1.AnalysisRun {
 	var analysisRun analysisv1alpha1.AnalysisRun
 	Eventually(func(g Gomega) {
 		analysisRunList := &analysisv1alpha1.AnalysisRunList{}
@@ -217,7 +263,9 @@ func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType
 
 		var matching []analysisv1alpha1.AnalysisRun
 		for _, item := range analysisRunList.Items {
-			if item.Labels["acceptance-target"] == targetName && item.Labels[analysisType] == analysisValue {
+			if item.Labels[acceptanceTestLabel] == testName &&
+				item.Labels["target-name"] == targetName &&
+				item.Labels[analysisType] == analysisValue {
 				matching = append(matching, item)
 			}
 		}
@@ -289,6 +337,9 @@ func createPolicy(kubeClient client.Client, targetName string, enabled bool) *de
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      targetName,
 			Namespace: namespace,
+			Labels: map[string]string{
+				acceptanceTestLabel: targetName,
+			},
 		},
 		Spec: deployv1alpha1.AutomatedRollbackPolicySpec{
 			TargetName: targetName,

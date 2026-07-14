@@ -63,7 +63,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 		})
 
 		Specify("Happy Path", func(ctx context.Context) {
-			By("Create a automated rollback policy")
+			By("Create an automated rollback policy")
 			targetName = generateName("target")
 			createPolicy(ctx, kubeClient, targetName, true)
 
@@ -126,7 +126,7 @@ func waitForRollbackWebhook(ctx context.Context, kubeClient client.Client, logge
 			return false
 		}
 		return true
-	}).WithContext(ctx).Should(Equal(true))
+	}).WithContext(ctx).Should(BeTrue())
 }
 
 func cleanupRollbackTestResources(ctx context.Context, kubeClient client.Client, targetName string) {

@@ -46,14 +46,14 @@ func (r *Runner) Prepare(logger kitlog.Logger, config *rest.Config) error {
 }
 
 func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
-	Describe("Automated Rollback", func() {
+	Describe("Automated Rollback", Ordered, func() {
 		var (
 			kubeClient         client.Client
 			targetName         string
 			previousTargetName string
 		)
 
-		BeforeEach(func() {
+		BeforeAll(func() {
 			kubeClient = newClient(config)
 			waitForRollbackWebhook(kubeClient, logger)
 		})

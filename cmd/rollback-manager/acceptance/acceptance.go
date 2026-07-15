@@ -69,12 +69,12 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 			By("Create rollback analysis")
 			previousTargetName = generateName("previous-target")
-			createAnalysisTemplate(kubeClient, targetName, previousTargetName, "health", "true")
-			createAnalysisTemplate(kubeClient, targetName, targetName, "rollback", "true")
+			createAnalysisTemplate(kubeClient, targetName, previousTargetName, "health")
+			createAnalysisTemplate(kubeClient, targetName, targetName, "rollback")
 
 			By("Create releases")
 			previousRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": previousTargetName})
-			previousAnalysisRun := expectAnalysisRunCreated(kubeClient, previousTargetName, "health", "true", targetName)
+			previousAnalysisRun := expectAnalysisRunCreated(kubeClient, previousTargetName, "health", targetName)
 			completeAnalysisRun(kubeClient, previousAnalysisRun.Name, analysisv1alpha1.AnalysisPhaseSuccessful)
 			expectReleaseHealthy(kubeClient, previousRelease.Name)
 			activeRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": targetName})
@@ -82,7 +82,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			setPreviousRelease(kubeClient, activeRelease.Name, previousRelease.Name)
 
 			By("Fail release rollback analysis")
-			analysisRun := expectAnalysisRunCreated(kubeClient, targetName, "rollback", "true", targetName)
+			analysisRun := expectAnalysisRunCreated(kubeClient, targetName, "rollback", targetName)
 			completeAnalysisRun(kubeClient, analysisRun.Name, analysisv1alpha1.AnalysisPhaseFailed)
 			expectRollbackRequired(kubeClient, activeRelease.Name)
 
@@ -222,7 +222,7 @@ func getPolicy(kubeClient client.Client, targetName string) *deployv1alpha1.Auto
 	return policy
 }
 
-func createAnalysisTemplate(kubeClient client.Client, testName, targetName, analysisType, analysisValue string) *analysisv1alpha1.AnalysisTemplate {
+func createAnalysisTemplate(kubeClient client.Client, testName, targetName, analysisType string) *analysisv1alpha1.AnalysisTemplate {
 	template := &analysisv1alpha1.AnalysisTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      generateName(analysisType + "-analysis"),
@@ -230,7 +230,7 @@ func createAnalysisTemplate(kubeClient client.Client, testName, targetName, anal
 			Labels: map[string]string{
 				"target-name":       targetName,
 				acceptanceTestLabel: testName,
-				analysisType:        analysisValue,
+				analysisType:        "true",
 			},
 		},
 		Spec: analysisv1alpha1.AnalysisTemplateSpec{
@@ -251,7 +251,7 @@ func createAnalysisTemplate(kubeClient client.Client, testName, targetName, anal
 	return template
 }
 
-func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType, analysisValue, testName string) analysisv1alpha1.AnalysisRun {
+func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType, testName string) analysisv1alpha1.AnalysisRun {
 	var analysisRun analysisv1alpha1.AnalysisRun
 	Eventually(func(g Gomega) {
 		analysisRunList := &analysisv1alpha1.AnalysisRunList{}
@@ -261,7 +261,7 @@ func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType
 		for _, item := range analysisRunList.Items {
 			if item.Labels[acceptanceTestLabel] == testName &&
 				item.Labels["target-name"] == targetName &&
-				item.Labels[analysisType] == analysisValue {
+				item.Labels[analysisType] == "true" {
 				matching = append(matching, item)
 			}
 		}

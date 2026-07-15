@@ -365,7 +365,7 @@ func listRollbacks(ctx context.Context, kubeClient client.Client, targetName str
 func expectRollbackSucceeded(ctx context.Context, kubeClient client.Client, name string) {
 	Eventually(func(g Gomega) {
 		rollback := getRollback(ctx, kubeClient, name)
-		condition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+		condition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 		g.Expect(condition).NotTo(BeNil())
 		g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		g.Expect(rollback.Status.CompletionTime).NotTo(BeNil())

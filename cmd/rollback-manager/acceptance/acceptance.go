@@ -64,7 +64,7 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 
 		Specify("Happy Path", func() {
 			By("Create a automated rollback policy")
-			targetName = generateTargetName()
+			targetName = generateName("target")
 			createPolicy(kubeClient, targetName, true)
 
 			By("Create rollback analysis")
@@ -160,10 +160,6 @@ func cleanupRollbackTestResources(kubeClient client.Client, targetName string) {
 
 func generateName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, testCounter.Add(1))
-}
-
-func generateTargetName() string {
-	return generateName("target")
 }
 
 func createReleaseWithLabels(kubeClient client.Client, targetName string, annotations, labels map[string]string) *deployv1alpha1.Release {

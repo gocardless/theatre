@@ -53,60 +53,60 @@ func (r *Runner) Run(logger kitlog.Logger, config *rest.Config) {
 			previousTargetName string
 		)
 
-		BeforeAll(func() {
+		BeforeAll(func(ctx context.Context) {
 			kubeClient = newClient(config)
-			waitForRollbackWebhook(kubeClient, logger)
+			waitForRollbackWebhook(ctx, kubeClient, logger)
 		})
 
-		AfterEach(func() {
-			cleanupRollbackTestResources(kubeClient, targetName)
+		AfterEach(func(ctx context.Context) {
+			cleanupRollbackTestResources(ctx, kubeClient, targetName)
 		})
 
-		Specify("Happy Path", func() {
+		Specify("Happy Path", func(ctx context.Context) {
 			By("Create a automated rollback policy")
 			targetName = generateName("target")
-			createPolicy(kubeClient, targetName, true)
+			createPolicy(ctx, kubeClient, targetName, true)
 
 			By("Create rollback analysis")
 			previousTargetName = generateName("previous-target")
-			createAnalysisTemplate(kubeClient, targetName, previousTargetName, "health")
-			createAnalysisTemplate(kubeClient, targetName, targetName, "rollback")
+			createAnalysisTemplate(ctx, kubeClient, targetName, previousTargetName, "health")
+			createAnalysisTemplate(ctx, kubeClient, targetName, targetName, "rollback")
 
 			By("Create releases")
-			previousRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": previousTargetName})
-			previousAnalysisRun := expectAnalysisRunCreated(kubeClient, previousTargetName, "health", targetName)
-			completeAnalysisRun(kubeClient, previousAnalysisRun.Name, analysisv1alpha1.AnalysisPhaseSuccessful)
-			expectReleaseHealthy(kubeClient, previousRelease.Name)
-			activeRelease := createActiveReleaseWithLabels(kubeClient, targetName, map[string]string{"target-name": targetName})
-			deactivateRelease(kubeClient, previousRelease.Name)
-			setPreviousRelease(kubeClient, activeRelease.Name, previousRelease.Name)
+			previousRelease := createActiveReleaseWithLabels(ctx, kubeClient, targetName, map[string]string{"target-name": previousTargetName})
+			previousAnalysisRun := expectAnalysisRunCreated(ctx, kubeClient, previousTargetName, "health", targetName)
+			completeAnalysisRun(ctx, kubeClient, previousAnalysisRun.Name, analysisv1alpha1.AnalysisPhaseSuccessful)
+			expectReleaseHealthy(ctx, kubeClient, previousRelease.Name)
+			activeRelease := createActiveReleaseWithLabels(ctx, kubeClient, targetName, map[string]string{"target-name": targetName})
+			deactivateRelease(ctx, kubeClient, previousRelease.Name)
+			setPreviousRelease(ctx, kubeClient, activeRelease.Name, previousRelease.Name)
 
 			By("Fail release rollback analysis")
-			analysisRun := expectAnalysisRunCreated(kubeClient, targetName, "rollback", targetName)
-			completeAnalysisRun(kubeClient, analysisRun.Name, analysisv1alpha1.AnalysisPhaseFailed)
-			expectRollbackRequired(kubeClient, activeRelease.Name)
+			analysisRun := expectAnalysisRunCreated(ctx, kubeClient, targetName, "rollback", targetName)
+			completeAnalysisRun(ctx, kubeClient, analysisRun.Name, analysisv1alpha1.AnalysisPhaseFailed)
+			expectRollbackRequired(ctx, kubeClient, activeRelease.Name)
 
 			By("Expect rollback to be created")
 			var rollback deployv1alpha1.Rollback
 			Eventually(func(g Gomega) {
-				rollbacks := listRollbacks(kubeClient, targetName)
+				rollbacks := listRollbacks(ctx, kubeClient, targetName)
 				g.Expect(rollbacks).To(HaveLen(1))
 				rollback = rollbacks[0]
 				g.Expect(rollback.Spec.InitiatedBy.Principal).To(Equal("automated-rollback-controller"))
 				g.Expect(rollback.Spec.ToReleaseRef.Name).To(Equal(previousRelease.Name))
-			}).Should(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			By("Expect rollback to succeed")
-			expectRollbackSucceeded(kubeClient, rollback.Name)
+			expectRollbackSucceeded(ctx, kubeClient, rollback.Name)
 
 			By("Expect automated rollback policy to be disabled following rollback")
 			Eventually(func(g Gomega) {
-				policy := getPolicy(kubeClient, targetName)
+				policy := getPolicy(ctx, kubeClient, targetName)
 				condition := meta.FindStatusCondition(policy.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
 				g.Expect(condition).NotTo(BeNil())
 				g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(condition.Reason).To(Equal(deployv1alpha1.AutomatedRollbackPolicyReasonDisabledByController))
-			}).Should(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 	})
 }
@@ -117,19 +117,19 @@ func newClient(config *rest.Config) client.Client {
 	return kubeClient
 }
 
-func waitForRollbackWebhook(kubeClient client.Client, logger kitlog.Logger) {
+func waitForRollbackWebhook(ctx context.Context, kubeClient client.Client, logger kitlog.Logger) {
 	Eventually(func() bool {
 		config := &admissionregistrationv1.MutatingWebhookConfiguration{}
-		err := kubeClient.Get(context.TODO(), client.ObjectKey{Name: "theatre-rollback-mutate"}, config)
+		err := kubeClient.Get(ctx, client.ObjectKey{Name: "theatre-rollback-mutate"}, config)
 		if err != nil {
 			logger.Log("error", err)
 			return false
 		}
 		return true
-	}).Should(Equal(true))
+	}).WithContext(ctx).Should(Equal(true))
 }
 
-func cleanupRollbackTestResources(kubeClient client.Client, targetName string) {
+func cleanupRollbackTestResources(ctx context.Context, kubeClient client.Client, targetName string) {
 	if targetName == "" {
 		return
 	}
@@ -144,7 +144,7 @@ func cleanupRollbackTestResources(kubeClient client.Client, targetName string) {
 		&deployv1alpha1.Release{},
 		&analysisv1alpha1.AnalysisTemplate{},
 	} {
-		_ = kubeClient.DeleteAllOf(context.TODO(), obj,
+		_ = kubeClient.DeleteAllOf(ctx, obj,
 			client.InNamespace(namespace),
 			labelSelector,
 			client.PropagationPolicy(foreground),
@@ -153,16 +153,16 @@ func cleanupRollbackTestResources(kubeClient client.Client, targetName string) {
 
 	Eventually(func(g Gomega) {
 		policyList := &deployv1alpha1.AutomatedRollbackPolicyList{}
-		g.Expect(kubeClient.List(context.TODO(), policyList, client.InNamespace(namespace), labelSelector)).To(Succeed())
+		g.Expect(kubeClient.List(ctx, policyList, client.InNamespace(namespace), labelSelector)).To(Succeed())
 		g.Expect(policyList.Items).To(BeEmpty())
-	}).Should(Succeed())
+	}).WithContext(ctx).Should(Succeed())
 }
 
 func generateName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, testCounter.Add(1))
 }
 
-func createReleaseWithLabels(kubeClient client.Client, targetName string, annotations, labels map[string]string) *deployv1alpha1.Release {
+func createReleaseWithLabels(ctx context.Context, kubeClient client.Client, targetName string, annotations, labels map[string]string) *deployv1alpha1.Release {
 	if labels == nil {
 		labels = map[string]string{}
 	}
@@ -183,46 +183,46 @@ func createReleaseWithLabels(kubeClient client.Client, targetName string, annota
 			},
 		},
 	}
-	Expect(kubeClient.Create(context.TODO(), release)).To(Succeed())
-	waitReleaseInitialised(kubeClient, release.Name)
+	Expect(kubeClient.Create(ctx, release)).To(Succeed())
+	waitReleaseInitialised(ctx, kubeClient, release.Name)
 	return release
 }
 
-func createActiveReleaseWithLabels(kubeClient client.Client, targetName string, labels map[string]string) *deployv1alpha1.Release {
-	release := createReleaseWithLabels(kubeClient, targetName, map[string]string{
+func createActiveReleaseWithLabels(ctx context.Context, kubeClient client.Client, targetName string, labels map[string]string) *deployv1alpha1.Release {
+	release := createReleaseWithLabels(ctx, kubeClient, targetName, map[string]string{
 		deployv1alpha1.AnnotationKeyReleaseActivate: deployv1alpha1.AnnotationValueReleaseActivateTrue,
 	}, labels)
 	Eventually(func() bool {
-		return meta.IsStatusConditionTrue(getRelease(kubeClient, release.Name).Status.Conditions, deployv1alpha1.ReleaseConditionActive)
-	}).Should(BeTrue())
+		return meta.IsStatusConditionTrue(getRelease(ctx, kubeClient, release.Name).Status.Conditions, deployv1alpha1.ReleaseConditionActive)
+	}).WithContext(ctx).Should(BeTrue())
 	return release
 }
 
-func waitReleaseInitialised(kubeClient client.Client, name string) {
+func waitReleaseInitialised(ctx context.Context, kubeClient client.Client, name string) {
 	Eventually(func() bool {
-		return getRelease(kubeClient, name).IsStatusInitialised()
-	}).Should(BeTrue())
+		return getRelease(ctx, kubeClient, name).IsStatusInitialised()
+	}).WithContext(ctx).Should(BeTrue())
 }
 
-func getRelease(kubeClient client.Client, name string) *deployv1alpha1.Release {
+func getRelease(ctx context.Context, kubeClient client.Client, name string) *deployv1alpha1.Release {
 	release := &deployv1alpha1.Release{}
-	Expect(kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: name}, release)).To(Succeed())
+	Expect(kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, release)).To(Succeed())
 	return release
 }
 
-func getRollback(kubeClient client.Client, name string) *deployv1alpha1.Rollback {
+func getRollback(ctx context.Context, kubeClient client.Client, name string) *deployv1alpha1.Rollback {
 	rollback := &deployv1alpha1.Rollback{}
-	Expect(kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: name}, rollback)).To(Succeed())
+	Expect(kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, rollback)).To(Succeed())
 	return rollback
 }
 
-func getPolicy(kubeClient client.Client, targetName string) *deployv1alpha1.AutomatedRollbackPolicy {
+func getPolicy(ctx context.Context, kubeClient client.Client, targetName string) *deployv1alpha1.AutomatedRollbackPolicy {
 	policy := &deployv1alpha1.AutomatedRollbackPolicy{}
-	Expect(kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: targetName}, policy)).To(Succeed())
+	Expect(kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: targetName}, policy)).To(Succeed())
 	return policy
 }
 
-func createAnalysisTemplate(kubeClient client.Client, testName, targetName, analysisType string) *analysisv1alpha1.AnalysisTemplate {
+func createAnalysisTemplate(ctx context.Context, kubeClient client.Client, testName, targetName, analysisType string) *analysisv1alpha1.AnalysisTemplate {
 	template := &analysisv1alpha1.AnalysisTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      generateName(analysisType + "-analysis"),
@@ -247,15 +247,15 @@ func createAnalysisTemplate(kubeClient client.Client, testName, targetName, anal
 			},
 		},
 	}
-	Expect(kubeClient.Create(context.TODO(), template)).To(Succeed())
+	Expect(kubeClient.Create(ctx, template)).To(Succeed())
 	return template
 }
 
-func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType, testName string) analysisv1alpha1.AnalysisRun {
+func expectAnalysisRunCreated(ctx context.Context, kubeClient client.Client, targetName, analysisType, testName string) analysisv1alpha1.AnalysisRun {
 	var analysisRun analysisv1alpha1.AnalysisRun
 	Eventually(func(g Gomega) {
 		analysisRunList := &analysisv1alpha1.AnalysisRunList{}
-		g.Expect(kubeClient.List(context.TODO(), analysisRunList, client.InNamespace(namespace))).To(Succeed())
+		g.Expect(kubeClient.List(ctx, analysisRunList, client.InNamespace(namespace))).To(Succeed())
 
 		var matching []analysisv1alpha1.AnalysisRun
 		for _, item := range analysisRunList.Items {
@@ -268,67 +268,67 @@ func expectAnalysisRunCreated(kubeClient client.Client, targetName, analysisType
 
 		g.Expect(matching).To(HaveLen(1))
 		analysisRun = matching[0]
-	}).Should(Succeed())
+	}).WithContext(ctx).Should(Succeed())
 	return analysisRun
 }
 
-func completeAnalysisRun(kubeClient client.Client, name string, phase analysisv1alpha1.AnalysisPhase) {
+func completeAnalysisRun(ctx context.Context, kubeClient client.Client, name string, phase analysisv1alpha1.AnalysisPhase) {
 	Eventually(func() error {
 		analysisRun := &analysisv1alpha1.AnalysisRun{}
-		if err := kubeClient.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: name}, analysisRun); err != nil {
+		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, analysisRun); err != nil {
 			return err
 		}
 		analysisRun.Status.Phase = phase
-		return kubeClient.Update(context.TODO(), analysisRun)
-	}).Should(Succeed())
+		return kubeClient.Update(ctx, analysisRun)
+	}).WithContext(ctx).Should(Succeed())
 }
 
-func expectReleaseHealthy(kubeClient client.Client, releaseName string) {
+func expectReleaseHealthy(ctx context.Context, kubeClient client.Client, releaseName string) {
 	Eventually(func(g Gomega) {
-		release := getRelease(kubeClient, releaseName)
+		release := getRelease(ctx, kubeClient, releaseName)
 		condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionHealthy)
 		g.Expect(condition).NotTo(BeNil())
 		g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		g.Expect(condition.Reason).To(Equal(deployv1alpha1.ReasonAnalysisSucceeded))
-	}).Should(Succeed())
+	}).WithContext(ctx).Should(Succeed())
 }
 
-func expectRollbackRequired(kubeClient client.Client, releaseName string) {
+func expectRollbackRequired(ctx context.Context, kubeClient client.Client, releaseName string) {
 	Eventually(func(g Gomega) {
-		release := getRelease(kubeClient, releaseName)
+		release := getRelease(ctx, kubeClient, releaseName)
 		condition := meta.FindStatusCondition(release.Status.Conditions, deployv1alpha1.ReleaseConditionRollbackRequired)
 		g.Expect(condition).NotTo(BeNil())
 		g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		g.Expect(condition.Reason).To(Equal(deployv1alpha1.ReasonAnalysisFailed))
-	}).Should(Succeed())
+	}).WithContext(ctx).Should(Succeed())
 }
 
-func deactivateRelease(kubeClient client.Client, name string) {
+func deactivateRelease(ctx context.Context, kubeClient client.Client, name string) {
 	Eventually(func() error {
-		release := getRelease(kubeClient, name)
+		release := getRelease(ctx, kubeClient, name)
 		delete(release.Annotations, deployv1alpha1.AnnotationKeyReleaseActivate)
-		return kubeClient.Update(context.TODO(), release)
-	}).Should(Succeed())
+		return kubeClient.Update(ctx, release)
+	}).WithContext(ctx).Should(Succeed())
 	Eventually(func() bool {
-		return meta.IsStatusConditionFalse(getRelease(kubeClient, name).Status.Conditions, deployv1alpha1.ReleaseConditionActive)
-	}).Should(BeTrue())
+		return meta.IsStatusConditionFalse(getRelease(ctx, kubeClient, name).Status.Conditions, deployv1alpha1.ReleaseConditionActive)
+	}).WithContext(ctx).Should(BeTrue())
 }
 
-func setPreviousRelease(kubeClient client.Client, name, previousRelease string) {
+func setPreviousRelease(ctx context.Context, kubeClient client.Client, name, previousRelease string) {
 	Eventually(func() error {
-		release := getRelease(kubeClient, name)
+		release := getRelease(ctx, kubeClient, name)
 		if release.Annotations == nil {
 			release.Annotations = map[string]string{}
 		}
 		release.Annotations[deployv1alpha1.AnnotationKeyReleasePreviousRelease] = previousRelease
-		return kubeClient.Update(context.TODO(), release)
-	}).Should(Succeed())
+		return kubeClient.Update(ctx, release)
+	}).WithContext(ctx).Should(Succeed())
 	Eventually(func() string {
-		return getRelease(kubeClient, name).Status.PreviousRelease.ReleaseRef
-	}).Should(Equal(previousRelease))
+		return getRelease(ctx, kubeClient, name).Status.PreviousRelease.ReleaseRef
+	}).WithContext(ctx).Should(Equal(previousRelease))
 }
 
-func createPolicy(kubeClient client.Client, targetName string, enabled bool) *deployv1alpha1.AutomatedRollbackPolicy {
+func createPolicy(ctx context.Context, kubeClient client.Client, targetName string, enabled bool) *deployv1alpha1.AutomatedRollbackPolicy {
 	policy := &deployv1alpha1.AutomatedRollbackPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      targetName,
@@ -346,13 +346,13 @@ func createPolicy(kubeClient client.Client, targetName string, enabled bool) *de
 			},
 		},
 	}
-	Expect(kubeClient.Create(context.TODO(), policy)).To(Succeed())
+	Expect(kubeClient.Create(ctx, policy)).To(Succeed())
 	return policy
 }
 
-func listRollbacks(kubeClient client.Client, targetName string) []deployv1alpha1.Rollback {
+func listRollbacks(ctx context.Context, kubeClient client.Client, targetName string) []deployv1alpha1.Rollback {
 	rollbackList := &deployv1alpha1.RollbackList{}
-	Expect(kubeClient.List(context.TODO(), rollbackList, client.InNamespace(namespace))).To(Succeed())
+	Expect(kubeClient.List(ctx, rollbackList, client.InNamespace(namespace))).To(Succeed())
 	var ret []deployv1alpha1.Rollback
 	for _, rollback := range rollbackList.Items {
 		if rollback.Spec.ToReleaseRef.Target == targetName {
@@ -362,12 +362,12 @@ func listRollbacks(kubeClient client.Client, targetName string) []deployv1alpha1
 	return ret
 }
 
-func expectRollbackSucceeded(kubeClient client.Client, name string) {
+func expectRollbackSucceeded(ctx context.Context, kubeClient client.Client, name string) {
 	Eventually(func(g Gomega) {
-		rollback := getRollback(kubeClient, name)
+		rollback := getRollback(ctx, kubeClient, name)
 		condition := meta.FindStatusCondition(rollback.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
 		g.Expect(condition).NotTo(BeNil())
 		g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		g.Expect(rollback.Status.CompletionTime).NotTo(BeNil())
-	}).Should(Succeed())
+	}).WithContext(ctx).Should(Succeed())
 }

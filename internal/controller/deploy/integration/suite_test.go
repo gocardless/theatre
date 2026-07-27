@@ -202,6 +202,10 @@ func (f *FakeDeployer) GetDeploymentStatus(ctx context.Context, deploymentID str
 	}, nil
 }
 
+func (f *FakeDeployer) PostDeploymentHooks(ctx context.Context, req cicd.DeploymentRequest, deploymentID string) error {
+	return nil
+}
+
 func (f *FakeDeployer) Name() string {
 	return "fake"
 }

@@ -16,6 +16,7 @@ const (
 	EventDeploymentFailed        = "DeploymentFailed"
 	EventRollbackSucceeded       = "RollbackSucceeded"
 	EventRollbackFailed          = "RollbackFailed"
+	EventRollbackSuperseded      = "RollbackSuperseded"
 
 	// Automated rollback events
 	EventErrorGettingRollbackPolicy = "ErrorGettingRollbackPolicy"

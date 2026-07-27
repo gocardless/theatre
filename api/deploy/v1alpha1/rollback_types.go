@@ -15,10 +15,10 @@ const (
 	// Status=False means the rollback is yet to start or has completed.
 	RollbackConditionInProgress = "InProgress"
 
-	// RollbackConditionSucceded indicates whether the rollback has succeeded.
+	// RollbackConditionSucceeded indicates whether the rollback has succeeded.
 	// Status=True means the rollback has succeeded.
 	// Status=False means the rollback has not failed.
-	RollbackConditionSucceded = "Succeeded"
+	RollbackConditionSucceeded = "Succeeded"
 )
 
 // RollbackSpec defines the desired state of Rollback

@@ -78,7 +78,7 @@ var _ = Describe("RollbackReconciler", func() {
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
-				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 				return cond != nil && cond.Status == metav1.ConditionTrue
 			}).Should(BeTrue())
 
@@ -130,7 +130,7 @@ var _ = Describe("RollbackReconciler", func() {
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
-				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
 				// Wait for terminal failure: Succeeded=False, InProgress=False, AttemptCount >= 3
 				return cond != nil && cond.Status == metav1.ConditionFalse &&
@@ -161,7 +161,7 @@ var _ = Describe("RollbackReconciler", func() {
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
-				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
 				// Wait for terminal failure: Succeeded=False, AttemptCount=1, InProgress=False, Message contains error
 				return cond != nil && cond.Status == metav1.ConditionFalse && rb.Status.AttemptCount == 1 &&
@@ -216,7 +216,7 @@ var _ = Describe("RollbackReconciler", func() {
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(rollback), rb); err != nil {
 					return false
 				}
-				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceded)
+				cond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionSucceeded)
 				inProgressCond := meta.FindStatusCondition(rb.Status.Conditions, deployv1alpha1.RollbackConditionInProgress)
 				// Should have failed with release not found
 				return cond != nil && cond.Status == metav1.ConditionFalse &&

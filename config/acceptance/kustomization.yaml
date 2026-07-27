@@ -13,5 +13,14 @@ patchesStrategicMerge:
   - overlays/vault-manager.yaml
   - overlays/workloads-manager.yaml
   - overlays/release-manager.yaml
+  - overlays/release-mutating-webhook.yaml
   - overlays/rollback-manager.yaml
   - overlays/automated-rollback-manager.yaml
+
+patches:
+  - path: overlays/release-manager-analysis-role.patch.yaml
+    target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: theatre-release-manager

@@ -21,7 +21,7 @@ const (
 // Rollback helpers
 
 func (rollback *Rollback) IsCompleted() bool {
-	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceded})
+	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceeded})
 }
 
 // GetEffectiveTime returns the effective time of the rollback, which is the completion time

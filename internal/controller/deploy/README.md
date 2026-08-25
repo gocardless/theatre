@@ -1,6 +1,6 @@
 # Deploy Controllers Overview
 
-This directory contains the controllers for the Deploy API group, which manages release and rollback resources.
+This directory contains the controllers for the Deploy API group, which manages release, rollback, and automated rollback policy resources.
 
 ## Controllers
 
@@ -8,6 +8,7 @@ This directory contains the controllers for the Deploy API group, which manages 
   - `release_analysis.go` - Health analysis reconciliation for Release resources
   - `release_culling.go` - Release culling logic
 - `rollback_controller.go` - Manages Rollback resources
+- `automated_rollback_policy_controller.go` - Manages AutomatedRollbackPolicy resources
 
 ## Release Controller
 
@@ -87,3 +88,31 @@ The controller registers the following Prometheus metrics:
 - `rollbackTerminalTotal` — counter of rollbacks that reached a terminal state, labelled by outcome
 - `rollbackCompletionDurationSeconds` — histogram of rollback duration from creation to completion
 - `rollbackRetryCount` — histogram of the number of retries per rollback
+
+## Automated Rollback Controller
+
+Responsible for reconciling `AutomatedRollbackPolicy` resources and creating `Rollback` resources
+when the configured trigger condition is met on the active release.
+
+The controller watches `Release` objects and maps
+them to their policy. A reconciliation is triggered only when:
+
+- An `AutomatedRollbackPolicy` is created, updated, or deleted, **or**
+- The policy's trigger condition **transitions** on an active `Release`
+
+This predicate filters out all other Release update events, keeping reconcile load low.
+
+**Note:** the controller expects exactly one `AutomatedRollbackPolicy` per target. If zero or more
+than one policies exist for a target, Release update events for that target are silently dropped.
+
+### Reconcile flow
+
+1. Find the active `Release` for the policy's `targetName`.
+2. Evaluate policy constraints (e.g. `spec.enabled`) and update the `Automated` status condition.
+3. If rollback is allowed, check the trigger condition on the active release and confirm no
+   `Rollback` resource already exists for it (deduplication via owner index).
+4. If all checks pass, create a `Rollback` resource with `toReleaseRef.name` left empty — the
+   Rollback controller resolves it to the latest healthy release.
+5. Disable the policy after creating the rollback (`Automated: False`, reason `DisabledByController`).
+
+The policy will be re-enabled when the next Release recovers from the trigger condition (i.e. the configured condition status changes to the opposite of the configured condition status).

@@ -3,6 +3,8 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("Helpers", func() {
@@ -191,6 +193,111 @@ var _ = Describe("Helpers", func() {
 				releaseB.InitialiseStatus("init")
 
 				Expect(releaseA.Status.Signature).To(Equal(releaseB.Status.Signature))
+			})
+		})
+	})
+	Context("AutomatedRollbackPolicy", func() {
+		var (
+			policy AutomatedRollbackPolicy
+		)
+
+		BeforeEach(func() {
+			policy = AutomatedRollbackPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: AutomatedRollbackPolicySpec{
+					TargetName: "test-target",
+					Trigger: RollbackTrigger{
+						ConditionType:   ReleaseConditionRollbackRequired,
+						ConditionStatus: metav1.ConditionTrue,
+					},
+				},
+				Status: AutomatedRollbackPolicyStatus{},
+			}
+		})
+
+		Context("evaluatePolicyConstraints", func() {
+			Context("when spec.enabled=false", func() {
+				It("should return allowed=false with reason SetByUser", func() {
+					policy.Spec.Enabled = false
+					result := policy.EvaluatePolicyConstraints(nil)
+					Expect(result.Allowed).To(BeFalse())
+					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
+					Expect(result.Message).To(Equal("Automated rollback policy is disabled"))
+				})
+			})
+
+			Context("when spec.enabled=true", func() {
+				BeforeEach(func() {
+					policy.Spec.Enabled = true
+				})
+
+				It("should return allowed=true", func() {
+					result := policy.EvaluatePolicyConstraints(nil)
+					Expect(result.Allowed).To(BeTrue())
+					Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
+				})
+
+				Context("when policy is disabled by the controller", func() {
+					var release *Release
+
+					BeforeEach(func() {
+						meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+							Type:   AutomatedRollbackPolicyConditionActive,
+							Status: metav1.ConditionFalse,
+							Reason: AutomatedRollbackPolicyReasonDisabledByController,
+						})
+
+						release = &Release{
+							Status: ReleaseStatus{},
+						}
+					})
+
+					It("should return allowed=true when release has recovered from failure", func() {
+						meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
+							Type:   ReleaseConditionRollbackRequired,
+							Status: metav1.ConditionFalse,
+							Reason: "AnalysisSucceeded",
+						})
+
+						result := policy.EvaluatePolicyConstraints(release)
+						Expect(result.Allowed).To(BeTrue())
+						Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonSetByUser))
+					})
+
+					It("should return allowed=false when release has not recovered from failure RollbackRequired=True", func() {
+						meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
+							Type:   ReleaseConditionRollbackRequired,
+							Status: metav1.ConditionTrue,
+							Reason: "AnalysisFailed",
+						})
+
+						result := policy.EvaluatePolicyConstraints(release)
+						Expect(result.Allowed).To(BeFalse())
+						Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
+					})
+
+					It("should return allowed=false when release has not recovered from failure RollbackRequired=Unknown", func() {
+						meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
+							Type:   ReleaseConditionRollbackRequired,
+							Status: metav1.ConditionUnknown,
+							Reason: "AnalysisFailed",
+						})
+
+						result := policy.EvaluatePolicyConstraints(release)
+						Expect(result.Allowed).To(BeFalse())
+						Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
+					})
+
+					It("should return allowed=false when release has not recovered from failure RollbackRequired is not set", func() {
+						// No condition is set, so the condition is unknown
+						result := policy.EvaluatePolicyConstraints(release)
+						Expect(result.Allowed).To(BeFalse())
+						Expect(result.Reason).To(Equal(AutomatedRollbackPolicyReasonDisabledByController))
+					})
+				})
 			})
 		})
 	})

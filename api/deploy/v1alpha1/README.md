@@ -7,6 +7,7 @@ specific field that is used to identify the resource to which the CRD applies.
 
 - Release - records release information like a set of revisions
 - Rollback - records rollback information, like from/to which release, deployment options
+- AutomatedRollbackPolicy - controls automated rollback behavior (trigger, rollback deployment options)
 
 ## Release
 
@@ -87,3 +88,42 @@ progress through status conditions.
 | `InProgress` | Rollback is in progress (e.g. ArgoCD sync running) | Rollback has not started or has completed |
 | `Succeeded`  | Rollback completed successfully                    | Rollback has not yet succeeded            |
 
+
+---
+
+## AutomatedRollbackPolicy
+
+**Short name:** `arbp`
+
+Controls whether the operator should automatically create a `Rollback` resource when
+a `Release` for a given target enters a trigger condition. The policy can be enabled
+or disabled, and the controller will disable it automatically after performing one
+automated rollback to prevent rollback loops.
+
+### Spec
+
+| Field                                     | Required | Description                                                                                        |
+| ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `targetName`                              | Yes      | Identifies which releases this policy applies to, matching `Release.config.targetName` (immutable) |
+| `enabled`                                 | Yes      | Whether automated rollbacks are active (default: `false`)                                          |
+| `trigger.conditionType`                   | No       | The `Release` condition type to watch (default: `RollbackRequired`)                                |
+| `trigger.conditionStatus`                 | No       | The condition status value that triggers a rollback (`True` or `False`, default: `True`)           |
+| `rollbackTemplate.metadata.labels`        | No       | Labels to apply to the created `Rollback` resource                                                 |
+| `rollbackTemplate.metadata.annotations`   | No       | Annotations to apply to the created `Rollback` resource                                            |
+| `rollbackTemplate.spec.deploymentOptions` | No       | Provider-specific options passed to the created `Rollback` spec                                    |
+
+### Status
+
+| Field                       | Description                                                     |
+| --------------------------- | --------------------------------------------------------------- |
+| `conditions`                | Observed conditions: `Automated`                                |
+| `lastAutomatedRollbackTime` | Timestamp of the last automated rollback created by this policy |
+
+### Conditions
+
+| Condition   | Status=True                     | Status=False                     |
+| ----------- | ------------------------------- | -------------------------------- |
+| `Automated` | Automated rollbacks are enabled | Automated rollbacks are disabled |
+
+Reason values: `SetByUser` (user explicitly configured it) or `DisabledByController`
+(controller disabled it after performing an automated rollback).

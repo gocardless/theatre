@@ -6,6 +6,7 @@ field that specifies the resource to which the CRD applies. Target is a GoCardle
 specific field that is used to identify the resource to which the CRD applies.
 
 - Release - records release information like a set of revisions
+- Rollback - records rollback information, like from/to which release, deployment options
 
 ## Release
 
@@ -41,4 +42,48 @@ conditions.
 | `Active`           | Release is actively serving traffic | Release has been superseded    |
 | `Healthy`          | Release passed health analysis      | Release failed health analysis |
 | `RollbackRequired` | Release should be rolled back       | Release does not need rollback |
+
+
+---
+
+## Rollback
+
+**Short name:** `rb`
+
+Represents a historical record of a rollback operation. A `Rollback` resource is
+created (manually or automatically) to roll a target back to a previously healthy
+`Release`. The controller carries out the rollback via the CI/CD system and tracks
+progress through status conditions.
+
+### Spec
+
+| Field                   | Required | Description                                                                                              |
+| ----------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `toReleaseRef.target`   | Yes      | Target name identifying which release target to roll back (immutable)                                    |
+| `toReleaseRef.name`     | No       | Name of the specific `Release` to roll back to; if empty the controller picks the latest healthy release |
+| `reason`                | Yes      | Human-readable explanation for why the rollback was initiated (1–512 chars)                              |
+| `initiatedBy.principal` | No       | Identifier of the person or system that triggered the rollback                                           |
+| `initiatedBy.type`      | No       | Type of initiator, e.g. `user` or `system`                                                               |
+| `deploymentOptions`     | No       | Provider-specific options passed to the CI/CD system                                                     |
+
+### Status
+
+| Field            | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `conditions`     | Observed conditions: `InProgress`, `Succeeded`                        |
+| `message`        | Human-readable state description                                      |
+| `fromReleaseRef` | The release being rolled back from                                    |
+| `automatic`      | Whether this rollback was triggered automatically                     |
+| `startTime`      | When the rollback operation started                                   |
+| `completionTime` | When the rollback operation completed                                 |
+| `deploymentID`   | Unique identifier for the CI/CD deployment job                        |
+| `deploymentURL`  | URL to the CI job performing the rollback                             |
+| `attemptCount`   | Number of times the controller has attempted to initiate the rollback |
+
+### Conditions
+
+| Condition    | Status=True                                        | Status=False                              |
+| ------------ | -------------------------------------------------- | ----------------------------------------- |
+| `InProgress` | Rollback is in progress (e.g. ArgoCD sync running) | Rollback has not started or has completed |
+| `Succeeded`  | Rollback completed successfully                    | Rollback has not yet succeeded            |
 

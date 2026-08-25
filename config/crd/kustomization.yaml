@@ -10,6 +10,7 @@ resources:
   - bases/workloads.crd.gocardless.com_consoleauthorisations.yaml
   - bases/workloads.crd.gocardless.com_consoletemplates.yaml
   - bases/deploy.crd.gocardless.com_releases.yaml
+  - bases/deploy.crd.gocardless.com_rollbacks.yaml
   - external/analysis-run-crd.yaml
   - external/analysis-template-crd.yaml
   - external/cluster-analysis-template-crd.yaml

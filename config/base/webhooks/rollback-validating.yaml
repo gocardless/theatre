@@ -1,0 +1,31 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: rollback-validate
+  annotations:
+    cert-manager.io/inject-ca-from: theatre-system/theatre-rollback-manager
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: Cg==
+      service:
+        name: theatre-rollback-manager
+        namespace: theatre-system
+        path: /validate-rollbacks
+        port: 443
+    failurePolicy: Fail
+    name: rollback.deploy.crd.gocardless.com
+    rules:
+      - apiGroups:
+          - deploy.crd.gocardless.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - rollbacks
+        scope: "*"
+    sideEffects: None
+    timeoutSeconds: 10

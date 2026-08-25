@@ -9,4 +9,11 @@ const (
 
 	// Culling events
 	EventReleaseCulled = "ReleasedCulled"
+
+	// Deployment events
+	EventDeploymentTriggered     = "DeploymentTriggered"
+	EventDeploymentTriggerFailed = "DeploymentTriggerFailed"
+	EventDeploymentFailed        = "DeploymentFailed"
+	EventRollbackSucceeded       = "RollbackSucceeded"
+	EventRollbackFailed          = "RollbackFailed"
 )

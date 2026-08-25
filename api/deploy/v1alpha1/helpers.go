@@ -18,6 +18,30 @@ const (
 	SignatureLength = 10
 )
 
+// Rollback helpers
+
+func (rollback *Rollback) IsCompleted() bool {
+	return recutil.IsConditionStatusKnown(rollback.Status.Conditions, []string{RollbackConditionSucceeded})
+}
+
+// GetEffectiveTime returns the effective time of the rollback, which is the completion time
+// if set, otherwise the creation time.
+func (rollback *Rollback) GetEffectiveTime() time.Time {
+	if rollback.Status.CompletionTime.IsZero() {
+		return rollback.ObjectMeta.CreationTimestamp.Time
+	}
+	return rollback.Status.CompletionTime.Time
+}
+
+func FindInProgressRollback(rollbackList *RollbackList) *Rollback {
+	for _, rollback := range rollbackList.Items {
+		if meta.IsStatusConditionTrue(rollback.Status.Conditions, RollbackConditionInProgress) {
+			return &rollback
+		}
+	}
+	return nil
+}
+
 // Release helpers
 
 func (releaseConfig *ReleaseConfig) Equals(other *ReleaseConfig) bool {

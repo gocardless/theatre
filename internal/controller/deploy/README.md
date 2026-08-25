@@ -1,12 +1,13 @@
 # Deploy Controllers Overview
 
-This directory contains the controllers for the Deploy API group, which manages release resources.
+This directory contains the controllers for the Deploy API group, which manages release and rollback resources.
 
 ## Controllers
 
 - `release_controller.go` - Manages Release resources
   - `release_analysis.go` - Health analysis reconciliation for Release resources
   - `release_culling.go` - Release culling logic
+- `rollback_controller.go` - Manages Rollback resources
 
 ## Release Controller
 
@@ -57,3 +58,32 @@ The controller culls old releases to prevent unbounded growth. Culling behaviour
 - A Kubernetes `Lease` object (named `theatre-release-cull-<hash>`) is used to prevent concurrent culls across multiple reconcile loops
 - Default limit is **30** releases per target; configurable via the `theatre.gocardless.com/release-limit` annotation on the namespace
 - Oldest releases (by `deploymentEndTime`, falling back to creation time) are deleted first
+
+## Rollback Controller
+
+Responsible for reconciling Rollback resources. Rollback resources are either created manually by a
+user or automatically by the automated rollback controller. The Rollback controller is responsible
+for initiating the rollback process through a configured CI/CD backend. As of time of writing, the
+supported backends are:
+
+- **GitHub Deployments** - implemented using the GitHub REST API (see `pkg/cicd/github`)
+- **ArgoCD** - implemented using the ArgoCD REST API (see `pkg/cicd/argocd`)
+
+The configured Rollback `.spec.deploymentOptions` will be passed to the chosen backend.
+
+### Reconcile flow
+
+1. On first reconcile, the controller records the currently active release as `status.fromReleaseRef`.
+2. The controller triggers a deployment via the configured backend and sets `InProgress: True`.
+3. The controller polls the backend every **15 seconds** until the deployment succeeds or fails.
+4. On failure, the controller retries up to **3 attempts** total (trigger + re-polls). Retries only
+   occur for errors the backend marks as retryable; non-retryable errors fail immediately.
+5. On terminal success or failure, the `Succeeded` condition is set accordingly and reconciliation stops.
+
+### Metrics
+
+The controller registers the following Prometheus metrics:
+
+- `rollbackTerminalTotal` — counter of rollbacks that reached a terminal state, labelled by outcome
+- `rollbackCompletionDurationSeconds` — histogram of rollback duration from creation to completion
+- `rollbackRetryCount` — histogram of the number of retries per rollback

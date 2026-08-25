@@ -3,7 +3,9 @@ package integration
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -23,10 +25,13 @@ import (
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/internal/controller/deploy"
+	"github.com/gocardless/theatre/v5/pkg/cicd"
 )
 
 var (
 	testEnv     *envtest.Environment
+	deployer    *FakeDeployer
+	rollbackMgr ctrl.Manager
 	releaseMgr  ctrl.Manager
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -59,6 +64,16 @@ var _ = BeforeSuite(func() {
 	err = deployv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Create separate managers for rollback and release controllers
+	// to simulate production where they run in separate processes
+	rollbackMgr, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0", // Disable metrics to avoid port conflicts
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+
 	releaseMgr, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -67,12 +82,28 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	deployer = NewFakeDeployer()
+
+	err = (&deploy.RollbackReconciler{
+		Client:   rollbackMgr.GetClient(),
+		Scheme:   rollbackMgr.GetScheme(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Rollback"),
+		Deployer: deployer,
+	}).SetupWithManager(ctx, rollbackMgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = (&deploy.ReleaseReconciler{
 		Client: releaseMgr.GetClient(),
 		Scheme: releaseMgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Release"),
 	}).SetupWithManager(ctx, releaseMgr)
 	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		defer GinkgoRecover()
+		err := rollbackMgr.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+	}()
 
 	go func() {
 		defer GinkgoRecover()
@@ -90,13 +121,85 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+// TriggerResult holds the result for a TriggerDeployment call
+type TriggerResult struct {
+	Result *cicd.DeploymentResult
+	Err    error
+}
+
+// StatusResult holds the result for a GetDeploymentStatus call
+type StatusResult struct {
+	Result *cicd.DeploymentResult
+	Err    error
+}
+
+// FakeDeployer is a thread-safe fake implementation of the cicd.Deployer interface
+type FakeDeployer struct {
+	TriggerResults sync.Map // map[string]TriggerResult keyed by "namespace/name"
+	StatusResults  sync.Map // map[string]StatusResult keyed by deploymentID
+}
+
+func NewFakeDeployer() *FakeDeployer {
+	return &FakeDeployer{}
+}
+
+func (f *FakeDeployer) TriggerDeployment(ctx context.Context, req cicd.DeploymentRequest) (*cicd.DeploymentResult, error) {
+	key := req.Rollback.Namespace + "/" + req.Rollback.Name
+	if val, ok := f.TriggerResults.Load(key); ok {
+		result := val.(TriggerResult)
+		return result.Result, result.Err
+	}
+
+	// Default: return a pending deployment with options encoded in URL
+	deploymentURL := "https://example.com/deployments/" + req.Rollback.Name
+	if len(req.Options) > 0 {
+		params := url.Values{}
+		for k, v := range req.Options {
+			params.Set(k, fmt.Sprint(v))
+		}
+		deploymentURL += "?" + params.Encode()
+	}
+	return &cicd.DeploymentResult{
+		ID:      "default-deployment-" + req.Rollback.Name,
+		URL:     deploymentURL,
+		Status:  cicd.DeploymentStatusPending,
+		Message: "Deployment created",
+	}, nil
+}
+
+func (f *FakeDeployer) GetDeploymentStatus(ctx context.Context, deploymentID string) (*cicd.DeploymentResult, error) {
+	if val, ok := f.StatusResults.Load(deploymentID); ok {
+		result := val.(StatusResult)
+		return result.Result, result.Err
+	}
+
+	// Default: return success
+	return &cicd.DeploymentResult{
+		ID:      deploymentID,
+		Status:  cicd.DeploymentStatusSucceeded,
+		Message: "Deployment succeeded",
+	}, nil
+}
+
+func (f *FakeDeployer) Name() string {
+	return "fake"
+}
+
+func (f *FakeDeployer) SetTriggerResult(namespace, name string, result TriggerResult) {
+	f.TriggerResults.Store(namespace+"/"+name, result)
+}
+
+func (f *FakeDeployer) SetStatusResult(deploymentID string, result StatusResult) {
+	f.StatusResults.Store(deploymentID, result)
+}
+
 func generateNamespaceName() string {
 	return fmt.Sprintf("test-ns-%d-%d", GinkgoParallelProcess(), testCounter.Add(1))
 }
 
 func setupTestNamespace(ctx context.Context) string {
 	ns := generateNamespaceName()
-	err := releaseMgr.GetClient().Create(ctx, &v1.Namespace{
+	err := rollbackMgr.GetClient().Create(ctx, &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
@@ -126,7 +229,7 @@ func generateRelease(namespace string, target string) *v1alpha1.Release {
 func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *v1alpha1.Release {
 	release := generateRelease(namespace, target)
 	release.Annotations = annotations
-	err := releaseMgr.GetClient().Create(ctx, release)
+	err := rollbackMgr.GetClient().Create(ctx, release)
 	Expect(err).NotTo(HaveOccurred())
 	return release
 }

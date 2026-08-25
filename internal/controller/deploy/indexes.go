@@ -1,0 +1,9 @@
+package deploy
+
+const (
+	// IndexFieldOwner indexes objects by their controller owner reference
+	IndexFieldOwner = ".metadata.controller"
+
+	// IndexFieldReleaseTarget indexes releases by their target name
+	IndexFieldReleaseTarget = ".config.targetName"
+)

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      controller: release-manager
+      group: deploy.crd.gocardless.com
+  template:
+    metadata:
+      labels:
+        controller: release-manager
+        group: deploy.crd.gocardless.com
+    spec:
+      containers:
+        - command:
+            - /usr/local/bin/release-manager
+          args:
+            - --metrics-address=0.0.0.0
+            - --enable-argo-rollouts-analysis
+          image: theatre:latest
+          imagePullPolicy: Never
+          name: manager
+          resources:
+            limits:
+              cpu: 100m
+              memory: 256Mi

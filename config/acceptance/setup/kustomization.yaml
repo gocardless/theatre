@@ -4,5 +4,6 @@ kind: Kustomization
 
 resources:
   - resources/cert-manager.yaml
+  - resources/deploy-service.yaml
   - resources/staging-service.yaml
   - resources/vault.yaml

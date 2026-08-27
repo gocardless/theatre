@@ -41,3 +41,18 @@ builds:
     id: workloads-manager
     binary: workloads-manager
     main: cmd/workloads-manager/main.go
+
+  - <<: *commonBuildConfig
+    id: release-manager
+    binary: release-manager
+    main: cmd/release-manager/main.go
+
+  - <<: *commonBuildConfig
+    id: rollback-manager
+    binary: rollback-manager
+    main: cmd/rollback-manager/main.go
+
+  - <<: *commonBuildConfig
+    id: automated-rollback-manager
+    binary: automated-rollback-manager
+    main: cmd/automated-rollback-manager/main.go

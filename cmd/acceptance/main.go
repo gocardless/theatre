@@ -136,7 +136,7 @@ func main() {
 		}
 
 		logger.Log("msg", "install theatre CRDs")
-		installCRDs, err := exec.CommandContext(ctx, "kustomize", "build", "config/crd").Output()
+		installCRDs, err := exec.CommandContext(ctx, "kustomize", "build", "config/acceptance/crd").Output()
 		if err != nil {
 			app.Fatalf("failed to kustomize theatre CRDs: %v", err)
 		}

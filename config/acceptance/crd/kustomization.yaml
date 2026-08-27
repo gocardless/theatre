@@ -1,0 +1,12 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# This kustomization builds on top of config/crd by additionally including the
+# Argo Rollouts CRDs (AnalysisRun, AnalysisTemplate, ClusterAnalysisTemplate).
+# These are only required by the release-manager's analysis feature
+# Real users of config/crd are expected to install Argo Rollouts + CRDs
+# themselves and only pulled in here for acceptance testing.
+resources:
+  - ../../crd
+  - ../../crd/external

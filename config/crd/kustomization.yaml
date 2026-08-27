@@ -12,9 +12,6 @@ resources:
   - bases/deploy.crd.gocardless.com_releases.yaml
   - bases/deploy.crd.gocardless.com_rollbacks.yaml
   - bases/deploy.crd.gocardless.com_automatedrollbackpolicies.yaml
-  - external/analysis-run-crd.yaml
-  - external/analysis-template-crd.yaml
-  - external/cluster-analysis-template-crd.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # patches:

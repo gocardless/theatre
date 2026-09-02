@@ -542,11 +542,30 @@ func isConsoleAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule, auth 
 		return false
 	}
 
-	if len(auth.Spec.Authorisations) >= rule.ConsoleAuthorisers.AuthorisationsRequired {
+	if countDistinctSubjects(auth.Spec.Authorisations) >= rule.ConsoleAuthorisers.AuthorisationsRequired {
 		return true
 	}
 
 	return false
+}
+
+// countDistinctSubjects returns the number of unique subjects in subjects,
+// so that the same approver appearing more than once (which shouldn't
+// normally happen, but the webhook is the only thing preventing it) is only
+// counted once towards the required number of authorisers.
+func countDistinctSubjects(subjects []rbacv1.Subject) int {
+	type subjectKey struct {
+		Kind      string
+		Name      string
+		Namespace string
+	}
+
+	seen := make(map[subjectKey]struct{}, len(subjects))
+	for _, s := range subjects {
+		seen[subjectKey{Kind: s.Kind, Name: s.Name, Namespace: s.Namespace}] = struct{}{}
+	}
+
+	return len(seen)
 }
 
 // consoleStatusContext is a wrapper for the objects required to calculate the

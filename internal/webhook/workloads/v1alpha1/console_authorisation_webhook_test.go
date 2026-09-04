@@ -114,6 +114,22 @@ var _ = Describe("Authorisation webhook", func() {
 			})
 		})
 
+		Context("Adding an authoriser who has already authorised the console", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_duplicate.yaml"
+			})
+
+			JustBeforeEach(func() {
+				update.user = "user1"
+				err = update.Validate()
+			})
+
+			It("Returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("spec.authorisations field can only be appended to")))
+			})
+		})
+
 		Context("Removing an existing authoriser", func() {
 			BeforeEach(func() {
 				updateFixture = "./testdata/console_authorisation_update_remove.yaml"

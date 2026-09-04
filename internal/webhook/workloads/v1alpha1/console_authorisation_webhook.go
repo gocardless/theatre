@@ -116,7 +116,12 @@ func (u *ConsoleAuthorisationUpdate) Validate() error {
 	add := rbacutils.Diff(u.updatedAuth.Spec.Authorisations, u.existingAuth.Spec.Authorisations)
 	remove := rbacutils.Diff(u.existingAuth.Spec.Authorisations, u.updatedAuth.Spec.Authorisations)
 
-	if len(add) > 1 || len(remove) != 0 {
+	// Diff only reports subjects that aren't already present, so re-adding a
+	// subject that has already authorised the console produces an empty add
+	// list. Comparing lengths catches that case too, preventing the same
+	// approver from being counted more than once.
+	expectedLen := len(u.existingAuth.Spec.Authorisations) + len(add)
+	if len(add) > 1 || len(remove) != 0 || len(u.updatedAuth.Spec.Authorisations) != expectedLen {
 		err = multierror.Append(err, errors.New("the spec.authorisations field can only be appended to (with one subject) per update"))
 	}
 

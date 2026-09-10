@@ -17,7 +17,6 @@ spec:
     spec:
       containers:
         - name: manager
-          image: theatre:latest
           imagePullPolicy: Never
           args:
             - --no-google  # disable Google for acceptance tests

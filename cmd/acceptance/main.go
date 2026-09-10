@@ -35,7 +35,7 @@ var (
 	logger      = kitlog.NewLogfmtLogger(os.Stderr)
 
 	prepare              = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
+	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("localhost/theatre:latest").String()
 	prepareConfigFile    = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile    = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
 	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.32.2").String()

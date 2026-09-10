@@ -233,7 +233,7 @@ spec:
             expirationSeconds: 900
   containers:
     - name: app
-      image: theatre:latest
+      image: localhost/theatre:latest
       imagePullPolicy: Never
       env:
         - name: VAULT_RESOLVED_KEY
@@ -271,7 +271,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: app
-      image: theatre:latest
+      image: localhost/theatre:latest
       imagePullPolicy: Never
       env:
         - name: VAULT_RESOLVED_KEY
@@ -298,7 +298,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: app
-      image: theatre:latest
+      image: localhost/theatre:latest
       imagePullPolicy: Never
       securityContext:
         runAsNonRoot: true
@@ -326,7 +326,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: app
-      image: theatre:latest
+      image: localhost/theatre:latest
       imagePullPolicy: Never
       securityContext:
         runAsNonRoot: true

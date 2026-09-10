@@ -60,16 +60,16 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest setup-ginkgo ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" ginkgo -race -randomize-suites -randomize-all -r ./...
 
-acceptance-e2e: install-tools acceptance-prepare acceptance-run acceptance-destroy ## Requires the following binaries: kubectl, kustomize, kind, docker
+acceptance-e2e: install-tools acceptance-prepare acceptance-run acceptance-destroy ## Requires the following binaries: kubectl, kustomize, kind, $(CONTAINER_TOOL)
 
 acceptance-run: install-tools ## Run acceptance tests
 	go run cmd/acceptance/main.go run --verbose
 
 acceptance-prepare: install-tools ## Prepare acceptance tests
-	go run cmd/acceptance/main.go prepare --verbose
+	go run cmd/acceptance/main.go prepare --container-tool $(CONTAINER_TOOL) --verbose
 
 acceptance-destroy: install-tools ## Destroy acceptance tests
-	go run cmd/acceptance/main.go destroy
+	go run cmd/acceptance/main.go destroy --container-tool $(CONTAINER_TOOL)
 
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run

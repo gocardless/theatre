@@ -549,20 +549,20 @@ func isConsoleAuthorised(rule *workloadsv1alpha1.ConsoleAuthorisationRule, auth 
 	return false
 }
 
-// countDistinctSubjects returns the number of unique subjects in subjects,
+// countDistinctSubjects returns the number of unique approvers in subjects,
 // so that the same approver appearing more than once (which shouldn't
 // normally happen, but the webhook is the only thing preventing it) is only
 // counted once towards the required number of authorisers.
+//
+// Uniqueness is keyed on Name alone: Name is the authenticated Kubernetes
+// username that the admission webhook verifies against the request, whereas
+// Kind/APIGroup/Namespace on a Subject are caller-controlled and unverified
+// (Kubernetes RBAC itself ignores Namespace for User subjects), so they must
+// not let the same approver be counted more than once.
 func countDistinctSubjects(subjects []rbacv1.Subject) int {
-	type subjectKey struct {
-		Kind      string
-		Name      string
-		Namespace string
-	}
-
-	seen := make(map[subjectKey]struct{}, len(subjects))
+	seen := make(map[string]struct{}, len(subjects))
 	for _, s := range subjects {
-		seen[subjectKey{Kind: s.Kind, Name: s.Name, Namespace: s.Namespace}] = struct{}{}
+		seen[s.Name] = struct{}{}
 	}
 
 	return len(seen)

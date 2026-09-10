@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	rbacv1 "k8s.io/api/rbac/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -129,6 +130,40 @@ func (u *ConsoleAuthorisationUpdate) Validate() error {
 	for _, s := range add {
 		if s.Name != u.user {
 			err = multierror.Append(err, errors.New("only the current user can be added as an authoriser"))
+			break
+		}
+	}
+
+	// An authorisation records an authenticated Kubernetes user, so the subject
+	// must say so. Authorising subjects are copied verbatim into the console's
+	// attach DirectoryRoleBinding, where the kind decides how the name is
+	// interpreted - a GoogleGroup subject, for example, is expanded into that
+	// group's members - so a non-User kind would grant attach access to
+	// identities that never authenticated.
+	for _, s := range add {
+		if s.Kind != rbacv1.UserKind {
+			err = multierror.Append(err, errors.Errorf("an authoriser must be a %s subject, got %q", rbacv1.UserKind, s.Kind))
+			break
+		}
+
+		// An empty apiGroup is defaulted to the RBAC group for User subjects,
+		// and is what the theatre-consoles CLI sends.
+		if s.APIGroup != "" && s.APIGroup != rbacv1.GroupName {
+			err = multierror.Append(err, errors.Errorf("an authoriser must belong to the %q apiGroup, got %q", rbacv1.GroupName, s.APIGroup))
+			break
+		}
+	}
+
+	// Name is the only part of a Subject that is tied to the authenticated
+	// identity. Namespace is not checked at all - it is meaningless for User
+	// subjects, and the theatre-consoles CLI sets it to the console's
+	// namespace - so it must not be usable to make the same approver count as
+	// more than one authoriser. Reject the update outright if this user
+	// already appears in the existing authorisations, whatever the other
+	// fields of those entries say.
+	for _, s := range u.existingAuth.Spec.Authorisations {
+		if s.Name == u.user {
+			err = multierror.Append(err, errors.New("this user has already authorised the console"))
 			break
 		}
 	}

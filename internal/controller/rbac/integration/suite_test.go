@@ -8,7 +8,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -24,6 +23,12 @@ import (
 var (
 	mgr     ctrl.Manager
 	testEnv *envtest.Environment
+	// Suite scoped, so AfterSuite can shut the manager down. Do not use
+	// ctrl.SetupSignalHandler() here: it is only cancelled by SIGINT/SIGTERM,
+	// which a normal `go test` exit never sends, leaving the manager running and
+	// the envtest etcd/kube-apiserver processes stranded.
+	ctx    context.Context
+	cancel context.CancelFunc
 )
 
 func TestSuite(t *testing.T) {
@@ -34,6 +39,8 @@ func TestSuite(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	ctx, cancel = context.WithCancel(context.Background())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -74,7 +81,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&directoryrolebinding.DirectoryRoleBindingReconciler{
 		Client:          mgr.GetClient(),
-		Ctx:             context.TODO(),
+		Ctx:             ctx,
 		Log:             ctrl.Log.WithName("controllers").WithName("DirectoryRoleBinding"),
 		Provider:        provider,
 		RefreshInterval: time.Duration(0), // don't test our caching/re-enqueue here
@@ -84,11 +91,15 @@ var _ = BeforeSuite(func() {
 
 	go func() {
 		defer GinkgoRecover()
-		err = mgr.Start(ctrl.SetupSignalHandler())
+		err := mgr.Start(ctx)
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
-		gexec.KillAndWait(4 * time.Second)
-		err := testEnv.Stop()
-		Expect(err).ToNot(HaveOccurred())
 	}()
 
+})
+
+var _ = AfterSuite(func() {
+	cancel()
+	By("tearing down the test environment")
+	err := testEnv.Stop()
+	Expect(err).ToNot(HaveOccurred())
 })

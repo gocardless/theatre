@@ -32,10 +32,14 @@ import (
 var (
 	app         = kingpin.New("acceptance", "Acceptance test suite for theatre").Version("0.0.0")
 	clusterName = app.Flag("cluster-name", "Name of Kubernetes context to against").Default("e2e").String()
-	logger      = kitlog.NewLogfmtLogger(os.Stderr)
+
+	// Mirrors CONTAINER_TOOL in the Makefile. Anything docker CLI compatible
+	// works. Setting this also passes it to kind (see kindCommand).
+	containerTool = app.Flag("container-tool", "Container tool used to build and inspect images (docker, podman)").Envar("CONTAINER_TOOL").Default("docker").String()
+	logger        = kitlog.NewLogfmtLogger(os.Stderr)
 
 	prepare              = app.Command("prepare", "Creates test Kubernetes cluster and other resources")
-	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("theatre:latest").String()
+	prepareImage         = prepare.Flag("image", "Docker image tag used for exchanging test images").Default("localhost/theatre:latest").String()
 	prepareConfigFile    = prepare.Flag("config-file", "Path to Kind config file").Default("kind-e2e.yaml").ExistingFile()
 	prepareDockerfile    = prepare.Flag("dockerfile", "Path to acceptance dockerfile").Default("Dockerfile").ExistingFile()
 	prepareKindNodeImage = prepare.Flag("kind-node-image", "Kind Node Image").Default("kindest/node:v1.32.2").String()
@@ -77,7 +81,7 @@ func main() {
 	case prepare.FullCommand():
 		logger = kitlog.With(logger, "clusterName", *clusterName)
 
-		clusters, err := exec.CommandContext(ctx, "kind", "get", "clusters").CombinedOutput()
+		clusters, err := kindCommand(ctx, "get", "clusters").CombinedOutput()
 		if err != nil {
 			app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
 		}
@@ -92,8 +96,8 @@ func main() {
 				logLevel = 5
 			}
 
-			if err = pipeOutput(exec.CommandContext(ctx,
-				"kind", "create", "cluster", "--name", *clusterName,
+			if err = pipeOutput(kindCommand(ctx,
+				"create", "cluster", "--name", *clusterName,
 				"--config", *prepareConfigFile, "--image", *prepareKindNodeImage,
 				"--verbosity", fmt.Sprintf("%d", logLevel))).Run(); err != nil {
 				app.Fatalf("failed to create kubernetes cluster with kind: %v", err)
@@ -101,22 +105,22 @@ func main() {
 		}
 
 		controlPlaneIDBytes, err := exec.CommandContext(
-			ctx, "docker", "ps", "--filter", fmt.Sprintf("name=%s-control-plane", *clusterName), "--format", "{{.ID}}",
+			ctx, *containerTool, "ps", "--filter", fmt.Sprintf("name=%s-control-plane", *clusterName), "--format", "{{.ID}}",
 		).Output()
 		controlPlaneID := string(bytes.TrimSpace(controlPlaneIDBytes))
 		if controlPlaneID == "" || err != nil {
 			app.Fatalf("failed to find control plane container: %v", err)
 		}
 
-		logger.Log("msg", "preparing acceptance docker image")
-		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", *prepareImage, "-f", *prepareDockerfile, path.Dir(*prepareDockerfile))
+		logger.Log("msg", "preparing acceptance image", "containerTool", *containerTool)
+		buildCmd := exec.CommandContext(ctx, *containerTool, "build", "-t", *prepareImage, "-f", *prepareDockerfile, path.Dir(*prepareDockerfile))
 
 		if err := pipeOutput(buildCmd).Run(); err != nil {
-			app.Fatalf("failed to build acceptance docker image: %v", err)
+			app.Fatalf("failed to build acceptance image: %v", err)
 		}
 
-		logger.Log("msg", "loading docker image into control plane", "controlPlane", controlPlaneID)
-		loadCmd := exec.CommandContext(ctx, "kind", "load", "docker-image", "--name", *clusterName, *prepareImage)
+		logger.Log("msg", "loading image into control plane", "controlPlane", controlPlaneID)
+		loadCmd := kindCommand(ctx, "load", "docker-image", "--name", *clusterName, *prepareImage)
 		if err := pipeOutput(loadCmd).Run(); err != nil {
 			app.Fatalf("failed to load image into control plane: %v", err)
 		}
@@ -201,7 +205,7 @@ func main() {
 	case destroy.FullCommand():
 		logger = kitlog.With(logger, "clusterName", *clusterName)
 
-		_, err := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", *clusterName).CombinedOutput()
+		_, err := kindCommand(ctx, "delete", "cluster", "--name", *clusterName).CombinedOutput()
 		if err != nil {
 			app.Fatalf("failed to destroy kubernetes cluster with kind: %v", err)
 		}
@@ -258,6 +262,23 @@ func mustClusterConfig() *rest.Config {
 	}
 
 	return cfg
+}
+
+// kindCommand builds a kind invocation, selecting the container provider that
+// matches --container-tool.
+//
+// kind defaults to docker. Unset or unrecognized value warns and falls back to
+// auto-detection. Existing value is preserved if already set.
+func kindCommand(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "kind", args...)
+
+	if _, ok := os.LookupEnv("KIND_EXPERIMENTAL_PROVIDER"); !ok {
+		if provider := path.Base(*containerTool); provider != "docker" {
+			cmd.Env = append(os.Environ(), fmt.Sprintf("KIND_EXPERIMENTAL_PROVIDER=%s", provider))
+		}
+	}
+
+	return cmd
 }
 
 func pipeOutput(cmd *exec.Cmd) *exec.Cmd {

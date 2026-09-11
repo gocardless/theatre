@@ -8,6 +8,14 @@ bases:
 resources:
   - resources/google-application-credentials.yaml
 
+# Use fully qualified image names to prevent conflicts where short name
+# `theatre:latest` gets interpreted differently by podman/docker/containerd.
+# Keep in sync with the `--image` default in cmd/acceptance/main.go.
+images:
+  - name: eu.gcr.io/gc-containers/gocardless/theatre
+    newName: localhost/theatre
+    newTag: latest
+
 patchesStrategicMerge:
   - overlays/rbac-manager.yaml
   - overlays/vault-manager.yaml

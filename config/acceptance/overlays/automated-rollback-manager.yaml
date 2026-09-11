@@ -19,7 +19,6 @@ spec:
             - /usr/local/bin/automated-rollback-manager
           args:
             - --metrics-address=0.0.0.0
-          image: theatre:latest
           imagePullPolicy: Never
           name: manager
           resources:

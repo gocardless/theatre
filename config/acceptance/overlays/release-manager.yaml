@@ -20,7 +20,6 @@ spec:
           args:
             - --metrics-address=0.0.0.0
             - --enable-argo-rollouts-analysis
-          image: theatre:latest
           imagePullPolicy: Never
           name: manager
           resources:

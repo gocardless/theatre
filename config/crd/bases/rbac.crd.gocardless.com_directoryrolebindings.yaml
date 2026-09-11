@@ -59,6 +59,9 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: RoleRef is immutable
+                  rule: self == oldSelf
               subjects:
                 items:
                   description: |-

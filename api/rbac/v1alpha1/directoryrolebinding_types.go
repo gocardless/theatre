@@ -8,7 +8,9 @@ import (
 // DirectoryRoleBindingSpec defines the desired state of DirectoryRoleBinding
 type DirectoryRoleBindingSpec struct {
 	Subjects []rbacv1.Subject `json:"subjects"`
-	RoleRef  rbacv1.RoleRef   `json:"roleRef"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoleRef is immutable"
+	RoleRef rbacv1.RoleRef `json:"roleRef"`
 }
 
 // DirectoryRoleBindingStatus defines the observed state of DirectoryRoleBinding

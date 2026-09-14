@@ -143,5 +143,56 @@ var _ = Describe("Reconciler", func() {
 				),
 			)
 		})
+
+		It("Does not modify RoleBindings it does not control", func() {
+			By("Creating a RoleBinding that is not owned by any DirectoryRoleBinding")
+			foreign := &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bar",
+					Namespace: namespaceName,
+				},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: rbacv1.GroupName,
+					Kind:     "Role",
+					Name:     "admin",
+				},
+				Subjects: []rbacv1.Subject{newUser("incumbent@gocardless.com")},
+			}
+
+			Expect(mgr.GetClient().Create(context.TODO(), foreign)).NotTo(
+				HaveOccurred(), "failed to create foreign RoleBinding",
+			)
+
+			By("Creating a DirectoryRoleBinding that collides with the foreign RoleBinding")
+			drb := &rbacv1alpha1.DirectoryRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bar",
+					Namespace: namespaceName,
+				},
+				Spec: rbacv1alpha1.DirectoryRoleBindingSpec{
+					Subjects: []rbacv1.Subject{newGoogleGroup("platform@gocardless.com")},
+					RoleRef: rbacv1.RoleRef{
+						APIGroup: rbacv1.GroupName,
+						Kind:     "Role",
+						Name:     "admin",
+					},
+				},
+			}
+
+			Expect(mgr.GetClient().Create(context.TODO(), drb)).NotTo(
+				HaveOccurred(), "failed to create 'bar' DirectoryRoleBinding",
+			)
+
+			By("Verify the foreign RoleBinding subjects are left untouched")
+			rb := &rbacv1.RoleBinding{}
+			identifier := client.ObjectKeyFromObject(drb)
+
+			Consistently(func() []rbacv1.Subject {
+				Expect(mgr.GetClient().Get(context.TODO(), identifier, rb)).NotTo(HaveOccurred())
+				return rb.Subjects
+			}).Should(ConsistOf(newUser("incumbent@gocardless.com")))
+
+			Expect(rb.OwnerReferences).To(BeEmpty(), "foreign RoleBinding should not be adopted")
+		})
 	})
 })

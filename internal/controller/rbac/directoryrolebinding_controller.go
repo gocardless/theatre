@@ -43,6 +43,7 @@ import (
 const (
 	EventRoleBindingCreated = "Created"
 	EventError              = "Error"
+	EventNotOwned           = "NotOwned"
 	EventSubjectAdd         = "SubjectAdd"
 	EventSubjectRemove      = "SubjectRemove"
 	EventSubjectsModified   = "SubjectsModified"
@@ -65,7 +66,7 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 	err = r.Get(r.Ctx, identifier, rb)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return reconcile.Result{}, fmt.Errorf("failed to get DirectoryRoleBinding: %w", err)
+			return reconcile.Result{}, fmt.Errorf("failed to get RoleBinding: %w", err)
 		}
 
 		rb = &rbacv1.RoleBinding{
@@ -89,6 +90,17 @@ func (r *DirectoryRoleBindingReconciler) ReconcileObject(logger logr.Logger, req
 		r.Log.Info(
 			fmt.Sprintf("Created RoleBinding: %s", identifier),
 			"event", EventRoleBindingCreated,
+		)
+	}
+
+	if !metav1.IsControlledBy(rb, drb) {
+		r.Log.Info(
+			fmt.Sprintf("RoleBinding %s is not controlled by this DirectoryRoleBinding", identifier),
+			"event", EventNotOwned,
+		)
+
+		return reconcile.Result{}, fmt.Errorf(
+			"refusing to modify RoleBinding %s: not controlled by this DirectoryRoleBinding", identifier,
 		)
 	}
 

@@ -130,6 +130,70 @@ var _ = Describe("Authorisation webhook", func() {
 			})
 		})
 
+		// The theatre-consoles CLI sets the console's namespace on the subject,
+		// and a client may set the apiGroup that the API server would default.
+		// A legitimate self-append that also smuggles in a second copy of an
+		// existing approver, inflating the total without producing an extra
+		// entry in the diff.
+		Context("Adding themselves while duplicating an existing authoriser", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_smuggled_duplicate.yaml"
+			})
+
+			It("Returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("spec.authorisations field can only be appended to")))
+			})
+		})
+
+		Context("Adding a single authoriser with an explicit apiGroup and namespace", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_canonical.yaml"
+			})
+
+			It("Returns no errors", func() {
+				Expect(err).To(BeNil())
+			})
+		})
+
+		Context("Adding an authoriser as a non-User subject kind", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_group_kind.yaml"
+			})
+
+			It("Returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("an authoriser must be a User subject")))
+			})
+		})
+
+		Context("Adding an authoriser belonging to a foreign apiGroup", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_foreign_apigroup.yaml"
+			})
+
+			It("Returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("an authoriser must belong to the \"rbac.authorization.k8s.io\" apiGroup")))
+			})
+		})
+
+		Context("Adding an authoriser who has already authorised the console, using a different namespace on the Subject", func() {
+			BeforeEach(func() {
+				updateFixture = "./testdata/console_authorisation_update_add_namespace_variant.yaml"
+			})
+
+			JustBeforeEach(func() {
+				update.user = "user1"
+				err = update.Validate()
+			})
+
+			It("Returns an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("this user has already authorised the console")))
+			})
+		})
+
 		Context("Removing an existing authoriser", func() {
 			BeforeEach(func() {
 				updateFixture = "./testdata/console_authorisation_update_remove.yaml"

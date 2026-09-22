@@ -20,13 +20,11 @@ var _ = Describe("RollbackReconciler", func() {
 		testNamespace string
 		release       *deployv1alpha1.Release
 		rollback      *deployv1alpha1.Rollback
-		k8sClient     client.Client
 	)
 
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
 		release = createRelease(ctx, testNamespace, "default-target", nil)
-		k8sClient = rollbackMgr.GetClient()
 	})
 
 	Describe("Basic rollback flow", func() {
@@ -136,7 +134,7 @@ var _ = Describe("RollbackReconciler", func() {
 				return cond != nil && cond.Status == metav1.ConditionFalse &&
 					inProgressCond != nil && inProgressCond.Status == metav1.ConditionFalse &&
 					rb.Status.AttemptCount >= 3 && rb.Status.CompletionTime != nil
-			}, "5s", "100ms").Should(BeTrue())
+			}).Should(BeTrue())
 		})
 
 		It("fails immediately on non-retryable error", func() {
@@ -222,7 +220,7 @@ var _ = Describe("RollbackReconciler", func() {
 				return cond != nil && cond.Status == metav1.ConditionFalse &&
 					inProgressCond != nil && inProgressCond.Status == metav1.ConditionFalse &&
 					rb.Status.CompletionTime != nil && strings.Contains(rb.Status.Message, "not found")
-			}, "1s", "100ms").Should(BeTrue())
+			}).Should(BeTrue())
 		})
 	})
 })

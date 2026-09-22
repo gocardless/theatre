@@ -17,12 +17,10 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 		testNamespace string
 		policy        *deployv1alpha1.AutomatedRollbackPolicy
 		targetName    string
-		k8sClient     client.Client
 	)
 
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
-		k8sClient = releaseMgr.GetClient()
 		targetName = generateTargetName()
 		policy = generatePolicy(testNamespace, targetName, nil)
 	})
@@ -35,8 +33,8 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not trigger rollback even if release meets trigger condition", func() {
-				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				createActiveReleaseWithRollbackRequired(testNamespace, targetName)
+				expectNoRollbackCreated(testNamespace)
 			})
 
 			It("should set Active condition to False with reason SetByUser", func() {
@@ -85,12 +83,12 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				release = createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
+				release = createActiveReleaseWithRollbackRequired(testNamespace, targetName)
 			})
 
 			It("should create a Rollback with correct spec and initiatedBy", func() {
 				By("Waiting for Rollback to be created")
-				rollback := expectRollbackCreated(k8sClient, testNamespace)
+				rollback := expectRollbackCreated(testNamespace)
 
 				By("Verifying Rollback spec")
 				Expect(rollback.Spec.ToReleaseRef.Target).To(Equal(targetName))
@@ -102,7 +100,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 
 			It("should update policy status with lastAutomatedRollbackTime", func() {
 				By("Waiting for Rollback to be created")
-				expectRollbackCreated(k8sClient, testNamespace)
+				expectRollbackCreated(testNamespace)
 
 				By("Verifying policy status is updated")
 				Eventually(func(g Gomega) {
@@ -176,7 +174,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 					}
 					cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
 					return cond != nil && cond.Status == metav1.ConditionTrue
-				}, "2s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 
@@ -207,12 +205,12 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
+				createActiveReleaseWithRollbackRequired(testNamespace, targetName)
 			})
 
 			It("should pass deploymentOptions from policy to rollback", func() {
 				By("Waiting for Rollback to be created")
-				rollback := expectRollbackCreated(k8sClient, testNamespace)
+				rollback := expectRollbackCreated(testNamespace)
 
 				By("Verifying deploymentOptions are passed to rollback")
 				Expect(rollback.Spec.DeploymentOptions).To(HaveKey("skip_canary"))
@@ -287,7 +285,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 					rollbackList := &deployv1alpha1.RollbackList{}
 					Expect(k8sClient.List(ctx, rollbackList, client.InNamespace(testNamespace))).To(Succeed())
 					return len(rollbackList.Items)
-				}, "2s", "200ms").Should(Equal(1))
+				}).Should(Equal(1))
 			})
 		})
 
@@ -298,7 +296,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not create a Rollback", func() {
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				expectNoRollbackCreated(testNamespace)
 			})
 		})
 
@@ -328,7 +326,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not create a Rollback", func() {
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				expectNoRollbackCreated(testNamespace)
 			})
 		})
 	})
@@ -338,7 +336,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 
 // createActiveReleaseWithRollbackRequired creates an active release and sets the RollbackRequired=True condition.
 // It waits for the release to be active and for the condition to be set before returning.
-func createActiveReleaseWithRollbackRequired(k8sClient client.Client, namespace, targetName string) *deployv1alpha1.Release {
+func createActiveReleaseWithRollbackRequired(namespace, targetName string) *deployv1alpha1.Release {
 	By("Creating an active release")
 	release := createRelease(ctx, namespace, targetName, map[string]string{
 		deployv1alpha1.AnnotationKeyReleaseActivate: deployv1alpha1.AnnotationValueReleaseActivateTrue,
@@ -376,7 +374,7 @@ func createActiveReleaseWithRollbackRequired(k8sClient client.Client, namespace,
 }
 
 // expectRollbackCreated waits for a Rollback to be created in the namespace and returns it.
-func expectRollbackCreated(k8sClient client.Client, namespace string) *deployv1alpha1.Rollback {
+func expectRollbackCreated(namespace string) *deployv1alpha1.Rollback {
 	var rollback *deployv1alpha1.Rollback
 	Eventually(func() bool {
 		rollbackList := &deployv1alpha1.RollbackList{}
@@ -393,13 +391,13 @@ func expectRollbackCreated(k8sClient client.Client, namespace string) *deployv1a
 }
 
 // expectNoRollbackCreated verifies that no Rollback resources are created in the namespace.
-func expectNoRollbackCreated(k8sClient client.Client, namespace string) {
+func expectNoRollbackCreated(namespace string) {
 	By("Verifying no Rollback is created")
 	Consistently(func() int {
 		rollbackList := &deployv1alpha1.RollbackList{}
 		Expect(k8sClient.List(ctx, rollbackList, client.InNamespace(namespace))).To(Succeed())
 		return len(rollbackList.Items)
-	}, "2s", "200ms").Should(Equal(0))
+	}).Should(Equal(0))
 }
 
 func generatePolicy(namespace, targetName string, opts map[string]apiextv1.JSON) *deployv1alpha1.AutomatedRollbackPolicy {

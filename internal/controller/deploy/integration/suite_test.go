@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/internal/controller/deploy"
 	"github.com/gocardless/theatre/v5/pkg/cicd"
@@ -241,17 +240,17 @@ func setupTestNamespace(ctx context.Context) string {
 	return ns.Name
 }
 
-func generateRelease(namespace string, target string) *v1alpha1.Release {
+func generateRelease(namespace string, target string) *deployv1alpha1.Release {
 	appSHA := generateCommitSHA()
 	infraSHA := generateCommitSHA()
-	return &v1alpha1.Release{
+	return &deployv1alpha1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: target + "-",
 			Namespace:    namespace,
 		},
-		ReleaseConfig: v1alpha1.ReleaseConfig{
+		ReleaseConfig: deployv1alpha1.ReleaseConfig{
 			TargetName: target,
-			Revisions: []v1alpha1.Revision{
+			Revisions: []deployv1alpha1.Revision{
 				{Name: "application-revision", ID: appSHA},
 				{Name: "infrastructure-revision", ID: infraSHA},
 			},
@@ -259,7 +258,7 @@ func generateRelease(namespace string, target string) *v1alpha1.Release {
 	}
 }
 
-func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *v1alpha1.Release {
+func createRelease(ctx context.Context, namespace string, target string, annotations map[string]string) *deployv1alpha1.Release {
 	release := generateRelease(namespace, target)
 	release.Annotations = annotations
 	Expect(k8sClient.Create(ctx, release)).To(Succeed())

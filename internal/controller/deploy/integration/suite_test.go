@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -58,7 +59,12 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "config", "crd", "bases"),
+			// AnalysisRun/AnalysisTemplate/ClusterAnalysisTemplate are owned by Argo
+			// Rollouts, so their CRDs are vendored under config/crd/external.
+			filepath.Join("..", "..", "..", "..", "config", "crd", "external"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -70,6 +76,8 @@ var _ = BeforeSuite(func() {
 	err = clientgoscheme.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = deployv1alpha1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = analysisv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
@@ -117,6 +125,9 @@ var _ = BeforeSuite(func() {
 		Client: releaseMgr.GetClient(),
 		Scheme: releaseMgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Release"),
+		// Automated rollbacks are only supported alongside analysis: nothing
+		// else sets the RollbackRequired condition.
+		AnalysisEnabled: true,
 	}).SetupWithManager(ctx, releaseMgr)
 	Expect(err).NotTo(HaveOccurred())
 

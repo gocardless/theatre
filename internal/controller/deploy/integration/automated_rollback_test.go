@@ -152,7 +152,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(BeTrue())
 
 				By("Creating a new active release")
-				newRelease := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, true)
+				newRelease := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, nil, true)
 
 				By("Letting the new release's analysis succeed")
 				completeReleaseAnalysis(testNamespace, newRelease, analysisv1alpha1.AnalysisPhaseSuccessful)
@@ -228,7 +228,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release without trigger condition first")
-				release := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, true)
+				release := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, nil, true)
 
 				By("Creating existing rollback with owner reference to release")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), release)).To(Succeed())
@@ -319,7 +319,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 // production. It returns once the condition is observed.
 func createActiveReleaseWithRollbackRequired(namespace, targetName string, labels map[string]string) *deployv1alpha1.Release {
 	By("Creating an active release")
-	release := createAnalysisRelease(ctx, namespace, targetName, labels, true)
+	release := createAnalysisRelease(ctx, namespace, targetName, labels, nil, true)
 
 	By("Failing the release's analysis")
 	completeReleaseAnalysis(namespace, release, analysisv1alpha1.AnalysisPhaseFailed)

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -17,14 +18,21 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 		testNamespace string
 		policy        *deployv1alpha1.AutomatedRollbackPolicy
 		targetName    string
-		k8sClient     client.Client
+		// releaseLabels select the AnalysisTemplate below. Automated rollbacks
+		// are only supported with analysis enabled, so every release here is
+		// analysed, and its RollbackRequired condition comes from a mocked
+		// AnalysisRun.
+		releaseLabels map[string]string
 	)
 
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
-		k8sClient = releaseMgr.GetClient()
 		targetName = generateTargetName()
 		policy = generatePolicy(testNamespace, targetName, nil)
+		releaseLabels = map[string]string{"app": targetName}
+
+		createAnalysisTemplate(ctx, testNamespace, "rollback-template", releaseLabels,
+			map[string]string{"health": "true", "rollback": "true"})
 	})
 
 	Describe("Policy evaluation", func() {
@@ -35,8 +43,8 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not trigger rollback even if release meets trigger condition", func() {
-				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				createActiveReleaseWithRollbackRequired(testNamespace, targetName, releaseLabels)
+				expectNoRollbackCreated(testNamespace)
 			})
 
 			It("should set Active condition to False with reason SetByUser", func() {
@@ -85,12 +93,12 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				release = createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
+				release = createActiveReleaseWithRollbackRequired(testNamespace, targetName, releaseLabels)
 			})
 
 			It("should create a Rollback with correct spec and initiatedBy", func() {
 				By("Waiting for Rollback to be created")
-				rollback := expectRollbackCreated(k8sClient, testNamespace)
+				rollback := expectRollbackCreated(testNamespace)
 
 				By("Verifying Rollback spec")
 				Expect(rollback.Spec.ToReleaseRef.Target).To(Equal(targetName))
@@ -102,7 +110,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 
 			It("should update policy status with lastAutomatedRollbackTime", func() {
 				By("Waiting for Rollback to be created")
-				expectRollbackCreated(k8sClient, testNamespace)
+				expectRollbackCreated(testNamespace)
 
 				By("Verifying policy status is updated")
 				Eventually(func(g Gomega) {
@@ -144,29 +152,14 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(BeTrue())
 
 				By("Creating a new active release")
-				newRelease := createRelease(ctx, testNamespace, targetName, map[string]string{
-					deployv1alpha1.AnnotationKeyReleaseActivate: "true",
-				})
-				By("Waiting for new release to be active")
-				Eventually(func() bool {
-					r := &deployv1alpha1.Release{}
-					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(newRelease), r); err != nil {
-						return false
-					}
+				newRelease := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, nil, true)
 
-					return r.IsConditionActiveTrue()
-				}).Should(BeTrue())
+				By("Letting the new release's analysis succeed")
+				completeReleaseAnalysis(testNamespace, newRelease, analysisv1alpha1.AnalysisPhaseSuccessful)
 
-				By("Setting the RollbackRequired=false")
-				// refetch the release
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(newRelease), newRelease)).To(Succeed())
-				meta.SetStatusCondition(&newRelease.Status.Conditions, metav1.Condition{
-					Type:    deployv1alpha1.ReleaseConditionRollbackRequired,
-					Status:  metav1.ConditionFalse,
-					Reason:  "AnalysisSucceeded",
-					Message: "Analysis completed successfully",
-				})
-				Expect(k8sClient.Status().Update(ctx, newRelease)).To(Succeed())
+				By("Waiting for RollbackRequired=False on the new release")
+				expectReleaseCondition(newRelease, deployv1alpha1.ReleaseConditionRollbackRequired,
+					metav1.ConditionFalse, deployv1alpha1.ReasonAnalysisSucceeded)
 
 				By("Verifying policy is re-enabled")
 				Eventually(func() bool {
@@ -176,7 +169,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 					}
 					cond := meta.FindStatusCondition(p.Status.Conditions, deployv1alpha1.AutomatedRollbackPolicyConditionActive)
 					return cond != nil && cond.Status == metav1.ConditionTrue
-				}, "2s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 
@@ -207,12 +200,12 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release with trigger condition")
-				createActiveReleaseWithRollbackRequired(k8sClient, testNamespace, targetName)
+				createActiveReleaseWithRollbackRequired(testNamespace, targetName, releaseLabels)
 			})
 
 			It("should pass deploymentOptions from policy to rollback", func() {
 				By("Waiting for Rollback to be created")
-				rollback := expectRollbackCreated(k8sClient, testNamespace)
+				rollback := expectRollbackCreated(testNamespace)
 
 				By("Verifying deploymentOptions are passed to rollback")
 				Expect(rollback.Spec.DeploymentOptions).To(HaveKey("skip_canary"))
@@ -235,18 +228,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}).Should(Succeed())
 
 				By("Creating active release without trigger condition first")
-				release := createRelease(ctx, testNamespace, targetName, map[string]string{
-					deployv1alpha1.AnnotationKeyReleaseActivate: deployv1alpha1.AnnotationValueReleaseActivateTrue,
-				})
-
-				By("Waiting for release to be active")
-				Eventually(func() bool {
-					r := &deployv1alpha1.Release{}
-					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(release), r); err != nil {
-						return false
-					}
-					return r.IsConditionActiveTrue()
-				}).Should(BeTrue())
+				release := createAnalysisRelease(ctx, testNamespace, targetName, releaseLabels, nil, true)
 
 				By("Creating existing rollback with owner reference to release")
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), release)).To(Succeed())
@@ -271,14 +253,10 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 				}
 				Expect(k8sClient.Create(ctx, existingRollback)).To(Succeed())
 
-				By("Setting RollbackRequired=True condition on the release to trigger reconciliation")
-				meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
-					Type:    deployv1alpha1.ReleaseConditionRollbackRequired,
-					Status:  metav1.ConditionTrue,
-					Reason:  deployv1alpha1.ReasonAnalysisFailed,
-					Message: "Health check failed",
-				})
-				Expect(k8sClient.Status().Update(ctx, release)).To(Succeed())
+				By("Failing the release's analysis, setting RollbackRequired=True")
+				completeReleaseAnalysis(testNamespace, release, analysisv1alpha1.AnalysisPhaseFailed)
+				expectReleaseCondition(release, deployv1alpha1.ReleaseConditionRollbackRequired,
+					metav1.ConditionTrue, deployv1alpha1.ReasonAnalysisFailed)
 			})
 
 			It("should not create another Rollback", func() {
@@ -287,7 +265,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 					rollbackList := &deployv1alpha1.RollbackList{}
 					Expect(k8sClient.List(ctx, rollbackList, client.InNamespace(testNamespace))).To(Succeed())
 					return len(rollbackList.Items)
-				}, "2s", "200ms").Should(Equal(1))
+				}).Should(Equal(1))
 			})
 		})
 
@@ -298,7 +276,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not create a Rollback", func() {
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				expectNoRollbackCreated(testNamespace)
 			})
 		})
 
@@ -328,7 +306,7 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 			})
 
 			It("should not create a Rollback", func() {
-				expectNoRollbackCreated(k8sClient, testNamespace)
+				expectNoRollbackCreated(testNamespace)
 			})
 		})
 	})
@@ -336,47 +314,32 @@ var _ = Describe("AutomatedRollbackReconciler", func() {
 
 // Helper functions
 
-// createActiveReleaseWithRollbackRequired creates an active release and sets the RollbackRequired=True condition.
-// It waits for the release to be active and for the condition to be set before returning.
-func createActiveReleaseWithRollbackRequired(k8sClient client.Client, namespace, targetName string) *deployv1alpha1.Release {
+// createActiveReleaseWithRollbackRequired creates an active, analysed release
+// and fails its AnalysisRun, which is what sets RollbackRequired=True in
+// production. It returns once the condition is observed.
+func createActiveReleaseWithRollbackRequired(namespace, targetName string, labels map[string]string) *deployv1alpha1.Release {
 	By("Creating an active release")
-	release := createRelease(ctx, namespace, targetName, map[string]string{
-		deployv1alpha1.AnnotationKeyReleaseActivate: deployv1alpha1.AnnotationValueReleaseActivateTrue,
-	})
+	release := createAnalysisRelease(ctx, namespace, targetName, labels, nil, true)
 
-	By("Waiting for release to be active")
-	Eventually(func() bool {
-		r := &deployv1alpha1.Release{}
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(release), r); err != nil {
-			return false
-		}
-		return r.IsConditionActiveTrue()
-	}).Should(BeTrue())
-
-	By("Setting RollbackRequired=True condition on the release")
-	Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), release)).To(Succeed())
-	meta.SetStatusCondition(&release.Status.Conditions, metav1.Condition{
-		Type:    deployv1alpha1.ReleaseConditionRollbackRequired,
-		Status:  metav1.ConditionTrue,
-		Reason:  deployv1alpha1.ReasonAnalysisFailed,
-		Message: "Health check failed",
-	})
-	Expect(k8sClient.Status().Update(ctx, release)).To(Succeed())
+	By("Failing the release's analysis")
+	completeReleaseAnalysis(namespace, release, analysisv1alpha1.AnalysisPhaseFailed)
 
 	By("Verifying the RollbackRequired condition was set")
-	Eventually(func() bool {
-		r := &deployv1alpha1.Release{}
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(release), r); err != nil {
-			return false
-		}
-		return meta.IsStatusConditionTrue(r.Status.Conditions, deployv1alpha1.ReleaseConditionRollbackRequired)
-	}).Should(BeTrue())
+	expectReleaseCondition(release, deployv1alpha1.ReleaseConditionRollbackRequired,
+		metav1.ConditionTrue, deployv1alpha1.ReasonAnalysisFailed)
 
 	return release
 }
 
+// completeReleaseAnalysis waits for the release's AnalysisRun to be created by
+// the release controller, then drives it to a terminal phase.
+func completeReleaseAnalysis(namespace string, release *deployv1alpha1.Release, phase analysisv1alpha1.AnalysisPhase) {
+	run := awaitAnalysisRuns(namespace, release, 1)[0]
+	setAnalysisRunPhase(ctx, &run, phase)
+}
+
 // expectRollbackCreated waits for a Rollback to be created in the namespace and returns it.
-func expectRollbackCreated(k8sClient client.Client, namespace string) *deployv1alpha1.Rollback {
+func expectRollbackCreated(namespace string) *deployv1alpha1.Rollback {
 	var rollback *deployv1alpha1.Rollback
 	Eventually(func() bool {
 		rollbackList := &deployv1alpha1.RollbackList{}
@@ -393,13 +356,13 @@ func expectRollbackCreated(k8sClient client.Client, namespace string) *deployv1a
 }
 
 // expectNoRollbackCreated verifies that no Rollback resources are created in the namespace.
-func expectNoRollbackCreated(k8sClient client.Client, namespace string) {
+func expectNoRollbackCreated(namespace string) {
 	By("Verifying no Rollback is created")
 	Consistently(func() int {
 		rollbackList := &deployv1alpha1.RollbackList{}
 		Expect(k8sClient.List(ctx, rollbackList, client.InNamespace(namespace))).To(Succeed())
 		return len(rollbackList.Items)
-	}, "2s", "200ms").Should(Equal(0))
+	}).Should(Equal(0))
 }
 
 func generatePolicy(namespace, targetName string, opts map[string]apiextv1.JSON) *deployv1alpha1.AutomatedRollbackPolicy {

@@ -281,6 +281,13 @@ func parseAnalysisResults(analysisList []analysisv1alpha1.AnalysisRun) map[analy
 	}
 
 	for _, v := range analysisList {
+		// A freshly created AnalysisRun has an empty phase until it is picked up
+		// by the controller. Treat this as a pending run
+		if v.Status.Phase == "" {
+			out[analysisv1alpha1.AnalysisPhasePending] = append(out[analysisv1alpha1.AnalysisPhasePending], v.Name)
+			continue
+		}
+
 		out[v.Status.Phase] = append(out[v.Status.Phase], v.Name)
 	}
 
@@ -376,6 +383,11 @@ func createAnalysisRun(release *deployv1alpha1.Release, template runtime.Object)
 	}
 
 	finalLabels := maps.Clone(release.GetLabels())
+
+	if finalLabels == nil {
+		finalLabels = map[string]string{}
+	}
+
 	if healthLabel, found := templateLabels["health"]; found {
 		finalLabels["health"] = healthLabel
 	}

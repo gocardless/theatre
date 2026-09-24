@@ -2,14 +2,11 @@ package integration
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"time"
 
 	"github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
-	deploy "github.com/gocardless/theatre/v5/internal/controller/deploy"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -23,13 +20,11 @@ var _ = Describe("ReleaseController", func() {
 	var (
 		testNamespace  string
 		defaultRelease *v1alpha1.Release
-		k8sClient      client.Client
 	)
 
 	BeforeEach(func() {
 		testNamespace = setupTestNamespace(ctx)
 		defaultRelease = createRelease(ctx, testNamespace, "default-target", nil)
-		k8sClient = releaseMgr.GetClient()
 	})
 
 	Context("handleAnnotations", func() {
@@ -47,7 +42,7 @@ var _ = Describe("ReleaseController", func() {
 					return fmt.Errorf("release hasn't been initialised by the reconciler")
 				}
 				return nil
-			}, "5s", "100ms").Should(Succeed())
+			}).Should(Succeed())
 		})
 
 		Context("AnnotationKeyReleaseDeploymentStartTime", func() {
@@ -65,7 +60,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentStartTime.Unix() == metav1Timestamp.Unix()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should clear status.deploymentStartTime when annotation is removed", func() {
@@ -81,7 +76,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return !updatedObj.Status.DeploymentStartTime.IsZero()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 
 				By("Removing the annotation")
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)).To(Succeed())
@@ -92,7 +87,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentStartTime.IsZero()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should not update status.deploymentStartTime when annotation has invalid timestamp", func() {
@@ -106,7 +101,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentStartTime.IsZero()
-				}, "2s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 
@@ -125,7 +120,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentEndTime.Unix() == metav1Timestamp.Unix()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should clear status.deploymentEndTime when annotation is removed", func() {
@@ -141,7 +136,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return !updatedObj.Status.DeploymentEndTime.IsZero()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 
 				By("Removing the annotation")
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)).To(Succeed())
@@ -152,7 +147,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentEndTime.IsZero()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should not update status.deploymentEndTime when annotation has invalid timestamp", func() {
@@ -166,7 +161,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.DeploymentEndTime.IsZero()
-				}, "2s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 
@@ -182,7 +177,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.IsConditionActiveTrue()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should set status.conditions.active to false when annotation is removed", func() {
@@ -196,7 +191,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.IsConditionActiveTrue()
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 
 				By("Removing the annotation")
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)).To(Succeed())
@@ -207,7 +202,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return meta.IsStatusConditionFalse(updatedObj.Status.Conditions, v1alpha1.ReleaseConditionActive)
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should not activate when annotation value is not 'true'", func() {
@@ -221,7 +216,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return meta.IsStatusConditionPresentAndEqual(updatedObj.Status.Conditions, v1alpha1.ReleaseConditionActive, metav1.ConditionUnknown)
-				}, "2s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 
@@ -239,7 +234,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.PreviousRelease.ReleaseRef == previousReleaseName
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 
 			It("should clear status.previousRelease.releaseRef when annotation is removed", func() {
@@ -255,7 +250,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.PreviousRelease.ReleaseRef == previousReleaseName
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 
 				By("Removing the previous release annotation")
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, fetchedRelease)).To(Succeed())
@@ -266,7 +261,7 @@ var _ = Describe("ReleaseController", func() {
 					updatedObj := &v1alpha1.Release{}
 					Expect(k8sClient.Get(ctx, client.ObjectKey{Name: defaultRelease.Name, Namespace: testNamespace}, updatedObj)).To(Succeed())
 					return updatedObj.Status.PreviousRelease.ReleaseRef == ""
-				}, "5s", "100ms").Should(BeTrue())
+				}).Should(BeTrue())
 			})
 		})
 	})
@@ -305,15 +300,11 @@ var _ = Describe("ReleaseController", func() {
 
 			// The number of releases should be 6
 			Eventually(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: targetName}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, targetName)
 			}).Should(Equal(6))
 
 			Consistently(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: targetName}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, targetName)
 			}).Should(Equal(6))
 		})
 
@@ -326,16 +317,12 @@ var _ = Describe("ReleaseController", func() {
 
 			// The number of releases of the first target should be 5
 			Eventually(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: targetName}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, targetName)
 			}).Should(Equal(5))
 
 			// The number of releases in the other target should still be 3
 			Eventually(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: otherTarget}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, otherTarget)
 			}).Should(Equal(3))
 		})
 
@@ -344,9 +331,7 @@ var _ = Describe("ReleaseController", func() {
 			createReleases(ctx, testNamespace, targetName, nil, 5)
 
 			Eventually(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: targetName}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, targetName)
 			}).Should(Equal(5))
 		})
 
@@ -358,9 +343,7 @@ var _ = Describe("ReleaseController", func() {
 
 			// The number of releases should be 5
 			Eventually(func() int {
-				releases := &v1alpha1.ReleaseList{}
-				Expect(k8sClient.List(ctx, releases, client.InNamespace(testNamespace), client.MatchingFields(map[string]string{deploy.IndexFieldReleaseTarget: targetName}))).To(Succeed())
-				return len(releases.Items)
+				return countReleases(testNamespace, targetName)
 			}).Should(Equal(5))
 
 			// The oldest release (index 0) should be deleted
@@ -388,17 +371,20 @@ func createReleases(ctx context.Context, namespace, targetName string, extraAnno
 	return ret
 }
 
-func generateTargetName() string {
-	return fmt.Sprintf("test-target-%d-%d", GinkgoParallelProcess(), testCounter.Add(1))
-}
+// countReleases returns the number of releases in the namespace belonging to
+// the given target. The test client is uncached, so it cannot use the
+// controllers' field indexes and filters client side instead.
+func countReleases(namespace, targetName string) int {
+	releases := &v1alpha1.ReleaseList{}
+	Expect(k8sClient.List(ctx, releases, client.InNamespace(namespace))).To(Succeed())
 
-func generateCommitSHA() string {
-	bytes := make([]byte, 20)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		panic(err)
+	count := 0
+	for _, release := range releases.Items {
+		if release.ReleaseConfig.TargetName == targetName {
+			count++
+		}
 	}
-	return hex.EncodeToString(bytes)
+	return count
 }
 
 func getMetaV1Timestamp(ts string) metav1.Time {

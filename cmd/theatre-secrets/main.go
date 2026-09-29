@@ -222,7 +222,10 @@ func mainError(ctx context.Context, command string) (err error) {
 				return errors.Errorf("no secret data found at Vault KV path: %s", path)
 			}
 
-			value := resp.Data["data"].(map[string]interface{})["data"].(string)
+			value, err := extractSecretValue(resp, path)
+			if err != nil {
+				return err
+			}
 			secretEnv[key] = value
 		}
 
@@ -492,4 +495,29 @@ func outcome(err error) string {
 	}
 
 	return "success"
+}
+
+// extractSecretValue safely parses a Vault KV-v2 secret response, ensuring the data
+// conforms to the expected {"data": {"data": "<string>"}} structure without panicking.
+func extractSecretValue(resp *api.Secret, path string) (string, error) {
+	if resp == nil || resp.Data == nil {
+		return "", errors.Errorf("no secret data found at Vault KV path: %s", path)
+	}
+
+	outer, ok := resp.Data["data"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("vault secret at %s: unexpected response structure (KV v1 or non-KV engine?)", path)
+	}
+
+	raw, exists := outer["data"]
+	if !exists {
+		return "", fmt.Errorf("vault secret at %s: missing inner 'data' field", path)
+	}
+
+	value, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("vault secret at %s: data field is not a string (got %T)", path, raw)
+	}
+
+	return value, nil
 }

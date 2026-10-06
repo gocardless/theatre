@@ -44,6 +44,31 @@ A console that requires authentication to proceed will stay in a
 `PendingAuthorisation` state, until the necessary authorisations have been added
 to the `ConsoleAuthorisation` object linked to this console.
 
+> **Warning:** Authorisation rules are matched against the console's `spec.command`
+> as exact strings, and that command is chosen by the user requesting the console.
+> A rule only matches the exact spelling it was written for.
+>
+> Use a **strict default with allowlist rules**: set `defaultAuthorisationRule` to
+> require approval, then use `authorisationRules` to relax it for specific, known-safe
+> commands. A command spelled any other way (an absolute path to the same binary,
+> `sh -c`, `env`, ...) falls back to the default and still requires approval.
+>
+> Do **not** use a lax default (e.g. `authorisationsRequired: 0`) with stricter rules
+> on specific commands. That is a deny-list: any other spelling of a gated command
+> matches no rule, falls through to the default and runs without approval. Rules
+> cannot enumerate every way of expressing a command, so they are not a sandbox.
+>
+> Keep allowlist rules tight:
+>
+> - Prefer exact matches. Without a trailing `**` the command must have exactly as
+>   many elements as the rule.
+> - Use `*` for a single free-form argument rather than `**`.
+> - Avoid a trailing `**` on rules that require no approval. Everything after it is
+>   passed to the program, which may treat some arguments as flags that change what
+>   it does.
+> - Never allowlist a shell or interpreter (`sh`, `bash`, `env`, `python`, ...) with
+>   a wildcard.
+
 ## Custom resources
 
 ### `ConsoleTemplate`
@@ -58,9 +83,13 @@ This will ensure that users of the console are provided with an environment
 that's consistent with the main web/worker deployments, i.e. it is using the
 same container image and has the same environment, volumes and metadata defined.
 
-See [example `ConsoleTemplate`][example-consoletemplate] object.
+See [example `ConsoleTemplate`][example-consoletemplate] object, which uses the
+recommended [authorisation rule shape](#authorised-consoles). A
+[second example][example-consoletemplate-denylist] shows a deny-list shape that
+should **not** be copied.
 
-[example-consoletemplate]: ../../../config/samples/workloads_v1alpha1_consoletemplate.yaml
+[example-consoletemplate]: ../../../config/samples/workloads_v1alpha1_consoletemplate_allowlist.yaml
+[example-consoletemplate-denylist]: ../../../config/samples/workloads_v1alpha1_consoletemplate.yaml
 
 ## `Console`
 

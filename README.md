@@ -49,6 +49,19 @@ into pods by use of annotations.
   `theatre-secrets` tool to populate a container's environment with secrets
   from Vault before executing.
 
+### [Deploy](api/deploy/v1alpha1/README.md)
+
+Provides CRDs for managing releases and rollbacks. They are used to record
+release metadata, perform rollbacks, and automatically trigger rollbacks when
+a release is unhealthy.
+
+- `Release` records a deployment event for a given target, capturing the set
+  of revisions deployed together and tracking the deployment's lifecycle.
+- `Rollback` represents a historical record of a rollback operation, rolling a
+  target back to a previously healthy `Release`.
+- `AutomatedRollbackPolicy` controls whether the operator should automatically
+  create a `Rollback` when a `Release` for a given target becomes unhealthy.
+
 ## Command line interfaces
 
 As well as Kubernetes controllers this project also contains supporting CLI

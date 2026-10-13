@@ -11,6 +11,7 @@ import (
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
 	"github.com/gocardless/theatre/v5/pkg/logging"
 	"github.com/gocardless/theatre/v5/pkg/recutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -213,7 +214,10 @@ func (r *AutomatedRollbackReconciler) Reconcile(ctx context.Context, logger logr
 func (r *AutomatedRollbackReconciler) createOrUpdate(ctx context.Context, logger logr.Logger, object client.Object, objectType string) error {
 	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, object, recutil.StatusDiff)
 	if err != nil {
-		logger.Error(err, fmt.Sprintf("failed to update %s status", objectType))
+		// Conflicts are requeued without error by recutil.ResolveAndReconcile.
+		if !apierrors.IsConflict(err) {
+			logger.Error(err, fmt.Sprintf("failed to update %s status", objectType))
+		}
 		return err
 	}
 

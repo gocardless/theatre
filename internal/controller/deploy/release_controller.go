@@ -7,6 +7,7 @@ import (
 
 	analysisv1alpha1 "github.com/akuity/kargo/api/stubs/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	deployv1alpha1 "github.com/gocardless/theatre/v5/api/deploy/v1alpha1"
@@ -100,7 +101,10 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, logger logr.Logger, r
 
 	outcome, err := recutil.CreateOrUpdate(ctx, r.Client, release, recutil.StatusDiff)
 	if err != nil {
-		logger.Error(err, "failed to update release status")
+		// Conflicts are requeued without error by recutil.ResolveAndReconcile.
+		if !apierrors.IsConflict(err) {
+			logger.Error(err, "failed to update release status")
+		}
 		return ctrl.Result{}, errors.Join(err, analysisErr)
 	}
 

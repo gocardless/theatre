@@ -5,7 +5,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -32,11 +31,6 @@ const (
 	EventError        = "ReconcileError"
 	EventComplete     = "ReconcileComplete"
 )
-
-// conflictRequeueDelay is how long to wait before retrying a reconciliation that
-// failed only because of an optimistic concurrency conflict. It gives the informer
-// cache time to catch up with the latest version of the object.
-const conflictRequeueDelay = time.Second
 
 var (
 	reconcileErrorsTotal = prometheus.NewCounterVec(
@@ -82,9 +76,11 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 				// They are not failures: we requeue the request and let the next
 				// reconciliation work from a fresher view of the object, without
 				// reporting an error, recording an event or counting it in metrics.
+				// Requeue (rather than RequeueAfter) goes through the workqueue rate
+				// limiter, keeping exponential back-off if the conflict persists.
 				if isConflictOnly(err) {
 					logging.WithNoRecord(logger).Info("Requeueing reconciliation after conflict", "event", EventRequeued, "reason", err.Error())
-					res, err = reconcile.Result{RequeueAfter: conflictRequeueDelay}, nil
+					res, err = reconcile.Result{Requeue: true}, nil //nolint:staticcheck // RequeueAfter has no back-off
 					return
 				}
 				logger.Info(err.Error(), "event", EventError, "error", err)
@@ -124,32 +120,27 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 	})
 }
 
-// isConflictOnly reports whether err is an optimistic concurrency conflict, and
-// nothing else. Errors combined with errors.Join count only if every joined error
-// is a conflict, so that other failures reported alongside a conflict still surface.
+// isConflictOnly reports whether err contains an optimistic concurrency conflict
+// and nothing else. Every branch of an errors.Join must itself be conflict-only,
+// so that other failures reported alongside a conflict still surface.
 func isConflictOnly(err error) bool {
-	// Walk the wrap chain by hand rather than relying on apierrors.IsConflict alone,
-	// which uses errors.As and would match a conflict hidden inside a joined error.
-	for err != nil {
-		if joined, ok := err.(interface{ Unwrap() []error }); ok {
-			found := false
-			for _, e := range joined.Unwrap() {
-				if e == nil {
-					continue
-				}
-				if !isConflictOnly(e) {
-					return false
-				}
-				found = true
-			}
-			return found
-		}
-		if _, ok := err.(apierrors.APIStatus); ok {
-			return apierrors.IsConflict(err)
-		}
-		err = stderrors.Unwrap(err)
+	// apierrors.IsConflict searches the whole error tree, so false means there is
+	// no conflict anywhere below this point.
+	if !apierrors.IsConflict(err) {
+		return false
 	}
-	return false
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if !isConflictOnly(e) {
+				return false
+			}
+		}
+		return true
+	}
+	if next := stderrors.Unwrap(err); next != nil {
+		return isConflictOnly(next)
+	}
+	return true
 }
 
 // DiffFunc takes two Kubernetes resources: expected and existing. Both are assumed to be

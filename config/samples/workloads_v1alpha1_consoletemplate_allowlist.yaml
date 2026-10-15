@@ -1,0 +1,64 @@
+# Recommended shape for authorisation rules: a strict default with allowlist rules.
+#
+# defaultAuthorisationRule is the baseline: any command that matches no rule requires
+# approval, however it is spelled. authorisationRules then relax that baseline for
+# specific, known-safe commands. A command spelled differently from a rule (an absolute
+# path to the same binary, `sh -c`, `env`, ...) falls back to the default and needs
+# approval, so a missed spelling fails closed.
+#
+# Keep allowlist rules tight:
+#   - Prefer exact matches. Each element is compared as an exact string, and without a
+#     trailing `**` the command must have exactly as many elements as the rule.
+#   - Use `*` to allow a single free-form argument, rather than `**`.
+#   - Avoid a trailing `**` on rules that need no approval. Everything after it is passed
+#     to the program, which may treat some arguments as flags that change what it does.
+#   - Never allowlist a shell or interpreter (sh, bash, env, python, ...) with a wildcard.
+---
+kind: ConsoleTemplate
+apiVersion: workloads.crd.gocardless.com/v1alpha1
+spec:
+  additionalAttachSubjects:
+    - kind: User
+      name: foo@example.com
+    - kind: User
+      name: bar@example.com
+  defaultTimeoutSeconds: 300
+  maxTimeoutSeconds: 300
+  defaultTtlSecondsAfterFinished: 30
+  defaultTtlSecondsBeforeRunning: 120
+  # Strict default: anything not matched by a rule below needs one approval.
+  defaultAuthorisationRule:
+    authorisationsRequired: 1
+    subjects:
+      - kind: User
+        name: bob@example.com
+  authorisationRules:
+    # Exact match: runs `hostname` with no arguments.
+    - name: show-hostname
+      matchCommandElements: ["hostname"]
+      authorisationsRequired: 0
+      subjects: []
+    # Exact match: runs `date` with no arguments.
+    - name: show-date
+      matchCommandElements: ["date"]
+      authorisationsRequired: 0
+      subjects: []
+    # `*` allows exactly one free-form argument. Avoid `**` on rules like this one.
+    - name: echo-one-argument
+      matchCommandElements: ["echo", "*"]
+      authorisationsRequired: 0
+      subjects: []
+  template:
+    spec:
+      containers:
+        - image: alpine:latest
+          name: container-name-0
+          command:
+            - sleep
+          args:
+            - "100"
+metadata:
+  name: console-template-allowlist
+  labels:
+    repo: myapp-owner-myapp-repo
+    environment: myapp-env

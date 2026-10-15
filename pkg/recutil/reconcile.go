@@ -2,6 +2,7 @@ package recutil
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"reflect"
 
@@ -72,15 +73,18 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 				// reconciled, or the controller's object cache not being up-to-date
 				// (which can occur as a result of an update in a previous
 				// reconciliation).
-				// In these cases the reconciliation will be retried, and we do not
-				// want to pollute the object's events with transient errors which have
-				// no means of avoiding.
-				if apierrors.IsConflict(errors.Cause(err)) {
-					logging.WithNoRecord(logger).Info(err.Error(), "event", EventError, "error", err)
-				} else {
-					logger.Info(err.Error(), "event", EventError, "error", err)
-					reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
+				// They are not failures: we requeue the request and let the next
+				// reconciliation work from a fresher view of the object, without
+				// reporting an error, recording an event or counting it in metrics.
+				// Requeue (rather than RequeueAfter) goes through the workqueue rate
+				// limiter, keeping exponential back-off if the conflict persists.
+				if isConflictOnly(err) {
+					logging.WithNoRecord(logger).Info("Requeueing reconciliation after conflict", "event", EventRequeued, "reason", err.Error())
+					res, err = reconcile.Result{Requeue: true}, nil //nolint:staticcheck // RequeueAfter has no back-off
+					return
 				}
+				logger.Info(err.Error(), "event", EventError, "error", err)
+				reconcileErrorsTotal.WithLabelValues(obj.GetObjectKind().GroupVersionKind().Kind).Inc()
 			} else {
 				logger.Info("Completed reconciliation", "event", EventComplete)
 			}
@@ -114,6 +118,29 @@ func ResolveAndReconcile(ctx context.Context, logger logr.Logger, mgr manager.Ma
 
 		return inner(logger, request, obj)
 	})
+}
+
+// isConflictOnly reports whether err contains an optimistic concurrency conflict
+// and nothing else. Every branch of an errors.Join must itself be conflict-only,
+// so that other failures reported alongside a conflict still surface.
+func isConflictOnly(err error) bool {
+	// apierrors.IsConflict searches the whole error tree, so false means there is
+	// no conflict anywhere below this point.
+	if !apierrors.IsConflict(err) {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if !isConflictOnly(e) {
+				return false
+			}
+		}
+		return true
+	}
+	if next := stderrors.Unwrap(err); next != nil {
+		return isConflictOnly(next)
+	}
+	return true
 }
 
 // DiffFunc takes two Kubernetes resources: expected and existing. Both are assumed to be

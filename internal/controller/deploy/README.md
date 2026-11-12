@@ -50,6 +50,17 @@ The label on an `AnalysisTemplate` controls which Release condition it feeds:
 The `pre-release-timestamp` argument, if declared in a template, is automatically populated with a
 Unix timestamp of `deploymentStartTime - 5s` to ensure that the analysis for `RollbackRequired` condition is ran against the state before the deployment.
 
+> [!NOTE]
+> The controller only creates `AnalysisRun` resource. Populating the
+> `.status` fields of `AnalysisRun` resource must be set by another controller,
+> normally, argo-rollouts.
+
+> [!CAUTION]
+> `AnalysisRun` `.status` is considered authoritative. Any user or service
+> account with permissions to create/edit `AnalysisRun` resources in the
+> namespace of `Release`, is able to provide arbitrary health analysis status
+> to the controller.
+
 ### Release culling
 
 The controller culls old releases to prevent unbounded growth. Culling behaviour:

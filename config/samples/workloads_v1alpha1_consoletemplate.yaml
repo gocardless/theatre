@@ -1,3 +1,14 @@
+# WARNING: this sample shows a deny-list shape. Do NOT use it as a model.
+#
+# The default rule requires 0 approvals and only `echo something-bad **` is gated.
+# Rules match the console's command as exact strings, and the command is chosen by
+# the user requesting the console. Any other spelling of the same operation (an
+# absolute path to the binary, `sh -c`, `env`, ...) matches no rule, falls through
+# to the default, and runs with no approval.
+#
+# Use a strict default with allowlist rules instead. See
+# workloads_v1alpha1_consoletemplate_allowlist.yaml and the "Authorised consoles"
+# section of internal/controller/workloads/README.md.
 ---
 kind: ConsoleTemplate
 apiVersion: workloads.crd.gocardless.com/v1alpha1
